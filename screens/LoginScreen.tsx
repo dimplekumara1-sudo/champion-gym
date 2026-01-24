@@ -48,8 +48,8 @@ const LoginScreen: React.FC<{ onLogin: () => void, onSignUp: () => void }> = ({ 
   return (
     <div className="min-h-screen flex flex-col">
       <div className="relative w-full h-[320px] shrink-0">
-        <div 
-          className="absolute inset-0 bg-cover bg-center" 
+        <div
+          className="absolute inset-0 bg-cover bg-center"
           style={{ backgroundImage: `linear-gradient(180deg, rgba(16, 34, 22, 0.2) 0%, rgba(16, 34, 22, 1) 100%), url("https://picsum.photos/seed/gym/800/600")` }}
         ></div>
         <div className="absolute inset-0 flex flex-col justify-end p-6">
@@ -57,7 +57,7 @@ const LoginScreen: React.FC<{ onLogin: () => void, onSignUp: () => void }> = ({ 
             <div className="w-10 h-10 bg-primary rounded-lg flex items-center justify-center">
               <span className="material-symbols-rounded text-slate-900 font-bold">fitness_center</span>
             </div>
-            <span className="text-xl font-bold tracking-tight">POWERFLEX</span>
+            <span className="text-xl font-bold tracking-tight">CHAMPION GYM</span>
           </div>
           <h1 className="text-4xl font-bold leading-tight">Welcome <br />Back</h1>
         </div>
@@ -65,7 +65,7 @@ const LoginScreen: React.FC<{ onLogin: () => void, onSignUp: () => void }> = ({ 
 
       <div className="flex-1 px-6 pt-2 pb-8 flex flex-col bg-background-dark">
         <h2 className="text-slate-400 text-sm font-medium mb-6">Log in to track your progress</h2>
-        
+
         {error && (
           <div className="bg-red-500/10 border border-red-500 text-red-500 p-3 rounded-lg text-sm mb-4">
             {error}
@@ -75,10 +75,10 @@ const LoginScreen: React.FC<{ onLogin: () => void, onSignUp: () => void }> = ({ 
         <div className="space-y-4 mb-8">
           <div>
             <p className="text-white text-sm font-medium pb-2">Email</p>
-            <input 
-              className="w-full rounded-lg text-white border border-slate-700 bg-slate-800/50 focus:border-primary focus:ring-1 focus:ring-primary h-14 p-4 placeholder:text-slate-500" 
-              placeholder="Enter your email" 
-              type="email" 
+            <input
+              className="w-full rounded-lg text-white border border-slate-700 bg-slate-800/50 focus:border-primary focus:ring-1 focus:ring-primary h-14 p-4 placeholder:text-slate-500"
+              placeholder="Enter your email"
+              type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
             />
@@ -86,14 +86,14 @@ const LoginScreen: React.FC<{ onLogin: () => void, onSignUp: () => void }> = ({ 
           <div>
             <p className="text-white text-sm font-medium pb-2">Password</p>
             <div className="relative">
-              <input 
-                className="w-full rounded-lg text-white border border-slate-700 bg-slate-800/50 focus:border-primary focus:ring-1 focus:ring-primary h-14 p-4 pr-12 placeholder:text-slate-500" 
-                placeholder="Enter your password" 
+              <input
+                className="w-full rounded-lg text-white border border-slate-700 bg-slate-800/50 focus:border-primary focus:ring-1 focus:ring-primary h-14 p-4 pr-12 placeholder:text-slate-500"
+                placeholder="Enter your password"
                 type={showPassword ? "text" : "password"}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
               />
-              <button 
+              <button
                 type="button"
                 onClick={() => setShowPassword(!showPassword)}
                 className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white transition-colors"
@@ -106,7 +106,7 @@ const LoginScreen: React.FC<{ onLogin: () => void, onSignUp: () => void }> = ({ 
           </div>
         </div>
 
-        <button 
+        <button
           onClick={handleLogin}
           disabled={loading}
           className="w-full bg-primary text-slate-900 font-bold py-4 rounded-xl shadow-lg active:scale-[0.98] transition-all mb-6 disabled:opacity-50"
@@ -120,7 +120,7 @@ const LoginScreen: React.FC<{ onLogin: () => void, onSignUp: () => void }> = ({ 
           <div className="h-[1px] flex-1 bg-slate-800"></div>
         </div>
 
-        <button 
+        <button
           onClick={handleGoogleLogin}
           disabled={loading}
           className="w-full bg-slate-800 border border-slate-700 text-white font-medium py-4 rounded-xl flex items-center justify-center gap-3 active:scale-[0.98] mb-12 disabled:opacity-50"
@@ -131,7 +131,7 @@ const LoginScreen: React.FC<{ onLogin: () => void, onSignUp: () => void }> = ({ 
 
         <div className="mt-auto text-center">
           <p className="text-slate-400 text-sm">
-            New here? 
+            New here?
             <button onClick={onSignUp} className="text-primary font-semibold ml-1 hover:underline">Create an Account</button>
           </p>
         </div>
