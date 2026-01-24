@@ -26,7 +26,7 @@ const SplashScreen: React.FC<SplashScreenProps> = ({ onGetStarted, onSignIn }) =
             <span className="material-symbols-rounded text-white text-5xl">fitness_center</span>
           </div>
           <h1 className="text-white text-2xl font-extrabold tracking-tighter uppercase italic">
-            Power<span className="text-secondary">Flex</span>
+            Champion<span className="text-secondary">Gym</span>
           </h1>
         </div>
 
