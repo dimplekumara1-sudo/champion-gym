@@ -1,14 +1,19 @@
 
 import React, { useEffect, useState } from 'react';
 import StatusBar from '../components/StatusBar';
+import Header from '../components/Header';
 import BottomNav from '../components/BottomNav';
 import { AppScreen } from '../types';
 import { supabase } from '../lib/supabase';
+import { cache, CACHE_KEYS, CACHE_TTL } from '../lib/cache';
 
 const Dashboard: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNavigate }) => {
   const [user, setUser] = useState<any>(null);
   const [profile, setProfile] = useState<any>(null);
+  const [planDetails, setPlanDetails] = useState<any>(null);
+  const [currentProgram, setCurrentProgram] = useState<any>(null);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [isPlanModalOpen, setIsPlanModalOpen] = useState(false);
   const [editData, setEditData] = useState({ height: 0, weight: 0, target_weight: 0 });
 
   useEffect(() => {
@@ -19,18 +24,66 @@ const Dashboard: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNavigat
     const { data: { user } } = await supabase.auth.getUser();
     setUser(user);
     if (user) {
-      const { data } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', user.id)
-        .single();
-      setProfile(data);
-      if (data) {
+      // Check cache first for profile data
+      let profileData = cache.get(CACHE_KEYS.PROFILE_DATA);
+
+      if (!profileData) {
+        // Fetch from Supabase only if not cached
+        const { data } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', user.id)
+          .single();
+        profileData = data;
+        if (profileData) {
+          cache.set(CACHE_KEYS.PROFILE_DATA, profileData, CACHE_TTL.LONG);
+        }
+      }
+
+      setProfile(profileData);
+      if (profileData) {
         setEditData({
-          height: data.height || 170,
-          weight: data.weight || 70,
-          target_weight: data.target_weight || 65
+          height: profileData.height || 170,
+          weight: profileData.weight || 70,
+          target_weight: profileData.target_weight || 65
         });
+
+        if (profileData.plan) {
+          // Check cache for plan details
+          let cachedPlan = cache.get(`${CACHE_KEYS.PROFILE_DATA}_plan`);
+          if (!cachedPlan) {
+            const { data: planData } = await supabase
+              .from('plans')
+              .select('*')
+              .eq('id', profileData.plan)
+              .single();
+            if (planData) {
+              setPlanDetails(planData);
+              cache.set(`${CACHE_KEYS.PROFILE_DATA}_plan`, planData, CACHE_TTL.VERY_LONG);
+            }
+          } else {
+            setPlanDetails(cachedPlan);
+          }
+        }
+
+        // Fetch current program
+        let cachedProgram = cache.get(CACHE_KEYS.USER_PROGRAMS);
+        if (!cachedProgram) {
+          const { data: programData } = await supabase
+            .from('user_programs')
+            .select('*, workouts(*)')
+            .eq('user_id', user.id)
+            .eq('status', 'pending')
+            .order('created_at', { ascending: false })
+            .limit(1);
+
+          if (programData && programData.length > 0) {
+            setCurrentProgram(programData[0]);
+            cache.set(CACHE_KEYS.USER_PROGRAMS, programData[0], CACHE_TTL.MEDIUM);
+          }
+        } else {
+          setCurrentProgram(cachedProgram);
+        }
       }
     }
   };
@@ -76,100 +129,137 @@ const Dashboard: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNavigat
 
   const firstName = (profile?.full_name || user?.user_metadata?.full_name || 'User').split(' ')[0];
 
+  const daysUntilExpiry = profile?.plan_expiry_date
+    ? Math.ceil((new Date(profile.plan_expiry_date).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24))
+    : null;
+
+  const showExpiryAlert = daysUntilExpiry !== null && daysUntilExpiry <= 5 && daysUntilExpiry >= 0;
+  const showPaymentAlert = profile?.payment_status === 'pending' || profile?.payment_status === 'unpaid';
+
   return (
     <div className="min-h-screen bg-[#090E1A] pb-32">
       <StatusBar />
-      
+      <Header onProfileClick={() => onNavigate('PROFILE')} />
+
       <main className="px-5">
-        <header className="flex items-center justify-between py-4 mb-2">
-          <div>
-            <p className="text-slate-400 text-[13px] font-medium">Welcome back,</p>
-            <h1 className="text-2xl font-bold tracking-tight">{firstName} 👋</h1>
+        <div className="py-3 mb-2">
+          <p className="text-slate-400 text-[13px] font-medium">Welcome back,</p>
+          <h1 className="text-2xl font-bold tracking-tight">{firstName} 👋</h1>
+        </div>
+
+        {/* Notifications / Alerts */}
+        {(showExpiryAlert || showPaymentAlert) && (
+          <div className="flex flex-col gap-3 mb-6">
+            {showExpiryAlert && (
+              <div className="bg-orange-500/10 border border-orange-500/20 p-4 rounded-3xl flex items-center gap-3 animate-pulse">
+                <div className="w-10 h-10 rounded-full bg-orange-500/20 flex items-center justify-center text-orange-500">
+                  <span className="material-symbols-rounded">warning</span>
+                </div>
+                <div className="flex-1">
+                  <h4 className="text-sm font-bold text-orange-400">Plan Expiring Soon</h4>
+                  <p className="text-[11px] text-orange-500/80 font-medium">Your {planDetails?.name} plan expires in {daysUntilExpiry} days. Renew now!</p>
+                </div>
+                <button
+                  onClick={() => onNavigate('PROFILE')}
+                  className="bg-orange-500 text-[#090E1A] text-[10px] font-black px-4 py-2 rounded-xl"
+                >
+                  RENEW
+                </button>
+              </div>
+            )}
+            {showPaymentAlert && (
+              <div className="bg-red-500/10 border border-red-500/20 p-4 rounded-3xl flex items-center gap-3">
+                <div className="w-10 h-10 rounded-full bg-red-500/20 flex items-center justify-center text-red-500">
+                  <span className="material-symbols-rounded">payments</span>
+                </div>
+                <div className="flex-1">
+                  <h4 className="text-sm font-bold text-red-400">Payment Required</h4>
+                  <p className="text-[11px] text-red-500/80 font-medium">Please complete your payment to avoid service interruption.</p>
+                </div>
+                <button
+                  className="bg-red-500 text-white text-[10px] font-black px-4 py-2 rounded-xl"
+                >
+                  PAY NOW
+                </button>
+              </div>
+            )}
           </div>
-          <div className="flex items-center gap-3">
-            <button className="w-11 h-11 rounded-full bg-slate-800/60 flex items-center justify-center text-primary active:scale-95 transition-transform">
-              <span className="material-symbols-rounded font-bold">qr_code_scanner</span>
-            </button>
-            <button 
-              onClick={() => onNavigate('PROFILE')}
-              className="relative active:scale-95 transition-transform"
-            >
-              <img 
-                alt="Profile" 
-                className="w-11 h-11 rounded-full border-2 border-primary/20 object-cover" 
-                src="https://lh3.googleusercontent.com/aida-public/AB6AXuD0kTfbmjWttqs_ihqmdrkzwyGuFol1fPqybfuMYwlPE1rXola21FABzJUGv-FzPbZvAJuiwUzpMZXl-gKr0hqUpFALLPsj0T8ONg9UWBCSftuhnJjkQjBOJBSehk7afH3p2LzXa21GZCFIppOKgKFo9j7XesCxzu_QEuVb08hTQoKUwlSMBgtog_EJ6N63mH6QYzpN_jmbNVdWNkgWgG3cJnD8gLKKPxWzefWDTdFY65fJTeBtKVLvzJgPoH-F7sysqMfcEzFtbgx_"
-              />
-              <div className="absolute bottom-0 right-0 w-3 h-3 bg-primary border-2 border-[#090E1A] rounded-full"></div>
-            </button>
-          </div>
-        </header>
+        )}
 
         {/* Membership Status */}
-        <div className="bg-[#151C2C] border border-[#1E293B] p-4 rounded-3xl mb-4 flex items-center justify-between shadow-xl shadow-black/20">
+        <button
+          onClick={() => setIsPlanModalOpen(true)}
+          className="w-full bg-[#151C2C] border border-[#1E293B] p-4 rounded-3xl mb-4 flex items-center justify-between shadow-xl shadow-black/20 text-left active:scale-[0.98] transition-transform"
+        >
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
               <span className="material-symbols-rounded text-primary text-xl" style={{ fontVariationSettings: "'FILL' 1" }}>verified</span>
             </div>
             <div>
               <p className="text-[10px] text-slate-400 font-bold tracking-wider uppercase">Membership Status</p>
-              <h3 className="text-sm font-bold text-white">Active - Pro Plan</h3>
+              <h3 className="text-sm font-bold text-white">
+                {profile?.approval_status === 'approved' ? 'Active' : 'Pending'} - {planDetails?.name || 'Basic'}
+              </h3>
             </div>
           </div>
           <span className="material-symbols-rounded text-slate-500 text-lg">chevron_right</span>
-        </div>
+        </button>
 
         {/* BMI & Weight Grid */}
         <div className="grid grid-cols-2 gap-4 mb-4">
-          <div className="bg-[#151C2C] border border-[#1E293B] p-4 rounded-3xl flex flex-col items-center shadow-lg relative">
-            <div className="w-full flex justify-between mb-3">
+          <div className="bg-[#151C2C] border border-[#1E293B] p-5 rounded-3xl flex flex-col items-center shadow-lg relative">
+            <div className="w-full flex justify-between items-start mb-5">
               <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">BMI Status</span>
-              <div className="flex flex-col gap-1">
+              <div className="flex gap-2">
                 <span className="material-symbols-rounded text-[16px] text-slate-500">info</span>
                 <button onClick={() => setIsEditModalOpen(true)} className="material-symbols-rounded text-[16px] text-primary active:scale-110 transition-transform">edit</button>
               </div>
             </div>
-            <div className="relative w-24 h-14 flex items-end justify-center overflow-hidden">
-              <div className="absolute w-20 h-20 border-[6px] border-slate-800 rounded-full top-0"></div>
-              <div 
-                className="absolute w-20 h-20 border-[6px] border-primary rounded-full top-0" 
-                style={{ 
-                  clipPath: `inset(0 ${100 - Math.min(100, (bmi / 40) * 100)}% 0 0)`,
-                  transform: 'rotate(-45deg)'
-                }}
-              ></div>
-              <span className="text-xl font-bold z-10 pb-0.5">{bmi || '0.0'}</span>
+            <div className="relative w-28 h-28 flex items-center justify-center mb-4">
+              <svg className="w-full h-full -rotate-90 drop-shadow-lg">
+                <circle className="text-slate-800/60" cx="56" cy="56" fill="transparent" r="48" stroke="currentColor" strokeWidth="7"></circle>
+                <circle
+                  className="text-primary transition-all duration-500" cx="56" cy="56" fill="transparent" r="48"
+                  stroke="currentColor" strokeDasharray="302"
+                  strokeDashoffset={302 - (302 * Math.min(100, (bmi / 40) * 100)) / 100}
+                  strokeLinecap="round" strokeWidth="7"
+                ></circle>
+              </svg>
+              <div className="absolute text-center">
+                <span className="text-3xl font-black block leading-none text-white">{bmi || '0.0'}</span>
+              </div>
             </div>
-            <span className="mt-2 text-[10px] font-bold text-primary py-1 px-4 bg-primary/10 rounded-full uppercase tracking-tight">
+            <span className="text-[11px] font-bold text-primary py-2 px-5 bg-primary/15 rounded-full uppercase tracking-tight border border-primary/30">
               {getBMICategory(bmi)}
             </span>
           </div>
 
-          <div className="bg-[#151C2C] border border-[#1E293B] p-4 rounded-3xl flex flex-col items-center shadow-lg">
-            <div className="w-full flex justify-between mb-1">
+          <div className="bg-[#151C2C] border border-[#1E293B] p-5 rounded-3xl flex flex-col items-center shadow-lg">
+            <div className="w-full flex justify-between items-start mb-5">
               <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Weight Goal</span>
               <span className="material-symbols-rounded text-[16px] text-slate-500">trending_down</span>
             </div>
-            <div className="relative flex items-center justify-center">
-              <svg className="w-16 h-16 -rotate-90">
-                <circle className="text-slate-800" cx="32" cy="32" fill="transparent" r="28" stroke="currentColor" strokeWidth="5"></circle>
-                <circle 
-                  className="text-primary" cx="32" cy="32" fill="transparent" r="28" 
-                  stroke="currentColor" strokeDasharray="176" 
-                  strokeDashoffset={176 - (176 * goalProgress) / 100} 
-                  strokeLinecap="round" strokeWidth="5"
+            <div className="relative flex items-center justify-center mb-4">
+              <svg className="w-28 h-28 -rotate-90 drop-shadow-lg">
+                <circle className="text-slate-800/60" cx="56" cy="56" fill="transparent" r="48" stroke="currentColor" strokeWidth="7"></circle>
+                <circle
+                  className="text-primary transition-all duration-500" cx="56" cy="56" fill="transparent" r="48"
+                  stroke="currentColor" strokeDasharray="302"
+                  strokeDashoffset={302 - (302 * goalProgress) / 100}
+                  strokeLinecap="round" strokeWidth="7"
                 ></circle>
               </svg>
               <div className="absolute text-center">
-                <span className="text-sm font-bold block leading-none">{profile?.weight || 0}</span>
-                <span className="text-[9px] text-slate-500 font-medium">kg</span>
+                <span className="text-3xl font-black block leading-none text-white">{profile?.weight || 0}</span>
+                <span className="text-[11px] text-slate-400 font-bold">kg</span>
               </div>
             </div>
-            <p className="mt-1.5 text-[9px] text-slate-400 text-center font-medium">{weightToGoal}kg to goal ({profile?.target_weight || 0}kg)</p>
+            <p className="text-[10px] text-slate-400 text-center font-medium">{weightToGoal}kg to goal <br />({profile?.target_weight || 0}kg)</p>
           </div>
         </div>
 
         {/* Calorie Tracker Card */}
-        <button 
+        <button
           onClick={() => onNavigate('DAILY_TRACKER')}
           className="w-full text-left bg-[#151C2C] border border-[#1E293B] p-5 rounded-3xl mb-4 shadow-xl active:scale-[0.98] transition-transform"
         >
@@ -202,16 +292,93 @@ const Dashboard: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNavigat
           </div>
         </button>
 
+        {/* Current Workout Card */}
+        {currentProgram ? (
+          <button
+            onClick={() => onNavigate('WORKOUT_PROGRAM')}
+            className="w-full text-left bg-primary/10 border border-primary/20 p-5 rounded-[2.5rem] mb-4 shadow-xl active:scale-[0.98] transition-transform group"
+          >
+            <div className="flex justify-between items-center mb-4">
+              <span className="bg-primary text-slate-950 text-[10px] font-black px-2.5 py-1 rounded-lg uppercase tracking-wider">Current Program</span>
+              <span className="material-symbols-rounded text-primary group-hover:translate-x-1 transition-transform">arrow_forward</span>
+            </div>
+            <h3 className="text-xl font-bold text-white mb-1">{currentProgram.workouts?.name}</h3>
+            <p className="text-[11px] text-slate-400 font-medium mb-4">Week {currentProgram.week_number} • Day {currentProgram.day_of_week}</p>
+            <div className="flex items-center gap-2">
+              <div className="flex-1 h-1.5 bg-slate-800 rounded-full overflow-hidden">
+                <div className="w-1/3 h-full bg-primary shadow-[0_0_10px_rgba(34,197,94,0.4)]"></div>
+              </div>
+              <span className="text-[10px] font-bold text-slate-500 uppercase">33% Done</span>
+            </div>
+          </button>
+        ) : (
+          <button
+            onClick={() => onNavigate('EXPLORE')}
+            className="w-full text-left bg-slate-800/40 border border-slate-700/30 p-5 rounded-[2.5rem] mb-4 shadow-xl active:scale-[0.98] transition-transform flex items-center justify-between group"
+          >
+            <div>
+              <h3 className="text-lg font-bold text-white mb-1">No active program</h3>
+              <p className="text-xs text-slate-400">Browse the catalog for your next goal</p>
+            </div>
+            <div className="w-12 h-12 rounded-2xl bg-slate-800 flex items-center justify-center text-slate-400 group-hover:text-primary transition-colors">
+              <span className="material-symbols-rounded">explore</span>
+            </div>
+          </button>
+        )}
+
+        {/* Quick Actions */}
+        <section className="mb-6">
+          <h2 className="text-sm font-bold uppercase tracking-wider text-slate-500 mb-4 ml-2">Quick Actions</h2>
+          <div className="grid grid-cols-4 gap-2">
+            <button
+              onClick={() => onNavigate('GYM_CATALOG')}
+              className="bg-[#151C2C] border border-[#1E293B] p-3 rounded-3xl flex flex-col items-center gap-2 active:scale-95 transition-transform"
+            >
+              <div className="w-10 h-10 rounded-2xl bg-blue-500/10 flex items-center justify-center text-blue-500">
+                <span className="material-symbols-rounded">menu_book</span>
+              </div>
+              <span className="text-[9px] font-bold text-slate-300">Catalog</span>
+            </button>
+            <button
+              onClick={() => onNavigate('CREATE_WORKOUT')}
+              className="bg-[#151C2C] border border-[#1E293B] p-3 rounded-3xl flex flex-col items-center gap-2 active:scale-95 transition-transform"
+            >
+              <div className="w-10 h-10 rounded-2xl bg-primary/10 flex items-center justify-center text-primary">
+                <span className="material-symbols-rounded">add_circle</span>
+              </div>
+              <span className="text-[9px] font-bold text-slate-300">Create</span>
+            </button>
+            <button
+              onClick={() => onNavigate('WORKOUT_HISTORY')}
+              className="bg-[#151C2C] border border-[#1E293B] p-3 rounded-3xl flex flex-col items-center gap-2 active:scale-95 transition-transform"
+            >
+              <div className="w-10 h-10 rounded-2xl bg-orange-500/10 flex items-center justify-center text-orange-500">
+                <span className="material-symbols-rounded">history</span>
+              </div>
+              <span className="text-[9px] font-bold text-slate-300">History</span>
+            </button>
+            <button
+              onClick={() => onNavigate('ORDER_HISTORY')}
+              className="bg-[#151C2C] border border-[#1E293B] p-3 rounded-3xl flex flex-col items-center gap-2 active:scale-95 transition-transform"
+            >
+              <div className="w-10 h-10 rounded-2xl bg-purple-500/10 flex items-center justify-center text-purple-500">
+                <span className="material-symbols-rounded">package_2</span>
+              </div>
+              <span className="text-[9px] font-bold text-slate-300">Orders</span>
+            </button>
+          </div>
+        </section>
+
         {/* PT Session Card */}
-        <div className="bg-[#151C2C] border border-[#1E293B] p-4 rounded-3xl shadow-lg">
+        <div className="bg-[#151C2C] border border-[#1E293B] p-4 rounded-3xl shadow-lg mb-6">
           <div className="flex justify-between items-center mb-4">
             <h3 className="text-sm font-bold uppercase tracking-wider">Upcoming PT Session</h3>
             <button className="text-[11px] font-bold text-primary uppercase tracking-tighter hover:underline">View Schedule</button>
           </div>
           <div className="flex items-center gap-3 bg-slate-800/40 p-3 rounded-2xl border border-slate-700/30">
-            <img 
-              alt="Trainer" 
-              className="w-11 h-11 rounded-xl object-cover" 
+            <img
+              alt="Trainer"
+              className="w-11 h-11 rounded-xl object-cover"
               src="https://lh3.googleusercontent.com/aida-public/AB6AXuBxKi-8oL81giM-Bx-bk8rF5_93Jn3vYePYQpcFGPRCKgFT3wQutvrmvzQbq3VJufEpdILPZz-iannbJVMUQR-r-korKOaIoWf2gE2Q_il-skxN6ESzgI-987MyqQZdg7sMkRJ6MCBU1g_18k30OtyhLRhv4IgkfjhjD5nyDvwIZyPw-2e1ITVF0AtqjgOT2HzNsvgJKIZvJyKij7jYm5bpz-aHn_ruREy2nxIbq_ek6K3k5FqyItcIWbhx2vGrDhcfKHZ8CmHSyLwJ"
             />
             <div className="flex-1">
@@ -224,10 +391,40 @@ const Dashboard: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNavigat
             </div>
           </div>
         </div>
+
+        {/* Shop Section */}
+        <section className="mb-6">
+          <h2 className="text-sm font-bold uppercase tracking-wider text-slate-500 mb-4 ml-2">Shop Fitness Gear</h2>
+          <button
+            onClick={() => onNavigate('STORE')}
+            className="w-full bg-gradient-to-r from-primary/20 to-primary/10 border border-primary/30 p-5 rounded-3xl flex items-center justify-between shadow-xl shadow-primary/10 active:scale-[0.98] transition-transform mb-3"
+          >
+            <div className="flex items-center gap-4">
+              <div className="w-12 h-12 rounded-2xl bg-primary/20 flex items-center justify-center">
+                <span className="material-symbols-rounded text-primary text-2xl">shopping_bag</span>
+              </div>
+              <div className="text-left">
+                <h3 className="text-sm font-bold text-white">Browse Products</h3>
+                <p className="text-xs text-slate-400">Supplements, equipment & more</p>
+              </div>
+            </div>
+            <span className="material-symbols-rounded text-slate-500">chevron_right</span>
+          </button>
+          <button
+            onClick={() => onNavigate('CART')}
+            className="w-full bg-[#151C2C] border border-[#1E293B] p-4 rounded-2xl flex items-center justify-between active:scale-[0.98] transition-transform"
+          >
+            <div className="flex items-center gap-3">
+              <span className="material-symbols-rounded text-primary text-xl">shopping_cart</span>
+              <span className="text-sm font-semibold text-white">View Shopping Cart</span>
+            </div>
+            <span className="material-symbols-rounded text-slate-500 text-xl">chevron_right</span>
+          </button>
+        </section>
       </main>
 
       <BottomNav active="HOME" onNavigate={onNavigate} />
-      
+
       {/* Edit Modal */}
       {isEditModalOpen && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-black/80 backdrop-blur-sm">
@@ -237,24 +434,24 @@ const Dashboard: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNavigat
                 <h2 className="text-xl font-bold">Update Stats</h2>
                 <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-1">Real-time health tracking</p>
               </div>
-              <button 
-                onClick={() => setIsEditModalOpen(false)} 
+              <button
+                onClick={() => setIsEditModalOpen(false)}
                 className="w-10 h-10 rounded-full bg-slate-800 flex items-center justify-center text-slate-400 active:scale-90 transition-transform"
               >
                 <span className="material-symbols-rounded">close</span>
               </button>
             </div>
-            
+
             <div className="space-y-8">
               <div>
                 <div className="flex justify-between items-center mb-4">
                   <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Height (cm)</label>
                   <span className="text-lg font-black text-primary">{editData.height}</span>
                 </div>
-                <input 
-                  type="range" min="120" max="230" 
-                  value={editData.height} 
-                  onChange={(e) => setEditData({...editData, height: parseInt(e.target.value)})}
+                <input
+                  type="range" min="120" max="230"
+                  value={editData.height}
+                  onChange={(e) => setEditData({ ...editData, height: parseInt(e.target.value) })}
                   className="w-full h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-primary"
                 />
               </div>
@@ -264,10 +461,10 @@ const Dashboard: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNavigat
                   <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Current Weight (kg)</label>
                   <span className="text-lg font-black text-primary">{editData.weight}</span>
                 </div>
-                <input 
-                  type="range" min="30" max="200" 
-                  value={editData.weight} 
-                  onChange={(e) => setEditData({...editData, weight: parseInt(e.target.value)})}
+                <input
+                  type="range" min="30" max="200"
+                  value={editData.weight}
+                  onChange={(e) => setEditData({ ...editData, weight: parseInt(e.target.value) })}
                   className="w-full h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-primary"
                 />
               </div>
@@ -277,21 +474,84 @@ const Dashboard: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNavigat
                   <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Target Weight (kg)</label>
                   <span className="text-lg font-black text-primary">{editData.target_weight}</span>
                 </div>
-                <input 
-                  type="range" min="30" max="200" 
-                  value={editData.target_weight} 
-                  onChange={(e) => setEditData({...editData, target_weight: parseInt(e.target.value)})}
+                <input
+                  type="range" min="30" max="200"
+                  value={editData.target_weight}
+                  onChange={(e) => setEditData({ ...editData, target_weight: parseInt(e.target.value) })}
                   className="w-full h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-primary"
                 />
               </div>
             </div>
 
-            <button 
+            <button
               onClick={handleUpdateProfile}
               className="w-full bg-primary text-slate-900 font-bold py-5 rounded-2xl mt-10 shadow-lg shadow-primary/20 active:scale-[0.98] transition-all flex items-center justify-center gap-2"
             >
               <span>Save Changes</span>
               <span className="material-symbols-rounded">check</span>
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Plan Details Modal */}
+      {isPlanModalOpen && planDetails && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-black/80 backdrop-blur-sm">
+          <div className="w-full max-w-[380px] bg-[#151C2C] border border-[#1E293B] rounded-[2.5rem] p-8 shadow-2xl overflow-hidden relative">
+            <div className="flex justify-between items-center mb-6">
+              <div>
+                <h2 className="text-xl font-bold">{planDetails.name}</h2>
+                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-1">Your Membership Details</p>
+              </div>
+              <button
+                onClick={() => setIsPlanModalOpen(false)}
+                className="w-10 h-10 rounded-full bg-slate-800 flex items-center justify-center text-slate-400 active:scale-90 transition-transform"
+              >
+                <span className="material-symbols-rounded">close</span>
+              </button>
+            </div>
+
+            <div className="space-y-6">
+              <div>
+                <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest mb-2">Description</p>
+                <p className="text-sm text-slate-300 leading-relaxed">
+                  {planDetails.description || 'No description available for this plan.'}
+                </p>
+              </div>
+
+              <div>
+                <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest mb-3">What's Included</p>
+                <div className="space-y-3">
+                  {planDetails.features && planDetails.features.map((feature: string, idx: number) => (
+                    <div key={idx} className="flex items-center gap-3">
+                      <div className="w-5 h-5 rounded-full bg-primary/20 flex items-center justify-center">
+                        <span className="material-symbols-rounded text-primary text-[14px]">check</span>
+                      </div>
+                      <span className="text-sm text-slate-300">{feature}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="pt-6 border-t border-[#1E293B]">
+                <div className="flex justify-between items-center mb-2">
+                  <span className="text-xs text-slate-400">Price</span>
+                  <span className="text-lg font-black text-primary">{planDetails.price}</span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-xs text-slate-400">Status</span>
+                  <span className={`text-xs font-bold px-3 py-1 rounded-full ${profile?.approval_status === 'approved' ? 'bg-green-500/10 text-green-500' : 'bg-yellow-500/10 text-yellow-500'}`}>
+                    {profile?.approval_status?.toUpperCase() || 'PENDING'}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <button
+              onClick={() => setIsPlanModalOpen(false)}
+              className="w-full bg-slate-800 text-white font-bold py-5 rounded-2xl mt-8 active:scale-[0.98] transition-all"
+            >
+              Close Details
             </button>
           </div>
         </div>

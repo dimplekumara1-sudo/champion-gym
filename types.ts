@@ -1,8 +1,9 @@
 
-export type AppScreen = 
+export type AppScreen =
   | 'SPLASH'
   | 'LOGIN'
   | 'SIGNUP'
+  | 'GOOGLE_PASSWORD_SETUP'
   | 'FORGOT_PASSWORD'
   | 'VERIFICATION'
   | 'SUCCESS'
@@ -22,9 +23,22 @@ export type AppScreen =
   | 'WORKOUT_FEEDBACK'
   | 'STATS'
   | 'PROFILE'
+  | 'GYM_CATALOG'
+  | 'CREATE_WORKOUT'
+  | 'SUBSCRIPTION_DETAILS'
+  | 'WORKOUT_HISTORY'
+  | 'STORE'
+  | 'CART'
+  | 'ORDER_HISTORY'
   | 'ADMIN_DASHBOARD'
   | 'ADMIN_USERS'
-  | 'ADMIN_PLANS';
+  | 'ADMIN_PLANS'
+  | 'ADMIN_EXERCISES'
+  | 'ADMIN_WORKOUTS'
+  | 'ADMIN_CATEGORIES'
+  | 'ADMIN_SHOP'
+  | 'ADMIN_ORDERS'
+  | 'ADMIN_EXPLORE';
 
 export type NavTab = 'HOME' | 'EXPLORE' | 'ADD' | 'STATS' | 'MY_WORKOUTS';
 
@@ -33,4 +47,29 @@ export interface UserStats {
   height: number;
   goal: string;
   gender: string;
+}
+
+export interface Profile {
+  id: string;
+  full_name: string | null;
+  avatar_url: string | null;
+  role: 'user' | 'admin';
+  onboarding_completed: boolean;
+  approval_status: 'pending' | 'approved' | 'rejected';
+  payment_status: 'pending' | 'paid' | 'failed';
+  plan_id: string | null;
+  plan_start_date: string | null;
+  plan_expiry_date: string | null;
+  created_at: string;
+}
+
+export interface Plan {
+  id: string;
+  name: string;
+  price: string;
+  description: string | null;
+  features: string[];
+  popular: boolean;
+  duration_months: number;
+  updated_at: string;
 }

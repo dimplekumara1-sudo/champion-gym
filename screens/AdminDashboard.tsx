@@ -5,36 +5,227 @@ import { AppScreen } from '../types';
 
 const AdminDashboard: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNavigate }) => {
   const [stats, setStats] = useState({
-    totalRevenue: 42850,
+    totalRevenue: 0,
+    monthlyRevenue: 0,
+    yearlyRevenue: 0,
     activeUsers: 0,
-    newBookings: 96,
+    pendingApprovals: 0,
+    totalOrders: 0,
+    totalShopRevenue: 0,
+    shopOrders: 0,
   });
+  const [trendPeriod, setTrendPeriod] = useState<'7' | '30'>('30');
+  const [trendData, setTrendData] = useState<number[]>([]);
 
   useEffect(() => {
     fetchStats();
-  }, []);
+    fetchTrendData();
+    // Refresh stats every 30 seconds for realtime updates
+    const interval = setInterval(() => {
+      fetchStats();
+      fetchTrendData();
+    }, 30000);
+    return () => clearInterval(interval);
+  }, [trendPeriod]);
 
   const fetchStats = async () => {
-    const { count } = await supabase
-      .from('profiles')
-      .select('*', { count: 'exact', head: true });
-    
-    if (count !== null) {
-      setStats(prev => ({ ...prev, activeUsers: count }));
+    try {
+      // Fetch profiles
+      const { data: profiles, error: pError } = await supabase
+        .from('profiles')
+        .select('*');
+
+      if (pError) throw pError;
+
+      // Fetch plans
+      const { data: plans, error: plError } = await supabase
+        .from('plans')
+        .select('*');
+
+      if (plError) throw plError;
+
+      // Fetch orders
+      const { data: orders, error: ordersError } = await supabase
+        .from('gym_orders')
+        .select('*');
+
+      if (ordersError) throw ordersError;
+
+      // Fetch products for shop revenue
+      const { data: orderItems, error: itemsError } = await supabase
+        .from('gym_order_items')
+        .select('line_total');
+
+      if (itemsError) throw itemsError;
+
+      const now = new Date();
+      const currentMonth = now.getMonth();
+      const currentYear = now.getFullYear();
+
+      let totalRev = 0;
+      let monthlyRev = 0;
+      let yearlyRev = 0;
+      let pendingCount = 0;
+      let totalShopRev = 0;
+      let deliveredOrders = 0;
+
+      profiles?.forEach(user => {
+        if (user.approval_status === 'pending') pendingCount++;
+
+        if (user.payment_status === 'paid' && user.plan) {
+          const plan = plans?.find(p => p.id === user.plan);
+          if (plan) {
+            const price = parseInt(plan.price.replace(/[₹,]/g, '')) || 0;
+            totalRev += price;
+
+            if (user.plan_start_date) {
+              const startDate = new Date(user.plan_start_date);
+              if (startDate.getFullYear() === currentYear) {
+                yearlyRev += price;
+                if (startDate.getMonth() === currentMonth) {
+                  monthlyRev += price;
+                }
+              }
+            } else {
+              monthlyRev += price;
+              yearlyRev += price;
+            }
+          }
+        }
+      });
+
+      // Calculate shop revenue
+      orderItems?.forEach(item => {
+        totalShopRev += item.line_total || 0;
+      });
+
+      // Count delivered orders
+      deliveredOrders = orders?.filter(o => o.order_status === 'delivered').length || 0;
+
+      setStats({
+        totalRevenue: totalRev,
+        monthlyRevenue: monthlyRev,
+        yearlyRevenue: yearlyRev,
+        activeUsers: profiles?.length || 0,
+        pendingApprovals: pendingCount,
+        totalOrders: orders?.length || 0,
+        totalShopRevenue: totalShopRev,
+        shopOrders: deliveredOrders,
+      });
+    } catch (error) {
+      console.error('Error fetching admin stats:', error);
     }
   };
+
+  const fetchTrendData = async () => {
+    try {
+      const days = parseInt(trendPeriod);
+      const startDate = new Date();
+      startDate.setDate(startDate.getDate() - days);
+
+      // Fetch orders and profiles in the date range
+      const { data: ordersData, error: ordersError } = await supabase
+        .from('gym_orders')
+        .select('created_at, total_amount')
+        .gte('created_at', startDate.toISOString());
+
+      const { data: profilesData, error: profilesError } = await supabase
+        .from('profiles')
+        .select('plan_start_date, plan, id')
+        .gte('plan_start_date', startDate.toISOString());
+
+      if (ordersError || profilesError) throw ordersError || profilesError;
+
+      // Initialize daily revenue array
+      const dailyRevenue: { [key: string]: number } = {};
+      for (let i = 0; i < days; i++) {
+        const date = new Date();
+        date.setDate(date.getDate() - i);
+        const dateStr = date.toISOString().split('T')[0];
+        dailyRevenue[dateStr] = 0;
+      }
+
+      // Add order revenue
+      ordersData?.forEach(order => {
+        if (order.created_at) {
+          const dateStr = order.created_at.split('T')[0];
+          dailyRevenue[dateStr] = (dailyRevenue[dateStr] || 0) + (order.total_amount || 0);
+        }
+      });
+
+      // Add membership revenue
+      const { data: plans } = await supabase.from('plans').select('*');
+      profilesData?.forEach(profile => {
+        if (profile.plan_start_date) {
+          const dateStr = profile.plan_start_date.split('T')[0];
+          const plan = plans?.find(p => p.id === profile.plan);
+          if (plan) {
+            const price = parseInt(plan.price.replace(/[₹,]/g, '')) || 0;
+            dailyRevenue[dateStr] = (dailyRevenue[dateStr] || 0) + price;
+          }
+        }
+      });
+
+      // Convert to array and sort by date
+      const sortedDates = Object.keys(dailyRevenue).sort();
+      const revenues = sortedDates.map(date => dailyRevenue[date]);
+
+      setTrendData(revenues);
+    } catch (error) {
+      console.error('Error fetching trend data:', error);
+    }
+  };
+
+  const generateSVGPath = () => {
+    if (trendData.length === 0) return '';
+
+    const maxRevenue = Math.max(...trendData, 1);
+    const width = 400;
+    const height = 200;
+    const pointWidth = width / (trendData.length - 1 || 1);
+
+    let pathData = '';
+    let fillPath = '';
+
+    trendData.forEach((revenue, index) => {
+      const x = index * pointWidth;
+      const y = height - (revenue / maxRevenue) * (height - 20) - 10;
+
+      if (index === 0) {
+        pathData += `M${x},${y}`;
+        fillPath += `M${x},${y}`;
+      } else {
+        pathData += ` L${x},${y}`;
+        fillPath += ` L${x},${y}`;
+      }
+    });
+
+    fillPath += ` L${width},${height} L0,${height} Z`;
+
+    return { path: pathData, fill: fillPath };
+  };
+
+  const svgPaths = generateSVGPath();
 
   return (
     <div className="min-h-screen bg-background-light dark:bg-[#0F172A] text-slate-900 dark:text-white pb-32">
       <header className="px-6 py-4 flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Admin Dashboard</h1>
+          <h1 className="text-2xl font-bold tracking-tight text-white">Admin Dashboard</h1>
           <p className="text-slate-500 dark:text-slate-400 text-sm">Welcome back, Manager</p>
         </div>
-        <button className="w-10 h-10 rounded-full bg-slate-200 dark:bg-[#1E293B] flex items-center justify-center relative">
-          <span className="material-symbols-rounded text-slate-600 dark:text-slate-300">notifications</span>
-          <span className="absolute top-2 right-2 w-2 h-2 bg-red-500 rounded-full border-2 border-background-light dark:border-[#0F172A]"></span>
-        </button>
+        <div className="flex gap-2">
+          <button
+            onClick={fetchStats}
+            className="w-10 h-10 rounded-full bg-slate-200 dark:bg-[#1E293B] flex items-center justify-center hover:bg-slate-300 dark:hover:bg-slate-700 transition-colors"
+          >
+            <span className="material-symbols-rounded text-slate-600 dark:text-slate-300">refresh</span>
+          </button>
+          <button className="w-10 h-10 rounded-full bg-slate-200 dark:bg-[#1E293B] flex items-center justify-center relative">
+            <span className="material-symbols-rounded text-slate-600 dark:text-slate-300">notifications</span>
+            <span className="absolute top-2 right-2 w-2 h-2 bg-red-500 rounded-full border-2 border-background-light dark:border-[#0F172A]"></span>
+          </button>
+        </div>
       </header>
 
       <main className="px-6 space-y-6">
@@ -42,19 +233,25 @@ const AdminDashboard: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNa
           <div className="col-span-2 p-5 bg-white dark:bg-[#1E293B] rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800">
             <div className="flex justify-between items-start">
               <div>
-                <p className="text-slate-500 dark:text-slate-400 text-xs font-medium uppercase tracking-wider">Total Revenue</p>
-                <h2 className="text-3xl font-bold mt-1">${stats.totalRevenue.toLocaleString()}</h2>
+                <p className="text-slate-500 dark:text-slate-400 text-xs font-medium uppercase tracking-wider">Overall Revenue</p>
+                <h2 className="text-3xl font-bold mt-1">₹{stats.totalRevenue.toLocaleString()}</h2>
               </div>
               <div className="bg-primary/10 p-2 rounded-lg">
                 <span className="material-symbols-rounded text-primary">payments</span>
               </div>
             </div>
-            <div className="mt-4 flex items-center text-primary text-sm font-semibold">
-              <span className="material-symbols-rounded text-sm mr-1">trending_up</span>
-              <span>+12.5% <span className="text-slate-400 font-normal dark:text-slate-500 ml-1 text-xs">vs last month</span></span>
+            <div className="mt-6 grid grid-cols-2 gap-4 border-t border-slate-100 dark:border-slate-800 pt-4">
+              <div>
+                <p className="text-[10px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-widest">This Month</p>
+                <p className="text-lg font-bold text-primary">₹{stats.monthlyRevenue.toLocaleString()}</p>
+              </div>
+              <div>
+                <p className="text-[10px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-widest">This Year</p>
+                <p className="text-lg font-bold text-white">₹{stats.yearlyRevenue.toLocaleString()}</p>
+              </div>
             </div>
           </div>
-          
+
           <div className="p-5 bg-white dark:bg-[#1E293B] rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800">
             <p className="text-slate-500 dark:text-slate-400 text-xs font-medium uppercase tracking-wider">Active Users</p>
             <h2 className="text-2xl font-bold mt-1">{stats.activeUsers}</h2>
@@ -65,21 +262,43 @@ const AdminDashboard: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNa
           </div>
 
           <div className="p-5 bg-white dark:bg-[#1E293B] rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800">
-            <p className="text-slate-500 dark:text-slate-400 text-xs font-medium uppercase tracking-wider">New Bookings</p>
-            <h2 className="text-2xl font-bold mt-1">{stats.newBookings}</h2>
+            <p className="text-slate-500 dark:text-slate-400 text-xs font-medium uppercase tracking-wider">Pending</p>
+            <h2 className="text-2xl font-bold mt-1 text-orange-500">{stats.pendingApprovals}</h2>
+            <div className="mt-3 flex items-center text-orange-500 text-xs font-semibold">
+              <span className="material-symbols-rounded text-xs mr-0.5">notification_important</span>
+              <span>Needs Review</span>
+            </div>
+          </div>
+
+          <div className="p-5 bg-white dark:bg-[#1E293B] rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800">
+            <p className="text-slate-500 dark:text-slate-400 text-xs font-medium uppercase tracking-wider">Total Orders</p>
+            <h2 className="text-2xl font-bold mt-1">{stats.totalOrders}</h2>
             <div className="mt-3 flex items-center text-primary text-xs font-semibold">
               <span className="material-symbols-rounded text-xs mr-0.5">trending_up</span>
-              <span>8.1%</span>
+              <span>{stats.shopOrders} delivered</span>
+            </div>
+          </div>
+
+          <div className="p-5 bg-white dark:bg-[#1E293B] rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800">
+            <p className="text-slate-500 dark:text-slate-400 text-xs font-medium uppercase tracking-wider">Shop Revenue</p>
+            <h2 className="text-2xl font-bold mt-1">₹{stats.totalShopRevenue.toLocaleString()}</h2>
+            <div className="mt-3 flex items-center text-primary text-xs font-semibold">
+              <span className="material-symbols-rounded text-xs mr-0.5">trending_up</span>
+              <span>{((stats.totalShopRevenue / (stats.totalRevenue + stats.totalShopRevenue)) * 100 || 0).toFixed(1)}% of total</span>
             </div>
           </div>
         </div>
 
         <div className="bg-white dark:bg-[#1E293B] rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800 p-5">
           <div className="flex justify-between items-center mb-6">
-            <h3 className="font-bold text-lg text-white">Revenue Trend</h3>
-            <select className="bg-slate-100 dark:bg-[#0F172A] border-none text-xs rounded-lg py-1 pl-2 pr-8 focus:ring-primary text-slate-600 dark:text-slate-300 outline-none">
-              <option>Last 30 Days</option>
-              <option>Last 7 Days</option>
+            <h3 className="font-bold text-lg text-dark">Revenue Trend</h3>
+            <select
+              value={trendPeriod}
+              onChange={(e) => setTrendPeriod(e.target.value as '7' | '30')}
+              className="bg-slate-100 dark:bg-[#0F172A] border-none text-xs rounded-lg py-1 pl-2 pr-8 focus:ring-primary text-slate-600 dark:text-slate-300 outline-none"
+            >
+              <option value="7">Last 7 Days</option>
+              <option value="30">Last 30 Days</option>
             </select>
           </div>
           <div className="relative h-48 w-full">
@@ -96,18 +315,33 @@ const AdminDashboard: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNa
                   <stop offset="100%" stopColor="#22C55E" stopOpacity="0"></stop>
                 </linearGradient>
               </defs>
-              <path d="M0,180 L40,160 L80,170 L120,130 L160,140 L200,90 L240,110 L280,60 L320,80 L360,40 L400,50 L400,200 L0,200 Z" fill="url(#gradient)"></path>
-              <path d="M0,180 L40,160 L80,170 L120,130 L160,140 L200,90 L240,110 L280,60 L320,80 L360,40 L400,50" fill="none" stroke="#22C55E" strokeLinecap="round" strokeLinejoin="round" strokeWidth="3"></path>
-              <circle cx="200" cy="90" fill="#22C55E" r="4" stroke="white" strokeWidth="2"></circle>
-              <circle cx="360" cy="40" fill="#22C55E" r="4" stroke="white" strokeWidth="2"></circle>
+              {svgPaths.fill && <path d={svgPaths.fill} fill="url(#gradient)"></path>}
+              {svgPaths.path && <path d={svgPaths.path} fill="none" stroke="#22C55E" strokeLinecap="round" strokeLinejoin="round" strokeWidth="3"></path>}
+              {trendData.length > 0 && (
+                <>
+                  <circle cx={400 * (trendData.length - 1) / Math.max(trendData.length - 1, 1)} cy={200 - (trendData[trendData.length - 1] / Math.max(...trendData, 1)) * 180 - 10} fill="#22C55E" r="4" stroke="white" strokeWidth="2"></circle>
+                </>
+              )}
             </svg>
           </div>
           <div className="flex justify-between mt-4 text-[10px] text-slate-400 font-medium uppercase tracking-tighter">
-            <span>1 Oct</span>
-            <span>8 Oct</span>
-            <span>15 Oct</span>
-            <span>22 Oct</span>
-            <span>30 Oct</span>
+            {trendPeriod === '7' ? (
+              <>
+                <span>7d</span>
+                <span>5d</span>
+                <span>3d</span>
+                <span>1d</span>
+                <span>Today</span>
+              </>
+            ) : (
+              <>
+                <span>30d</span>
+                <span>20d</span>
+                <span>10d</span>
+                <span>5d</span>
+                <span>Today</span>
+              </>
+            )}
           </div>
         </div>
 
@@ -117,7 +351,7 @@ const AdminDashboard: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNa
             <button className="text-primary text-sm font-semibold">See All</button>
           </div>
           <div className="space-y-3">
-            <div 
+            <div
               onClick={() => onNavigate('ADMIN_PLANS')}
               className="flex items-center p-4 bg-white dark:bg-[#1E293B] rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800 active:scale-[0.98] transition-all"
             >
@@ -125,22 +359,101 @@ const AdminDashboard: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNa
                 <span className="material-symbols-rounded text-blue-500 text-xl">event_available</span>
               </div>
               <div className="flex-1 text-left">
-                <h4 className="text-sm font-semibold text-white">Manage Plans</h4>
+                <h4 className="text-sm font-semibold text-dark">Manage Plans</h4>
                 <p className="text-xs text-slate-500 dark:text-slate-400">Update membership offerings</p>
               </div>
               <span className="material-symbols-rounded text-slate-400">chevron_right</span>
             </div>
-            
-            <div 
+
+            <div
               onClick={() => onNavigate('ADMIN_USERS')}
               className="flex items-center p-4 bg-white dark:bg-[#1E293B] rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800 active:scale-[0.98] transition-all"
             >
-              <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center mr-4">
+              <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center mr-4 relative">
                 <span className="material-symbols-rounded text-primary text-xl">group</span>
+                {stats.pendingApprovals > 0 && (
+                  <span className="absolute -top-1 -right-1 w-4 h-4 bg-orange-500 rounded-full text-[8px] font-bold text-white flex items-center justify-center border-2 border-white dark:border-[#1E293B]">
+                    {stats.pendingApprovals}
+                  </span>
+                )}
               </div>
               <div className="flex-1 text-left">
-                <h4 className="text-sm font-semibold text-white">User Management</h4>
-                <p className="text-xs text-slate-500 dark:text-slate-400">{stats.activeUsers} total members</p>
+                <h4 className="text-sm font-semibold text-dark">User Management</h4>
+                <p className="text-xs text-slate-500 dark:text-slate-400">
+                  {stats.activeUsers} total members • {stats.pendingApprovals} pending
+                </p>
+              </div>
+              <span className="material-symbols-rounded text-slate-400">chevron_right</span>
+            </div>
+
+            <div
+              onClick={() => onNavigate('ADMIN_EXERCISES')}
+              className="flex items-center p-4 bg-white dark:bg-[#1E293B] rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800 active:scale-[0.98] transition-all"
+            >
+              <div className="w-10 h-10 rounded-xl bg-green-500/10 flex items-center justify-center mr-4">
+                <span className="material-symbols-rounded text-green-500 text-xl">fitness_center</span>
+              </div>
+              <div className="flex-1 text-left">
+                <h4 className="text-sm font-semibold text-dark">Exercise Database</h4>
+                <p className="text-xs text-slate-500 dark:text-slate-400">Upload and manage exercises</p>
+              </div>
+              <span className="material-symbols-rounded text-slate-400">chevron_right</span>
+            </div>
+
+            <div
+              onClick={() => onNavigate('ADMIN_WORKOUTS')}
+              className="flex items-center p-4 bg-white dark:bg-[#1E293B] rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800 active:scale-[0.98] transition-all"
+            >
+              <div className="w-10 h-10 rounded-xl bg-purple-500/10 flex items-center justify-center mr-4">
+                <span className="material-symbols-rounded text-purple-500 text-xl">list_alt</span>
+              </div>
+              <div className="flex-1 text-left">
+                <h4 className="text-sm font-semibold text-dark">Workout Programs</h4>
+                <p className="text-xs text-slate-500 dark:text-slate-400">Create and assign programs</p>
+              </div>
+              <span className="material-symbols-rounded text-slate-400">chevron_right</span>
+            </div>
+
+
+
+            <div
+              onClick={() => onNavigate('ADMIN_EXPLORE')}
+              className="flex items-center p-4 bg-white dark:bg-[#1E293B] rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800 active:scale-[0.98] transition-all"
+            >
+              <div className="w-10 h-10 rounded-xl bg-indigo-500/10 flex items-center justify-center mr-4">
+                <span className="material-symbols-rounded text-indigo-500 text-xl">explore</span>
+              </div>
+              <div className="flex-1 text-left">
+                <h4 className="text-sm font-semibold text-dark">Explore Content</h4>
+                <p className="text-xs text-slate-500 dark:text-slate-400">Manage video lessons & featured content</p>
+              </div>
+              <span className="material-symbols-rounded text-slate-400">chevron_right</span>
+            </div>
+
+            <div
+              onClick={() => onNavigate('ADMIN_SHOP')}
+              className="flex items-center p-4 bg-white dark:bg-[#1E293B] rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800 active:scale-[0.98] transition-all"
+            >
+              <div className="w-10 h-10 rounded-xl bg-emerald-500/10 flex items-center justify-center mr-4">
+                <span className="material-symbols-rounded text-emerald-500 text-xl">storefront</span>
+              </div>
+              <div className="flex-1 text-left">
+                <h4 className="text-sm font-semibold text-dark">Shop Management</h4>
+                <p className="text-xs text-slate-500 dark:text-slate-400">Products & inventory</p>
+              </div>
+              <span className="material-symbols-rounded text-slate-400">chevron_right</span>
+            </div>
+
+            <div
+              onClick={() => onNavigate('ADMIN_ORDERS')}
+              className="flex items-center p-4 bg-white dark:bg-[#1E293B] rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800 active:scale-[0.98] transition-all"
+            >
+              <div className="w-10 h-10 rounded-xl bg-purple-500/10 flex items-center justify-center mr-4">
+                <span className="material-symbols-rounded text-purple-500 text-xl">shopping_cart_checkout</span>
+              </div>
+              <div className="flex-1 text-left">
+                <h4 className="text-sm font-semibold text-dark">Orders Management</h4>
+                <p className="text-xs text-slate-500 dark:text-slate-400">View & manage all orders</p>
               </div>
               <span className="material-symbols-rounded text-slate-400">chevron_right</span>
             </div>
@@ -148,23 +461,24 @@ const AdminDashboard: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNa
         </div>
       </main>
 
-      <nav className="fixed bottom-0 left-0 right-0 bg-white/80 dark:bg-[#0F172A]/80 backdrop-blur-lg border-t border-slate-200 dark:border-slate-800 px-8 py-3 pb-8 flex justify-between items-center z-50 max-w-[430px] mx-auto">
-        <button onClick={() => onNavigate('ADMIN_DASHBOARD')} className="flex flex-col items-center space-y-1 text-primary">
-          <span className="material-symbols-rounded">dashboard</span>
-          <span className="text-[10px] font-bold">Home</span>
+      <nav className="fixed bottom-0 left-0 right-0 bg-white/80 dark:bg-[#0F172A]/80 backdrop-blur-lg border-t border-slate-200 dark:border-slate-800 px-4 py-3 pb-8 flex justify-between items-center z-50 max-w-[430px] mx-auto gap-2">
+        <button onClick={() => onNavigate('ADMIN_DASHBOARD')} className="flex flex-col items-center space-y-1 text-primary text-xs">
+          <span className="material-symbols-rounded text-lg">dashboard</span>
+          <span className="font-bold">Home</span>
         </button>
-        <button className="flex flex-col items-center space-y-1 text-slate-400 dark:text-slate-500">
-          <span className="material-symbols-rounded">analytics</span>
-          <span className="text-[10px] font-medium">Reports</span>
+
+        <button onClick={() => onNavigate('ADMIN_ORDERS')} className="flex flex-col items-center space-y-1 text-slate-400 dark:text-slate-500 hover:text-primary transition-colors text-xs">
+          <span className="material-symbols-rounded text-lg">shopping_cart_checkout</span>
+          <span className="font-medium">Orders</span>
         </button>
         <button onClick={() => onNavigate('DASHBOARD')} className="w-14 h-14 bg-primary text-white rounded-full flex items-center justify-center shadow-lg shadow-primary/30 -mt-10 border-4 border-background-light dark:border-[#0F172A]">
           <span className="material-symbols-rounded text-3xl">home</span>
         </button>
-        <button onClick={() => onNavigate('ADMIN_USERS')} className="flex flex-col items-center space-y-1 text-slate-400 dark:text-slate-500">
+        <button onClick={() => onNavigate('ADMIN_USERS')} className="flex flex-col items-center space-y-1 text-slate-400 dark:text-slate-500 hover:text-primary transition-colors">
           <span className="material-symbols-rounded">people</span>
           <span className="text-[10px] font-medium">Users</span>
         </button>
-        <button onClick={() => onNavigate('PROFILE')} className="flex flex-col items-center space-y-1 text-slate-400 dark:text-slate-500">
+        <button onClick={() => onNavigate('PROFILE')} className="flex flex-col items-center space-y-1 text-slate-400 dark:text-slate-500 hover:text-primary transition-colors">
           <span className="material-symbols-rounded">settings</span>
           <span className="text-[10px] font-medium">Config</span>
         </button>

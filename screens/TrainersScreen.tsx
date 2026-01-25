@@ -1,29 +1,23 @@
 
 import React from 'react';
 import StatusBar from '../components/StatusBar';
+import Header from '../components/Header';
 import BottomNav from '../components/BottomNav';
 import { AppScreen } from '../types';
 
 const trainers = [
-  { name: 'Alex Rivers', specialty: 'Strength & Conditioning', exp: '8yr', rate: '$45/hr', rating: '4.9', img: 'https://picsum.photos/seed/t1/200' },
-  { name: 'Sarah Jenkins', specialty: 'Yoga & Mobility', exp: '6yr', rate: '$50/hr', rating: '5.0', img: 'https://picsum.photos/seed/t2/200' },
-  { name: 'Marcus Chen', specialty: 'HIIT & Weight Loss', exp: '4yr', rate: '$40/hr', rating: '4.7', img: 'https://picsum.photos/seed/t3/200', away: true },
+  { name: 'Alex Rivers', specialty: 'Strength & Conditioning', exp: '8yr', rate: '₹1500/hr', rating: '4.9', img: 'https://picsum.photos/seed/t1/200' },
+  { name: 'Sarah Jenkins', specialty: 'Yoga & Mobility', exp: '6yr', rate: '₹2000/hr', rating: '5.0', img: 'https://picsum.photos/seed/t2/200' },
+  { name: 'Marcus Chen', specialty: 'HIIT & Weight Loss', exp: '4yr', rate: '₹1200/hr', rating: '4.7', img: 'https://picsum.photos/seed/t3/200', away: true },
 ];
 
 const TrainersScreen: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNavigate }) => {
   return (
-    <div className="pb-32 min-h-screen">
+    <div className="pb-32 min-h-screen bg-[#090E1A]">
       <StatusBar />
-      <main className="px-6 pt-4">
-        <header className="mb-6 flex items-center justify-between">
-          <button onClick={() => onNavigate('DASHBOARD')} className="w-10 h-10 flex items-center justify-center rounded-full bg-slate-800">
-            <span className="material-symbols-rounded">arrow_back_ios_new</span>
-          </button>
-          <h1 className="text-xl font-bold">Personal Trainers</h1>
-          <button className="w-10 h-10 flex items-center justify-center rounded-full bg-slate-800">
-            <span className="material-symbols-rounded">search</span>
-          </button>
-        </header>
+      <Header onProfileClick={() => onNavigate('PROFILE')} />
+      <main className="px-6 pt-2">
+        <h1 className="text-xl font-bold mb-6">Personal Trainers</h1>
 
         <div className="space-y-4">
           <div className="flex gap-3 overflow-x-auto no-scrollbar -mx-6 px-6 mb-6">
@@ -65,11 +59,10 @@ const TrainersScreen: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNa
                     </div>
                   </div>
                 </div>
-                <button 
+                <button
                   disabled={t.away}
-                  className={`w-full py-3.5 rounded-xl font-bold text-sm shadow-md transition-all ${
-                    t.away ? 'bg-slate-800 text-slate-500 cursor-not-allowed' : 'bg-primary text-white active:scale-[0.98]'
-                  }`}
+                  className={`w-full py-3.5 rounded-xl font-bold text-sm shadow-md transition-all ${t.away ? 'bg-slate-800 text-slate-500 cursor-not-allowed' : 'bg-primary text-white active:scale-[0.98]'
+                    }`}
                 >
                   {t.away ? 'Next Available: Tomorrow' : 'Book Now'}
                 </button>

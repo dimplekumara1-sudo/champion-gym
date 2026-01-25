@@ -27,7 +27,10 @@ const BottomNav: React.FC<BottomNavProps> = ({ active, onNavigate }) => {
       </button>
 
       <div className="relative -top-10">
-        <button className="bg-primary w-14 h-14 rounded-full flex items-center justify-center shadow-[0_0_20px_rgba(34,197,94,0.4)] text-slate-950 border-[6px] border-[#090E1A] transition-transform active:scale-90 hover:scale-105">
+        <button 
+          onClick={() => onNavigate('CREATE_WORKOUT')}
+          className="bg-primary w-14 h-14 rounded-full flex items-center justify-center shadow-[0_0_20px_rgba(34,197,94,0.4)] text-slate-950 border-[6px] border-[#090E1A] transition-transform active:scale-90 hover:scale-105"
+        >
           <span className="material-symbols-rounded text-3xl font-black">add</span>
         </button>
       </div>
