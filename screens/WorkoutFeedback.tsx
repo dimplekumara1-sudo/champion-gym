@@ -32,7 +32,7 @@ const WorkoutFeedback: React.FC<WorkoutFeedbackProps> = ({ programId, duration, 
     try {
       // Check cache for exercise count
       const cacheKey = `${CACHE_KEYS.WORKOUT_DETAIL}${programId}`;
-      let cachedData = cache.get(cacheKey);
+      let cachedData = cache.get<{ exerciseCount: number }>(cacheKey);
 
       if (!cachedData) {
         // Fetch exercise count
@@ -44,8 +44,15 @@ const WorkoutFeedback: React.FC<WorkoutFeedbackProps> = ({ programId, duration, 
 
         if (programError) throw programError;
 
-        if (programData?.workouts?.workout_exercises) {
-          const count = programData.workouts.workout_exercises.length;
+        const workouts = programData?.workouts as any;
+        if (workouts?.workout_exercises) {
+          const count = workouts.workout_exercises.length;
+          setExerciseCount(count);
+
+          // Cache the data
+          cache.set(cacheKey, { exerciseCount: count }, CACHE_TTL.MEDIUM);
+        } else if (Array.isArray(workouts) && workouts[0]?.workout_exercises) {
+          const count = workouts[0].workout_exercises.length;
           setExerciseCount(count);
 
           // Cache the data
@@ -57,7 +64,7 @@ const WorkoutFeedback: React.FC<WorkoutFeedbackProps> = ({ programId, duration, 
 
       // Check cache for week progress
       const weekCacheKey = `${CACHE_KEYS.DASHBOARD_STATS}_week`;
-      let cachedWeekData = cache.get(weekCacheKey);
+      let cachedWeekData = cache.get<{ completed: number, total: number }>(weekCacheKey);
 
       if (!cachedWeekData) {
         // Fetch weekly progress

@@ -27,7 +27,7 @@ const WorkoutSummary: React.FC<WorkoutSummaryProps> = ({ programId, duration, on
 
       // Check cache for workout data
       const cacheKey = `${CACHE_KEYS.WORKOUT_DETAIL}${programId}`;
-      let cachedData = cache.get(cacheKey);
+      let cachedData = cache.get<any>(cacheKey);
 
       if (!cachedData) {
         const { data: programData, error: programError } = await supabase
@@ -38,14 +38,16 @@ const WorkoutSummary: React.FC<WorkoutSummaryProps> = ({ programId, duration, on
 
         if (programError) throw programError;
 
-        if (programData?.workouts) {
-          setWorkoutName(programData.workouts.name || '');
-          const exercises = programData.workouts.workout_exercises || [];
+        const workouts = programData?.workouts as any;
+        if (workouts) {
+          const w = Array.isArray(workouts) ? workouts[0] : workouts;
+          setWorkoutName(w.name || '');
+          const exercises = w.workout_exercises || [];
           setExerciseCount(exercises.length);
 
           // Cache workout data for medium TTL
           cache.set(cacheKey, {
-            name: programData.workouts.name,
+            name: w.name,
             exerciseCount: exercises.length
           }, CACHE_TTL.MEDIUM);
         }
@@ -56,7 +58,7 @@ const WorkoutSummary: React.FC<WorkoutSummaryProps> = ({ programId, duration, on
       }
 
       // Check cache for profile gym location
-      let profileData = cache.get(CACHE_KEYS.PROFILE_DATA);
+      let profileData = cache.get<any>(CACHE_KEYS.PROFILE_DATA);
       if (!profileData) {
         const { data: profile, error: profileError } = await supabase
           .from('profiles')

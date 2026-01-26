@@ -1,4 +1,4 @@
-# PowerFlex Shop Management System - Complete Setup Guide
+# Challenge Gym Shop Management System - Complete Setup Guide
 
 ## 📋 What Has Been Created
 

@@ -18,7 +18,7 @@ View your app in AI Studio: https://ai.studio/apps/temp/1
 2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
 3. Run the app:
    `npm run dev`
-# champion-gym
-# champion-gym
-# champion-gym
-# champion-gym
+# Challenge-gym
+# Challenge-gym
+# Challenge-gym
+# Challenge-gym

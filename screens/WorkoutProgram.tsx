@@ -8,7 +8,6 @@ import { supabase } from '../lib/supabase';
 const WorkoutProgram: React.FC<{ onNavigate: (s: AppScreen) => void, onSelectWorkout: (workoutId: string, programId: string) => void }> = ({ onNavigate, onSelectWorkout }) => {
   const [programs, setPrograms] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [selectedExercise, setSelectedExercise] = useState<any>(null);
   const [userGender, setUserGender] = useState<string>('male');
 
   useEffect(() => {
@@ -31,6 +30,60 @@ const WorkoutProgram: React.FC<{ onNavigate: (s: AppScreen) => void, onSelectWor
     } catch (error) {
       console.error('Error fetching user gender:', error);
     }
+  };
+
+  const openVideoInNewTab = (title: string, videoUrl: string) => {
+    let embedUrl = videoUrl;
+
+    // Convert YouTube URLs to embeddable format if needed
+    if (videoUrl.includes('youtube.com/watch?v=')) {
+      const videoId = videoUrl.split('v=')[1].split('&')[0];
+      embedUrl = `https://www.youtube.com/embed/${videoId}`;
+    } else if (videoUrl.includes('youtu.be/')) {
+      const videoId = videoUrl.split('youtu.be/')[1].split('?')[0];
+      embedUrl = `https://www.youtube.com/embed/${videoId}`;
+    } else if (!videoUrl.includes('embed')) {
+      window.open(videoUrl, '_blank');
+      return;
+    }
+
+    // Create HTML page for video display
+    const htmlContent = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>${title}</title>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <style>
+          * { margin: 0; padding: 0; box-sizing: border-box; }
+          body { background: #000; font-family: system-ui, -apple-system, sans-serif; padding: 20px; }
+          .container { max-width: 1200px; margin: 0 auto; }
+          .header { margin-bottom: 20px; }
+          .title { color: #fff; font-size: 28px; font-weight: bold; margin-bottom: 10px; }
+          .video-container { position: relative; width: 100%; padding-bottom: 56.25%; height: 0; overflow: hidden; border-radius: 12px; margin-bottom: 20px; }
+          .video-container iframe { position: absolute; top: 0; left: 0; width: 100%; height: 100%; border: none; }
+          .back-btn { display: inline-block; margin-bottom: 20px; padding: 10px 20px; background: #3f46e1; color: #fff; text-decoration: none; border-radius: 8px; font-weight: bold; }
+          .back-btn:hover { background: #4f46e1; }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <a href="javascript:history.back()" class="back-btn">← Back</a>
+          <div class="header">
+            <div class="title">${title}</div>
+          </div>
+          <div class="video-container">
+            <iframe src="${embedUrl}" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
+          </div>
+        </div>
+      </body>
+      </html>
+    `;
+
+    const blob = new Blob([htmlContent], { type: 'text/html' });
+    const url = URL.createObjectURL(blob);
+    window.open(url, '_blank');
   };
 
   const loadExerciseVideo = async (workoutId: string) => {
@@ -63,10 +116,12 @@ const WorkoutProgram: React.FC<{ onNavigate: (s: AppScreen) => void, onSelectWor
         ? exercise.women_youtube_url || exercise.youtube_url
         : exercise.men_youtube_url || exercise.youtube_url;
 
-      setSelectedExercise({
-        name: exercise.exercise_name,
-        videoUrl: videoUrl
-      });
+      // Open video in new tab instead of modal
+      if (videoUrl) {
+        openVideoInNewTab(exercise.exercise_name, videoUrl);
+      } else {
+        alert('No video available for this exercise');
+      }
     } catch (error) {
       console.error('Error loading exercise video:', error);
       alert('Failed to load exercise video');
@@ -177,65 +232,6 @@ const WorkoutProgram: React.FC<{ onNavigate: (s: AppScreen) => void, onSelectWor
           </div>
         ))}
       </main>
-
-      {/* Exercise Video Modal */}
-      {selectedExercise && (
-        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
-          <div className="bg-slate-800 rounded-2xl max-w-2xl w-full overflow-hidden">
-            <div className="flex items-center justify-between p-4 border-b border-slate-700">
-              <h3 className="text-lg font-bold text-white">{selectedExercise.name}</h3>
-              <button
-                onClick={() => setSelectedExercise(null)}
-                className="p-2 hover:bg-slate-700 rounded-full transition-colors"
-              >
-                <span className="material-symbols-rounded text-2xl">close</span>
-              </button>
-            </div>
-
-            <div className="bg-black p-4">
-              {selectedExercise.videoUrl ? (
-                <iframe
-                  width="100%"
-                  height="400"
-                  src={selectedExercise.videoUrl.replace('youtube.com/watch?v=', 'youtube.com/embed/').split('&')[0]}
-                  title={selectedExercise.name}
-                  frameBorder="0"
-                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                  allowFullScreen
-                  className="rounded-lg"
-                />
-              ) : (
-                <div className="h-96 flex items-center justify-center bg-slate-700/50 rounded-lg">
-                  <p className="text-slate-400">No video available for this exercise</p>
-                </div>
-              )}
-            </div>
-
-            <div className="p-4 border-t border-slate-700 flex gap-2">
-              <button
-                onClick={() => {
-                  if (selectedExercise) {
-                    const workout = programs.find(p => p.workouts);
-                    if (workout) {
-                      onSelectWorkout(workout.workouts.id, workout.id);
-                      setSelectedExercise(null);
-                    }
-                  }
-                }}
-                className="flex-1 bg-primary hover:bg-primary/90 text-slate-950 font-bold py-2 rounded-lg transition-colors"
-              >
-                Start Workout
-              </button>
-              <button
-                onClick={() => setSelectedExercise(null)}
-                className="flex-1 bg-slate-700 hover:bg-slate-600 text-white font-bold py-2 rounded-lg transition-colors"
-              >
-                Close
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
       <BottomNav active="WORKOUTS" onNavigate={onNavigate} />
     </div>

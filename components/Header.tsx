@@ -1,16 +1,40 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { supabase } from '../lib/supabase';
 import { cache, CACHE_KEYS, CACHE_TTL } from '../lib/cache';
+import { PlanNotification } from '../lib/notifications';
 
 interface HeaderProps {
     onProfileClick?: () => void;
+    notifications?: PlanNotification[];
+    onNotificationsClick?: () => void;
 }
 
-const Header: React.FC<HeaderProps> = ({ onProfileClick }) => {
+const Header: React.FC<HeaderProps> = ({ onProfileClick, notifications = [], onNotificationsClick }) => {
     const [profilePhoto, setProfilePhoto] = useState<string | null>(null);
+    const [photoError, setPhotoError] = useState(false);
     const [uploading, setUploading] = useState(false);
     const [user, setUser] = useState<any>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
+
+    // Function to validate Google photo URL without direct fetching
+    const validateGooglePhotoUrl = (url: string): boolean => {
+        if (!url || typeof url !== 'string') return false;
+        
+        // Check if it's a Google photos URL
+        const googlePhotoPatterns = [
+            /lh3\.googleusercontent\.com/,
+            /photos\.google\.com/,
+            /googleusercontent\.com/
+        ];
+        
+        return googlePhotoPatterns.some(pattern => pattern.test(url));
+    };
+
+    // Function to handle photo errors with retry logic
+    const handlePhotoError = () => {
+        setPhotoError(true);
+        console.log('Profile photo failed to load, falling back to default avatar');
+    };
 
     useEffect(() => {
         const initializeProfile = async () => {
@@ -18,44 +42,54 @@ const Header: React.FC<HeaderProps> = ({ onProfileClick }) => {
             setUser(user);
 
             if (user) {
-                // Check if user has Google photo
                 const googlePhoto = user.user_metadata?.avatar_url;
-                if (googlePhoto) {
-                    setProfilePhoto(googlePhoto);
-                    return;
-                }
 
-                // Otherwise, check for uploaded custom profile photo
                 const cachedProfile = cache.get(CACHE_KEYS.PROFILE_DATA) as any;
-                if (cachedProfile?.avatar_url) {
+                if (cachedProfile?.avatar_url && cachedProfile.avatar_url.includes('supabase')) {
                     setProfilePhoto(cachedProfile.avatar_url);
+                    setPhotoError(false);
                     return;
                 }
 
-                // Fetch from database if not cached
                 const { data: profileData } = await supabase
                     .from('profiles')
                     .select('avatar_url')
                     .eq('id', user.id)
                     .single();
 
-                if (profileData?.avatar_url) {
+                if (profileData?.avatar_url && profileData.avatar_url.includes('supabase')) {
                     setProfilePhoto(profileData.avatar_url);
-                    // Update cache
+                    setPhotoError(false);
                     const fullProfile = (cache.get(CACHE_KEYS.PROFILE_DATA) || {}) as any;
                     cache.set(CACHE_KEYS.PROFILE_DATA, { ...fullProfile, avatar_url: profileData.avatar_url }, CACHE_TTL.LONG);
+                } else if (googlePhoto && validateGooglePhotoUrl(googlePhoto)) {
+                    // Use Google photo URL directly with error handling
+                    setProfilePhoto(googlePhoto);
+                    setPhotoError(false);
+                } else {
+                    setPhotoError(true);
                 }
             }
         };
 
         initializeProfile();
 
-        // Listen for auth changes
-        const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+        const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
             if (session?.user) {
                 const googlePhoto = session.user.user_metadata?.avatar_url;
                 if (googlePhoto) {
-                    setProfilePhoto(googlePhoto);
+                    const { data: profileData } = await supabase
+                        .from('profiles')
+                        .select('avatar_url')
+                        .eq('id', session.user.id)
+                        .single();
+
+                    if (!profileData?.avatar_url || !profileData.avatar_url.includes('supabase')) {
+                        if (validateGooglePhotoUrl(googlePhoto)) {
+                            setProfilePhoto(googlePhoto);
+                            setPhotoError(false);
+                        }
+                    }
                 }
             }
         });
@@ -137,38 +171,58 @@ const Header: React.FC<HeaderProps> = ({ onProfileClick }) => {
                     <span className="material-symbols-rounded text-slate-900 font-bold text-lg">fitness_center</span>
                 </div>
                 <div>
-                    <h1 className="text-sm font-black tracking-tight leading-none">POWERFLEX</h1>
+                    <h1 className="text-sm font-black tracking-tight leading-none">Challenge Gym</h1>
                     <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Elite Coach</p>
                 </div>
             </div>
 
-            <button
-                onClick={handlePhotoClick}
-                disabled={uploading}
-                className="relative group cursor-pointer transition-transform active:scale-95 disabled:opacity-50"
-                title={user?.user_metadata?.avatar_url ? 'View Profile' : 'Upload Photo'}
-            >
-                <div className="w-12 h-12 rounded-full border-2 border-primary/30 group-hover:border-primary/60 transition-colors overflow-hidden bg-slate-800 flex items-center justify-center">
-                    {profilePhoto ? (
-                        <img
-                            src={profilePhoto}
-                            alt="Profile"
-                            className="w-full h-full object-cover"
-                        />
-                    ) : (
-                        <span className="material-symbols-rounded text-slate-600 text-xl">account_circle</span>
-                    )}
-                </div>
-
-                {/* Upload indicator for non-Google photos */}
-                {!user?.user_metadata?.avatar_url && !profilePhoto && (
-                    <div className="absolute -bottom-1 -right-1 bg-primary text-slate-900 p-1.5 rounded-full shadow-lg border-2 border-[#090E1A]">
-                        <span className="material-symbols-rounded text-sm font-bold block" style={{ fontSize: '14px' }}>
-                            {uploading ? 'cloud_upload' : 'add'}
+            <div className="flex items-center gap-3">
+                {/* Notification Bell */}
+                <button
+                    onClick={onNotificationsClick}
+                    className="relative transition-transform active:scale-95"
+                    title="View notifications"
+                >
+                    <span className="material-symbols-rounded text-slate-400 hover:text-primary transition-colors">notifications</span>
+                    {notifications && notifications.length > 0 && (
+                        <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[9px] font-black h-5 w-5 rounded-full flex items-center justify-center">
+                            {notifications.length > 9 ? '9+' : notifications.length}
                         </span>
+                    )}
+                </button>
+
+                <button
+                    onClick={handlePhotoClick}
+                    disabled={uploading}
+                    className="relative group cursor-pointer transition-transform active:scale-95 disabled:opacity-50"
+                    title={user?.user_metadata?.avatar_url ? 'View Profile' : 'Upload Photo'}
+                >
+                    <div className="w-12 h-12 rounded-full border-2 border-primary/30 group-hover:border-primary/60 transition-colors overflow-hidden bg-slate-800 flex items-center justify-center">
+{profilePhoto && !photoError ? (
+                            <img
+                                src={profilePhoto}
+                                alt="Profile"
+                                className="w-full h-full object-cover"
+                                onError={handlePhotoError}
+                                referrerPolicy="no-referrer"
+                                crossOrigin="anonymous"
+                                loading="lazy"
+                            />
+                        ) : (
+                            <span className="material-symbols-rounded text-slate-600 text-xl">account_circle</span>
+                        )}
                     </div>
-                )}
-            </button>
+
+                    {/* Upload indicator for non-Google photos */}
+                    {!user?.user_metadata?.avatar_url && !profilePhoto && (
+                        <div className="absolute -bottom-1 -right-1 bg-primary text-slate-900 p-1.5 rounded-full shadow-lg border-2 border-[#090E1A]">
+                            <span className="material-symbols-rounded text-sm font-bold block" style={{ fontSize: '14px' }}>
+                                {uploading ? 'cloud_upload' : 'add'}
+                            </span>
+                        </div>
+                    )}
+                </button>
+            </div>
 
             <input
                 ref={fileInputRef}

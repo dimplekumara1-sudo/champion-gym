@@ -12,10 +12,10 @@ const SplashScreen: React.FC<SplashScreenProps> = ({ onGetStarted, onSignIn }) =
     <div className="relative h-screen flex flex-col">
       <StatusBar />
       <div className="absolute inset-0 z-0">
-        <img 
-          alt="Athlete training" 
-          className="w-full h-full object-cover" 
-          src="https://picsum.photos/seed/fitness/800/1600" 
+        <img
+          alt="Athlete training"
+          className="w-full h-full object-cover"
+          src="https://picsum.photos/seed/fitness/800/1600"
         />
         <div className="absolute inset-0 bg-gradient-to-t from-background-dark via-background-dark/60 to-transparent"></div>
       </div>
@@ -26,7 +26,7 @@ const SplashScreen: React.FC<SplashScreenProps> = ({ onGetStarted, onSignIn }) =
             <span className="material-symbols-rounded text-white text-5xl">fitness_center</span>
           </div>
           <h1 className="text-white text-2xl font-extrabold tracking-tighter uppercase italic">
-            Champion<span className="text-secondary">Gym</span>
+            Challenge<span className="text-secondary">Gym</span>
           </h1>
         </div>
 
@@ -41,14 +41,14 @@ const SplashScreen: React.FC<SplashScreenProps> = ({ onGetStarted, onSignIn }) =
         </div>
 
         <div className="space-y-4">
-          <button 
+          <button
             onClick={onGetStarted}
             className="w-full bg-primary hover:bg-green-500 text-slate-900 font-extrabold py-5 rounded-2xl text-lg transition-all transform active:scale-95 shadow-xl shadow-primary/30 flex items-center justify-center gap-2"
           >
             GET STARTED
             <span className="material-symbols-rounded">arrow_forward</span>
           </button>
-          <button 
+          <button
             onClick={onSignIn}
             className="w-full bg-transparent border-2 border-slate-700 text-white font-bold py-5 rounded-2xl text-lg hover:bg-slate-800 transition-all"
           >

@@ -3,45 +3,82 @@ import React, { useEffect, useState } from 'react';
 import StatusBar from '../components/StatusBar';
 import Header from '../components/Header';
 import BottomNav from '../components/BottomNav';
-import { AppScreen } from '../types';
+import { AppScreen, Profile } from '../types';
 import { supabase } from '../lib/supabase';
 import { cache, CACHE_KEYS, CACHE_TTL } from '../lib/cache';
+import { notificationService, PlanNotification } from '../lib/notifications';
 
 const Dashboard: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNavigate }) => {
   const [user, setUser] = useState<any>(null);
-  const [profile, setProfile] = useState<any>(null);
+  const [profile, setProfile] = useState<Profile | null>(null);
   const [planDetails, setPlanDetails] = useState<any>(null);
   const [currentProgram, setCurrentProgram] = useState<any>(null);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isPlanModalOpen, setIsPlanModalOpen] = useState(false);
   const [editData, setEditData] = useState({ height: 0, weight: 0, target_weight: 0 });
+  const [notifications, setNotifications] = useState<PlanNotification[]>([]);
+  const [showNotificationsModal, setShowNotificationsModal] = useState(false);
 
   useEffect(() => {
     fetchProfile();
+
+    // Set up real-time subscription for profile updates
+    const setupSubscription = async () => {
+      const { data: { user: authUser } } = await supabase.auth.getUser();
+      if (authUser) {
+        const subscription = supabase
+          .channel(`profile_${authUser.id}`)
+          .on(
+            'postgres_changes',
+            {
+              event: '*',
+              schema: 'public',
+              table: 'profiles',
+              filter: `id=eq.${authUser.id}`
+            },
+            () => {
+              // Invalidate cache and refetch when profile changes
+              cache.remove(CACHE_KEYS.PROFILE_DATA);
+              cache.remove(`${CACHE_KEYS.PROFILE_DATA}_plan`);
+              fetchProfile();
+            }
+          )
+          .subscribe();
+
+        return subscription;
+      }
+    };
+
+    let subscription: any;
+    setupSubscription().then((sub) => {
+      subscription = sub;
+    });
+
+    return () => {
+      if (subscription) {
+        subscription.unsubscribe();
+      }
+    };
   }, []);
 
   const fetchProfile = async () => {
     const { data: { user } } = await supabase.auth.getUser();
     setUser(user);
     if (user) {
-      // Check cache first for profile data
-      let profileData = cache.get(CACHE_KEYS.PROFILE_DATA);
+      // Always fetch fresh profile data from Supabase for payment status
+      const { data: profileData } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', user.id)
+        .single();
 
-      if (!profileData) {
-        // Fetch from Supabase only if not cached
-        const { data } = await supabase
-          .from('profiles')
-          .select('*')
-          .eq('id', user.id)
-          .single();
-        profileData = data;
-        if (profileData) {
-          cache.set(CACHE_KEYS.PROFILE_DATA, profileData, CACHE_TTL.LONG);
-        }
-      }
-
-      setProfile(profileData);
       if (profileData) {
+        setProfile(profileData);
+
+        // Fetch notifications
+        const userNotifications = await notificationService.getUserNotifications(user.id);
+        setNotifications(userNotifications);
+
         setEditData({
           height: profileData.height || 170,
           weight: profileData.weight || 70,
@@ -49,20 +86,14 @@ const Dashboard: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNavigat
         });
 
         if (profileData.plan) {
-          // Check cache for plan details
-          let cachedPlan = cache.get(`${CACHE_KEYS.PROFILE_DATA}_plan`);
-          if (!cachedPlan) {
-            const { data: planData } = await supabase
-              .from('plans')
-              .select('*')
-              .eq('id', profileData.plan)
-              .single();
-            if (planData) {
-              setPlanDetails(planData);
-              cache.set(`${CACHE_KEYS.PROFILE_DATA}_plan`, planData, CACHE_TTL.VERY_LONG);
-            }
-          } else {
-            setPlanDetails(cachedPlan);
+          // Always fetch fresh plan details to ensure upgrades are reflected
+          const { data: planData } = await supabase
+            .from('plans')
+            .select('*')
+            .eq('id', profileData.plan)
+            .single();
+          if (planData) {
+            setPlanDetails(planData);
           }
         }
 
@@ -134,12 +165,16 @@ const Dashboard: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNavigat
     : null;
 
   const showExpiryAlert = daysUntilExpiry !== null && daysUntilExpiry <= 5 && daysUntilExpiry >= 0;
-  const showPaymentAlert = profile?.payment_status === 'pending' || profile?.payment_status === 'unpaid';
+  const showPaymentAlert = (profile?.payment_status === 'pending' || profile?.payment_status === 'unpaid') && profile?.due_amount > 0;
 
   return (
     <div className="min-h-screen bg-[#090E1A] pb-32">
       <StatusBar />
-      <Header onProfileClick={() => onNavigate('PROFILE')} />
+      <Header
+        onProfileClick={() => onNavigate('PROFILE')}
+        notifications={notifications}
+        onNotificationsClick={() => setShowNotificationsModal(true)}
+      />
 
       <main className="px-5">
         <div className="py-3 mb-2">
@@ -159,12 +194,17 @@ const Dashboard: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNavigat
                   <h4 className="text-sm font-bold text-orange-400">Plan Expiring Soon</h4>
                   <p className="text-[11px] text-orange-500/80 font-medium">Your {planDetails?.name} plan expires in {daysUntilExpiry} days. Renew now!</p>
                 </div>
-                <button
-                  onClick={() => onNavigate('PROFILE')}
-                  className="bg-orange-500 text-[#090E1A] text-[10px] font-black px-4 py-2 rounded-xl"
-                >
-                  RENEW
-                </button>
+                <div className="flex flex-col items-end gap-1">
+                  {profile?.due_amount > 0 && (
+                    <span className="text-[10px] font-black text-orange-500">DUE: ₹{profile.due_amount}</span>
+                  )}
+                  <button
+                    onClick={() => onNavigate('PROFILE')}
+                    className="bg-orange-500 text-[#090E1A] text-[10px] font-black px-4 py-2 rounded-xl"
+                  >
+                    RENEW
+                  </button>
+                </div>
               </div>
             )}
             {showPaymentAlert && (
@@ -553,6 +593,71 @@ const Dashboard: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNavigat
             >
               Close Details
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* Notifications Modal */}
+      {showNotificationsModal && notifications.length > 0 && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[100] flex items-center justify-center p-6">
+          <div className="bg-[#1f2937] w-full max-w-sm rounded-3xl overflow-hidden border border-slate-800 shadow-2xl flex flex-col max-h-[90vh]">
+            <div className="sticky top-0 p-6 border-b border-slate-800 flex items-center justify-between bg-[#1f2937]">
+              <h2 className="text-xl font-bold text-white">Notifications</h2>
+              <button
+                onClick={() => setShowNotificationsModal(false)}
+                className="text-slate-400 hover:text-white transition-colors"
+              >
+                <span className="material-symbols-rounded">close</span>
+              </button>
+            </div>
+
+            <div className="overflow-y-auto no-scrollbar p-4 space-y-3 flex-1">
+              {notifications.map((notification, idx) => (
+                <div
+                  key={idx}
+                  className={`p-4 rounded-2xl border ${notification.type === 'expiring_soon'
+                    ? 'bg-orange-500/10 border-orange-500/20'
+                    : notification.type === 'expired'
+                      ? 'bg-red-500/10 border-red-500/20'
+                      : 'bg-blue-500/10 border-blue-500/20'
+                    }`}
+                >
+                  <div className="flex gap-3">
+                    <div className={`h-10 w-10 rounded-full flex items-center justify-center flex-shrink-0 ${notification.type === 'expiring_soon'
+                      ? 'bg-orange-500/20 text-orange-500'
+                      : notification.type === 'expired'
+                        ? 'bg-red-500/20 text-red-500'
+                        : 'bg-blue-500/20 text-blue-500'
+                      }`}>
+                      <span className="material-symbols-rounded text-sm">
+                        {notification.type === 'expiring_soon' ? 'schedule' : notification.type === 'expired' ? 'error' : 'info'}
+                      </span>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <h3 className="font-bold text-white text-sm">{notification.title}</h3>
+                      <p className="text-[12px] text-slate-300 mt-1">{notification.message}</p>
+                      {notification.dueAmount && (
+                        <p className="text-[11px] text-orange-400 font-medium mt-2">Due: ${notification.dueAmount.toFixed(2)}</p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div className="border-t border-slate-800 p-4 bg-[#1f2937] sticky bottom-0">
+              <button
+                onClick={() => {
+                  setShowNotificationsModal(false);
+                  if (notifications[0]?.actionUrl) {
+                    onNavigate(notifications[0].actionUrl as AppScreen);
+                  }
+                }}
+                className="w-full bg-primary text-slate-900 font-bold py-3 rounded-xl hover:bg-green-600 transition-colors"
+              >
+                Take Action
+              </button>
+            </div>
           </div>
         </div>
       )}

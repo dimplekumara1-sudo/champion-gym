@@ -9,7 +9,7 @@ const goals = [
   { id: 'flexibility', title: 'Improve Flexibility', desc: 'Focus on mobility, stretching and mental balance.', icon: 'self_improvement' },
 ];
 
-const OnboardingGoal: React.FC<{ onNext: (goal: string) => void }> = ({ onNext }) => {
+const OnboardingGoal: React.FC<{ onNext: (goal: string) => void; onBack: () => void }> = ({ onNext, onBack }) => {
   const [selected, setSelected] = useState('lose_weight');
 
   return (
@@ -17,6 +17,12 @@ const OnboardingGoal: React.FC<{ onNext: (goal: string) => void }> = ({ onNext }
       <StatusBar />
       <header className="mb-10">
         <div className="flex items-center mb-8">
+          <button 
+            onClick={onBack}
+            className="w-10 h-10 rounded-full bg-slate-800 flex items-center justify-center mr-4 active:scale-90 transition-transform"
+          >
+            <span className="material-symbols-rounded text-2xl text-white">arrow_back</span>
+          </button>
           <div className="flex-1">
             <div className="flex gap-1.5">
               <div className="flex-1 h-1 rounded-full bg-primary"></div>

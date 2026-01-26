@@ -57,7 +57,7 @@ const LoginScreen: React.FC<{ onLogin: () => void, onSignUp: () => void }> = ({ 
             <div className="w-10 h-10 bg-primary rounded-lg flex items-center justify-center">
               <span className="material-symbols-rounded text-slate-900 font-bold">fitness_center</span>
             </div>
-            <span className="text-xl font-bold tracking-tight">CHAMPION GYM</span>
+            <span className="text-xl font-bold tracking-tight">Challenge GYM</span>
           </div>
           <h1 className="text-4xl font-bold leading-tight">Welcome <br />Back</h1>
         </div>

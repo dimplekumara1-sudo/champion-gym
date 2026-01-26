@@ -205,7 +205,7 @@ For related data items, use descriptive patterns:
 ## Storage Details
 
 - **Storage**: Browser's `localStorage`
-- **Prefix**: `powerflex_cache_`
+- **Prefix**: `Challenge Gym_cache_`
 - **Format**: JSON serialized cache entries with timestamp
 - **Capacity**: ~5-10MB per domain (browser dependent)
 - **Persistence**: Survives page refresh and app restart

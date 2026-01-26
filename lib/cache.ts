@@ -11,7 +11,7 @@ interface CacheEntry<T> {
 }
 
 class CacheManager {
-    private prefix = 'powerflex_cache_';
+    private prefix = 'Challenge Gym_cache_';
 
     /**
      * Set cache with TTL

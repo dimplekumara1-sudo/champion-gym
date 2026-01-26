@@ -2,18 +2,26 @@
 import React, { useState } from 'react';
 import StatusBar from '../components/StatusBar';
 
-const OnboardingGender: React.FC<{ onNext: (gender: string) => void }> = ({ onNext }) => {
+const OnboardingGender: React.FC<{ onNext: (gender: string) => void; onBack: () => void }> = ({ onNext, onBack }) => {
   const [selected, setSelected] = useState<'male' | 'female'>('female');
 
   return (
     <div className="min-h-screen bg-background-dark p-6 flex flex-col">
       <StatusBar />
       <header className="mb-10">
-        <div className="flex items-center gap-1.5 mb-8">
-          <div className="w-8 h-1.5 rounded-full bg-primary"></div>
-          <div className="w-8 h-1.5 rounded-full bg-primary"></div>
-          <div className="w-8 h-1.5 rounded-full bg-slate-800"></div>
-          <div className="w-8 h-1.5 rounded-full bg-slate-800"></div>
+        <div className="flex items-center mb-8">
+          <button 
+            onClick={onBack}
+            className="w-10 h-10 rounded-full bg-slate-800 flex items-center justify-center mr-4 active:scale-90 transition-transform"
+          >
+            <span className="material-symbols-rounded text-2xl text-white">arrow_back</span>
+          </button>
+          <div className="flex-1 flex gap-1.5">
+            <div className="flex-1 h-1.5 rounded-full bg-primary"></div>
+            <div className="flex-1 h-1.5 rounded-full bg-primary"></div>
+            <div className="flex-1 h-1.5 rounded-full bg-slate-800"></div>
+            <div className="flex-1 h-1.5 rounded-full bg-slate-800"></div>
+          </div>
         </div>
         <h1 className="text-3xl font-extrabold tracking-tight mb-3">Which one are you?</h1>
         <p className="text-slate-400">To give you a better experience, we need to know your gender.</p>

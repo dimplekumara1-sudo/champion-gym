@@ -2,6 +2,7 @@
 import React, { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { AppScreen } from '../types';
+import { planService } from '../lib/planService';
 
 const AdminDashboard: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNavigate }) => {
   const [stats, setStats] = useState({
@@ -13,6 +14,8 @@ const AdminDashboard: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNa
     totalOrders: 0,
     totalShopRevenue: 0,
     shopOrders: 0,
+    dueRevenue: 0,
+    upcomingRenewals: 0,
   });
   const [trendPeriod, setTrendPeriod] = useState<'7' | '30'>('30');
   const [trendData, setTrendData] = useState<number[]>([]);
@@ -37,12 +40,12 @@ const AdminDashboard: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNa
 
       if (pError) throw pError;
 
-      // Fetch plans
-      const { data: plans, error: plError } = await supabase
-        .from('plans')
+      // Fetch payment history for membership revenue
+      const { data: payments, error: payError } = await supabase
+        .from('payment_history')
         .select('*');
 
-      if (plError) throw plError;
+      if (payError) throw payError;
 
       // Fetch orders
       const { data: orders, error: ordersError } = await supabase
@@ -68,30 +71,27 @@ const AdminDashboard: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNa
       let pendingCount = 0;
       let totalShopRev = 0;
       let deliveredOrders = 0;
+      let totalDue = 0;
 
-      profiles?.forEach(user => {
-        if (user.approval_status === 'pending') pendingCount++;
+      // Calculate membership revenue from payment history
+      payments?.forEach(payment => {
+        const amount = parseFloat(payment.amount.toString());
+        totalRev += amount;
 
-        if (user.payment_status === 'paid' && user.plan) {
-          const plan = plans?.find(p => p.id === user.plan);
-          if (plan) {
-            const price = parseInt(plan.price.replace(/[₹,]/g, '')) || 0;
-            totalRev += price;
-
-            if (user.plan_start_date) {
-              const startDate = new Date(user.plan_start_date);
-              if (startDate.getFullYear() === currentYear) {
-                yearlyRev += price;
-                if (startDate.getMonth() === currentMonth) {
-                  monthlyRev += price;
-                }
-              }
-            } else {
-              monthlyRev += price;
-              yearlyRev += price;
+        if (payment.payment_date) {
+          const payDate = new Date(payment.payment_date);
+          if (payDate.getFullYear() === currentYear) {
+            yearlyRev += amount;
+            if (payDate.getMonth() === currentMonth) {
+              monthlyRev += amount;
             }
           }
         }
+      });
+
+      profiles?.forEach(user => {
+        if (user.approval_status === 'pending') pendingCount++;
+        if (user.due_amount) totalDue += parseFloat(user.due_amount.toString());
       });
 
       // Calculate shop revenue
@@ -102,6 +102,9 @@ const AdminDashboard: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNa
       // Count delivered orders
       deliveredOrders = orders?.filter(o => o.order_status === 'delivered').length || 0;
 
+      // Get upcoming renewals
+      const upcoming = await planService.getUsersWithUpcomingRenewals();
+
       setStats({
         totalRevenue: totalRev,
         monthlyRevenue: monthlyRev,
@@ -111,6 +114,8 @@ const AdminDashboard: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNa
         totalOrders: orders?.length || 0,
         totalShopRevenue: totalShopRev,
         shopOrders: deliveredOrders,
+        dueRevenue: totalDue,
+        upcomingRenewals: upcoming.length,
       });
     } catch (error) {
       console.error('Error fetching admin stats:', error);
@@ -123,18 +128,18 @@ const AdminDashboard: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNa
       const startDate = new Date();
       startDate.setDate(startDate.getDate() - days);
 
-      // Fetch orders and profiles in the date range
+      // Fetch orders and payment history in the date range
       const { data: ordersData, error: ordersError } = await supabase
         .from('gym_orders')
         .select('created_at, total_amount')
         .gte('created_at', startDate.toISOString());
 
-      const { data: profilesData, error: profilesError } = await supabase
-        .from('profiles')
-        .select('plan_start_date, plan, id')
-        .gte('plan_start_date', startDate.toISOString());
+      const { data: paymentsData, error: paymentsError } = await supabase
+        .from('payment_history')
+        .select('payment_date, amount')
+        .gte('payment_date', startDate.toISOString());
 
-      if (ordersError || profilesError) throw ordersError || profilesError;
+      if (ordersError || paymentsError) throw ordersError || paymentsError;
 
       // Initialize daily revenue array
       const dailyRevenue: { [key: string]: number } = {};
@@ -154,15 +159,10 @@ const AdminDashboard: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNa
       });
 
       // Add membership revenue
-      const { data: plans } = await supabase.from('plans').select('*');
-      profilesData?.forEach(profile => {
-        if (profile.plan_start_date) {
-          const dateStr = profile.plan_start_date.split('T')[0];
-          const plan = plans?.find(p => p.id === profile.plan);
-          if (plan) {
-            const price = parseInt(plan.price.replace(/[₹,]/g, '')) || 0;
-            dailyRevenue[dateStr] = (dailyRevenue[dateStr] || 0) + price;
-          }
+      paymentsData?.forEach(payment => {
+        if (payment.payment_date) {
+          const dateStr = payment.payment_date.split('T')[0];
+          dailyRevenue[dateStr] = (dailyRevenue[dateStr] || 0) + parseFloat(payment.amount.toString());
         }
       });
 
@@ -177,7 +177,7 @@ const AdminDashboard: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNa
   };
 
   const generateSVGPath = () => {
-    if (trendData.length === 0) return '';
+    if (trendData.length === 0) return { path: '', fill: '' };
 
     const maxRevenue = Math.max(...trendData, 1);
     const width = 400;
@@ -285,6 +285,24 @@ const AdminDashboard: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNa
             <div className="mt-3 flex items-center text-primary text-xs font-semibold">
               <span className="material-symbols-rounded text-xs mr-0.5">trending_up</span>
               <span>{((stats.totalShopRevenue / (stats.totalRevenue + stats.totalShopRevenue)) * 100 || 0).toFixed(1)}% of total</span>
+            </div>
+          </div>
+
+          <div className="p-5 bg-white dark:bg-[#1E293B] rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800">
+            <p className="text-slate-500 dark:text-slate-400 text-xs font-medium uppercase tracking-wider">Due Amount</p>
+            <h2 className="text-2xl font-bold mt-1 text-red-500">₹{stats.dueRevenue.toLocaleString()}</h2>
+            <div className="mt-3 flex items-center text-red-500 text-xs font-semibold">
+              <span className="material-symbols-rounded text-xs mr-0.5">account_balance_wallet</span>
+              <span>To be collected</span>
+            </div>
+          </div>
+
+          <div className="p-5 bg-white dark:bg-[#1E293B] rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800">
+            <p className="text-slate-500 dark:text-slate-400 text-xs font-medium uppercase tracking-wider">Renewals</p>
+            <h2 className="text-2xl font-bold mt-1 text-blue-500">{stats.upcomingRenewals}</h2>
+            <div className="mt-3 flex items-center text-blue-500 text-xs font-semibold">
+              <span className="material-symbols-rounded text-xs mr-0.5">event_repeat</span>
+              <span>Next 7 Days</span>
             </div>
           </div>
         </div>

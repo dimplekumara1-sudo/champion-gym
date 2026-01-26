@@ -26,15 +26,17 @@ interface ExploreVideo {
 const ExploreScreen: React.FC<{
   onNavigate: (s: AppScreen) => void,
   onSelectWorkout: (id: string) => void,
-  onSelectCategory: (cat: string) => void
+  onSelectCategory: (categoryId: string, categoryName: string) => void
 }> = ({ onNavigate, onSelectWorkout, onSelectCategory }) => {
   const [categories, setCategories] = useState<any[]>([]);
   const [categoryVideos, setCategoryVideos] = useState<any[]>([]);
   const [featuredVideos, setFeaturedVideos] = useState<ExploreVideo[]>([]);
   const [selectedVideoType, setSelectedVideoType] = useState<VideoType | 'all'>('all');
-  const [selectedVideo, setSelectedVideo] = useState<ExploreVideo | null>(null);
   const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [sortBy, setSortBy] = useState<'newest' | 'duration' | 'difficulty'>('newest');
+  const [filterDifficulty, setFilterDifficulty] = useState<'all' | 'beginner' | 'intermediate' | 'advanced'>('all');
+  const [filterPremium, setFilterPremium] = useState(false);
 
   useEffect(() => {
     fetchData();
@@ -83,7 +85,7 @@ const ExploreScreen: React.FC<{
     try {
       setLoading(true);
       setSelectedCategoryId(categoryId);
-      onSelectCategory(categoryName);
+      onSelectCategory(categoryId, categoryName);
 
       // Fetch videos for this category
       const { data, error } = await supabase
@@ -129,6 +131,104 @@ const ExploreScreen: React.FC<{
       'training': '🏋️'
     };
     return icons[type] || '🎬';
+  };
+
+  const openVideoInNewTab = (video: ExploreVideo) => {
+    let videoUrl = video.video_url;
+
+    // Convert YouTube URLs to embeddable format if needed
+    if (videoUrl.includes('youtube.com/watch?v=')) {
+      const videoId = videoUrl.split('v=')[1].split('&')[0];
+      videoUrl = `https://www.youtube.com/embed/${videoId}`;
+    } else if (videoUrl.includes('youtu.be/')) {
+      const videoId = videoUrl.split('youtu.be/')[1].split('?')[0];
+      videoUrl = `https://www.youtube.com/embed/${videoId}`;
+    } else if (!videoUrl.includes('embed')) {
+      // If it's not already an embed URL, try to open as-is
+      window.open(videoUrl, '_blank');
+      return;
+    }
+
+    // Create a simple HTML page to display the video
+    const htmlContent = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>${video.title}</title>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <style>
+          * { margin: 0; padding: 0; box-sizing: border-box; }
+          body { background: #000; font-family: system-ui, -apple-system, sans-serif; padding: 20px; }
+          .container { max-width: 1200px; margin: 0 auto; }
+          .header { margin-bottom: 20px; }
+          .title { color: #fff; font-size: 28px; font-weight: bold; margin-bottom: 10px; }
+          .meta { color: #888; font-size: 14px; display: flex; gap: 20px; flex-wrap: wrap; margin-bottom: 20px; }
+          .badge { display: inline-block; padding: 4px 12px; background: #1e293b; color: #cbd5e1; border-radius: 20px; font-size: 12px; font-weight: bold; }
+          .video-container { position: relative; width: 100%; padding-bottom: 56.25%; height: 0; overflow: hidden; border-radius: 12px; margin-bottom: 20px; }
+          .video-container iframe { position: absolute; top: 0; left: 0; width: 100%; height: 100%; border: none; }
+          .description { color: #cbd5e1; line-height: 1.6; font-size: 14px; }
+          .back-btn { display: inline-block; margin-bottom: 20px; padding: 10px 20px; background: #3f46e1; color: #fff; text-decoration: none; border-radius: 8px; font-weight: bold; }
+          .back-btn:hover { background: #4f46e1; }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <a href="javascript:history.back()" class="back-btn">← Back</a>
+          <div class="header">
+            <div class="title">${video.title}</div>
+            <div class="meta">
+              <span class="badge">${video.type.replace('-', ' ')}</span>
+              ${video.difficulty ? `<span class="badge">${video.difficulty}</span>` : ''}
+              ${video.duration_minutes ? `<span class="badge">⏱️ ${video.duration_minutes}m</span>` : ''}
+              ${video.is_premium ? `<span class="badge">✨ Premium</span>` : ''}
+            </div>
+          </div>
+          <div class="video-container">
+            <iframe src="${videoUrl}" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
+          </div>
+          ${video.description ? `<div class="description"><p>${video.description}</p></div>` : ''}
+        </div>
+      </body>
+      </html>
+    `;
+
+    const blob = new Blob([htmlContent], { type: 'text/html' });
+    const url = URL.createObjectURL(blob);
+    window.open(url, '_blank');
+  };
+
+  const applySortAndFilter = (videos: ExploreVideo[]) => {
+    let filtered = videos;
+
+    // Apply difficulty filter
+    if (filterDifficulty !== 'all') {
+      filtered = filtered.filter(v => v.difficulty === filterDifficulty);
+    }
+
+    // Apply premium filter
+    if (filterPremium) {
+      filtered = filtered.filter(v => !v.is_premium);
+    }
+
+    // Apply sorting
+    switch (sortBy) {
+      case 'duration':
+        filtered = [...filtered].sort((a, b) => (b.duration_minutes || 0) - (a.duration_minutes || 0));
+        break;
+      case 'difficulty':
+        const difficultyOrder = { 'beginner': 0, 'intermediate': 1, 'advanced': 2 };
+        filtered = [...filtered].sort((a, b) =>
+          (difficultyOrder[a.difficulty as keyof typeof difficultyOrder] || 0) -
+          (difficultyOrder[b.difficulty as keyof typeof difficultyOrder] || 0)
+        );
+        break;
+      case 'newest':
+      default:
+        break;
+    }
+
+    return filtered;
   };
 
   const filteredVideos = selectedVideoType === 'all'
@@ -212,7 +312,7 @@ const ExploreScreen: React.FC<{
                 {filteredVideos.map(video => (
                   <div
                     key={video.id}
-                    onClick={() => setSelectedVideo(video)}
+                    onClick={() => openVideoInNewTab(video)}
                     className="group relative aspect-video rounded-2xl overflow-hidden shadow-lg cursor-pointer border border-slate-700 hover:border-primary/50 transition-all hover:shadow-xl hover:shadow-primary/20"
                   >
                     {/* Thumbnail */}
@@ -307,8 +407,8 @@ const ExploreScreen: React.FC<{
                 key={idx}
                 onClick={() => fetchCategoryVideos(cat.id, cat.name)}
                 className={`relative aspect-square rounded-[2rem] overflow-hidden group cursor-pointer shadow-lg border-2 transition-all ${selectedCategoryId === cat.id
-                    ? 'border-primary ring-2 ring-primary/50'
-                    : 'border-transparent hover:border-primary/50'
+                  ? 'border-primary ring-2 ring-primary/50'
+                  : 'border-transparent hover:border-primary/50'
                   }`}
               >
                 <img
@@ -317,21 +417,21 @@ const ExploreScreen: React.FC<{
                   src={cat.image_url}
                 />
                 <div className={`absolute inset-0 ${selectedCategoryId === cat.id
-                    ? 'bg-slate-950/30'
-                    : 'bg-slate-950/40 group-hover:bg-slate-950/20'
+                  ? 'bg-slate-950/30'
+                  : 'bg-slate-950/40 group-hover:bg-slate-950/20'
                   } transition-colors`}></div>
                 <div className="absolute inset-x-0 bottom-0 p-5 bg-gradient-to-t from-slate-950/80 to-transparent">
                   <h3 className={`text-base font-bold text-center tracking-tight ${selectedCategoryId === cat.id
-                      ? 'text-primary'
-                      : 'text-white group-hover:text-primary'
+                    ? 'text-primary'
+                    : 'text-white group-hover:text-primary'
                     } transition-colors`}>
                     {cat.name}
                   </h3>
                 </div>
                 {cat.icon && (
                   <div className={`absolute top-4 right-4 backdrop-blur-xl text-white rounded-full p-2.5 shadow-xl transition-all ${selectedCategoryId === cat.id
-                      ? 'bg-primary text-slate-950'
-                      : 'bg-white/10 group-hover:bg-primary group-hover:text-slate-950'
+                    ? 'bg-primary text-slate-950'
+                    : 'bg-white/10 group-hover:bg-primary group-hover:text-slate-950'
                     }`}>
                     <span className="material-symbols-rounded text-[18px] font-bold block">{cat.icon}</span>
                   </div>
@@ -346,204 +446,8 @@ const ExploreScreen: React.FC<{
               </div>
             ))}
           </div>
-
-          {/* Category Videos */}
-          {selectedCategoryId && categoryVideos.length > 0 && (
-            <div className="mt-8 pt-8 border-t border-slate-800">
-              <h3 className="text-lg font-bold mb-5 tracking-tight flex items-center gap-2">
-                <span className="material-symbols-rounded text-primary">play_circle</span>
-                Videos in this Category
-              </h3>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                {categoryVideos.map(video => (
-                  <div
-                    key={video.id}
-                    onClick={() => setSelectedVideo(video)}
-                    className="group relative aspect-video rounded-2xl overflow-hidden shadow-lg cursor-pointer border border-slate-700 hover:border-primary/50 transition-all hover:shadow-xl hover:shadow-primary/20"
-                  >
-                    {/* Thumbnail */}
-                    <img
-                      src={video.thumbnail_url || 'https://via.placeholder.com/400x225'}
-                      alt={video.title}
-                      className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                    />
-
-                    {/* Overlay */}
-                    <div className="absolute inset-0 bg-gradient-to-t from-slate-950/80 via-slate-950/20 to-transparent"></div>
-
-                    {/* Play Icon */}
-                    <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                      <div className="w-16 h-16 bg-primary/90 rounded-full flex items-center justify-center shadow-xl">
-                        <span className="material-symbols-rounded text-3xl text-slate-950">play_arrow</span>
-                      </div>
-                    </div>
-
-                    {/* Content */}
-                    <div className="absolute inset-x-0 bottom-0 p-4">
-                      {/* Type Badge */}
-                      <div className="flex items-center gap-2 mb-2">
-                        <span className={`px-2 py-1 rounded text-xs font-bold ${getVideoTypeBadgeColor(video.type)}`}>
-                          {getVideoTypeIcon(video.type)} {video.type.replace('-', ' ')}
-                        </span>
-                        {video.is_premium && (
-                          <span className="px-2 py-1 rounded text-xs font-bold bg-yellow-500/20 text-yellow-400">
-                            ✨ Premium
-                          </span>
-                        )}
-                      </div>
-
-                      {/* Title */}
-                      <h3 className="text-white font-bold text-sm line-clamp-2 mb-1">{video.title}</h3>
-
-                      {/* Meta Info */}
-                      <div className="flex items-center gap-3 text-[11px] text-slate-300 font-semibold">
-                        {video.duration_minutes && (
-                          <span className="flex items-center gap-1">
-                            <span className="material-symbols-rounded text-[14px]">schedule</span>
-                            {video.duration_minutes}m
-                          </span>
-                        )}
-                        {video.difficulty && (
-                          <span className="flex items-center gap-1 capitalize">
-                            <span className="material-symbols-rounded text-[14px]">trending_up</span>
-                            {video.difficulty}
-                          </span>
-                        )}
-                      </div>
-
-                      {/* Badges */}
-                      {video.badges.length > 0 && (
-                        <div className="flex gap-1 mt-2 flex-wrap">
-                          {video.badges.slice(0, 2).map((badge, idx) => (
-                            <span key={idx} className="bg-blue-500/20 text-blue-300 text-[10px] font-bold px-2 py-0.5 rounded">
-                              {badge}
-                            </span>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* No Videos Message */}
-          {selectedCategoryId && categoryVideos.length === 0 && !loading && (
-            <div className="mt-8 pt-8 border-t border-slate-800 text-center py-12 text-slate-500">
-              <span className="material-symbols-rounded text-4xl mb-4 block">video_library</span>
-              <p className="font-medium">No videos available in this category yet</p>
-            </div>
-          )}
         </section>
       </main>
-
-      {/* Video Modal */}
-      {selectedVideo && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-end animate-in fade-in">
-          <div className="w-full bg-slate-800 rounded-t-3xl p-6 max-h-[90vh] overflow-y-auto">
-            {/* Header */}
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="text-2xl font-bold text-white flex-1">{selectedVideo.title}</h2>
-              <button
-                onClick={() => setSelectedVideo(null)}
-                className="p-2 hover:bg-slate-700 rounded-lg transition text-slate-400"
-              >
-                <span className="material-symbols-rounded text-2xl">close</span>
-              </button>
-            </div>
-
-            {/* Video Player */}
-            <div className="relative w-full aspect-video bg-black rounded-2xl overflow-hidden mb-6">
-              {selectedVideo.video_url ? (
-                <iframe
-                  width="100%"
-                  height="100%"
-                  src={selectedVideo.video_url.includes('youtube.com') || selectedVideo.video_url.includes('youtu.be')
-                    ? selectedVideo.video_url.replace('youtube.com/watch?v=', 'youtube.com/embed/').replace('youtu.be/', 'youtube.com/embed/').split('&')[0]
-                    : selectedVideo.video_url
-                  }
-                  title={selectedVideo.title}
-                  frameBorder="0"
-                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                  allowFullScreen
-                  className="w-full h-full"
-                />
-              ) : (
-                <div className="w-full h-full flex items-center justify-center text-slate-400">
-                  <span className="material-symbols-rounded text-6xl">video_library</span>
-                </div>
-              )}
-            </div>
-
-            {/* Video Info */}
-            <div className="space-y-4">
-              {/* Meta Info */}
-              <div className="flex items-center gap-3 flex-wrap">
-                <span className={`px-3 py-1 rounded-full text-sm font-bold ${getVideoTypeBadgeColor(selectedVideo.type)}`}>
-                  {getVideoTypeIcon(selectedVideo.type)} {selectedVideo.type.replace('-', ' ')}
-                </span>
-                {selectedVideo.difficulty && (
-                  <span className="px-3 py-1 rounded-full text-sm font-bold bg-slate-700 text-slate-300 capitalize">
-                    {selectedVideo.difficulty}
-                  </span>
-                )}
-                {selectedVideo.duration_minutes && (
-                  <span className="px-3 py-1 rounded-full text-sm font-bold bg-slate-700 text-slate-300">
-                    ⏱️ {selectedVideo.duration_minutes} minutes
-                  </span>
-                )}
-                {selectedVideo.is_premium && (
-                  <span className="px-3 py-1 rounded-full text-sm font-bold bg-yellow-500/20 text-yellow-400">
-                    ✨ Premium Content
-                  </span>
-                )}
-              </div>
-
-              {/* Description */}
-              {selectedVideo.description && (
-                <div>
-                  <h3 className="text-sm font-bold text-slate-400 mb-2">Description</h3>
-                  <p className="text-white text-sm leading-relaxed">{selectedVideo.description}</p>
-                </div>
-              )}
-
-              {/* Badges */}
-              {selectedVideo.badges.length > 0 && (
-                <div>
-                  <h3 className="text-sm font-bold text-slate-400 mb-2">Highlights</h3>
-                  <div className="flex gap-2 flex-wrap">
-                    {selectedVideo.badges.map((badge, idx) => (
-                      <span key={idx} className="bg-blue-500/20 text-blue-300 text-xs font-bold px-3 py-1 rounded-full">
-                        {badge}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Action Buttons */}
-              <div className="flex gap-3 pt-4 border-t border-slate-700">
-                <button
-                  onClick={() => setSelectedVideo(null)}
-                  className="flex-1 bg-slate-700 hover:bg-slate-600 text-white font-bold py-3 rounded-xl transition"
-                >
-                  Close
-                </button>
-                <button
-                  onClick={() => {
-                    setSelectedVideo(null);
-                    onNavigate('DASHBOARD');
-                  }}
-                  className="flex-1 bg-primary hover:bg-primary/90 text-slate-950 font-bold py-3 rounded-xl transition"
-                >
-                  Start Training
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
 
       <BottomNav active="EXPLORE" onNavigate={onNavigate} />
 

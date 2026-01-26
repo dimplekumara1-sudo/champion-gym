@@ -1,10 +1,12 @@
 
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import StatusBar from '../components/StatusBar';
 
-const OnboardingHeight: React.FC<{ onNext: (height: number) => void }> = ({ onNext }) => {
+const OnboardingHeight: React.FC<{ onNext: (height: number) => void; onBack: () => void }> = ({ onNext, onBack }) => {
   const [unit, setUnit] = useState<'cm' | 'ft'>('cm');
   const [height, setHeight] = useState(170);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const isScrollingRef = useRef(false);
 
   const cmRange = Array.from({ length: 131 }, (_, i) => 220 - i);
   const ftRange = Array.from({ length: 49 }, (_, i) => {
@@ -15,6 +17,48 @@ const OnboardingHeight: React.FC<{ onNext: (height: number) => void }> = ({ onNe
       totalInches
     };
   });
+
+  const itemHeight = 48; // h-12
+
+  useEffect(() => {
+    if (!scrollRef.current) return;
+
+    let index = 0;
+    if (unit === 'cm') {
+      index = cmRange.indexOf(height);
+    } else {
+      const totalInches = Math.round(height / 2.54);
+      index = ftRange.findIndex(f => f.totalInches === totalInches);
+    }
+
+    if (index !== -1) {
+      isScrollingRef.current = true;
+      scrollRef.current.scrollTop = index * itemHeight;
+      setTimeout(() => { isScrollingRef.current = false; }, 50);
+    }
+  }, [unit]);
+
+  const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
+    if (isScrollingRef.current) return;
+
+    const scrollTop = e.currentTarget.scrollTop;
+    const index = Math.round(scrollTop / itemHeight);
+
+    if (unit === 'cm') {
+      const h = cmRange[index];
+      if (h !== undefined && h !== height) {
+        setHeight(h);
+      }
+    } else {
+      const f = ftRange[index];
+      if (f !== undefined) {
+        const val = Math.round(f.totalInches * 2.54);
+        if (val !== height) {
+          setHeight(val);
+        }
+      }
+    }
+  };
 
   const displayHeight = () => {
     if (unit === 'cm') return height;
@@ -27,11 +71,19 @@ const OnboardingHeight: React.FC<{ onNext: (height: number) => void }> = ({ onNe
   return (
     <div className="min-h-screen bg-white text-slate-900 p-6 flex flex-col">
       <StatusBar light />
-      <div className="flex items-center gap-1.5 mb-8">
-        <div className="w-8 h-1.5 rounded-full bg-primary"></div>
-        <div className="w-8 h-1.5 rounded-full bg-primary"></div>
-        <div className="w-8 h-1.5 rounded-full bg-primary"></div>
-        <div className="w-8 h-1.5 rounded-full bg-slate-200"></div>
+      <div className="flex items-center mb-8">
+        <button 
+          onClick={onBack}
+          className="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center mr-4 active:scale-90 transition-transform"
+        >
+          <span className="material-symbols-rounded text-2xl text-slate-900">arrow_back</span>
+        </button>
+        <div className="flex-1 flex gap-1.5">
+          <div className="flex-1 h-1.5 rounded-full bg-primary"></div>
+          <div className="flex-1 h-1.5 rounded-full bg-primary"></div>
+          <div className="flex-1 h-1.5 rounded-full bg-primary"></div>
+          <div className="flex-1 h-1.5 rounded-full bg-slate-200"></div>
+        </div>
       </div>
 
       <div className="text-center mb-10">
@@ -39,15 +91,15 @@ const OnboardingHeight: React.FC<{ onNext: (height: number) => void }> = ({ onNe
         <p className="text-slate-500">This helps us calculate your BMI and daily caloric needs accurately.</p>
       </div>
 
-      <div className="flex justify-center mb-8">
+      <div className="flex justify-center mb-8 relative z-10">
         <div className="bg-slate-100 p-1 rounded-xl flex">
-          <button 
+          <button
             onClick={() => setUnit('cm')}
             className={`px-8 py-2 rounded-lg text-sm font-bold transition-all ${unit === 'cm' ? 'bg-white shadow-sm text-slate-900' : 'text-slate-500'}`}
           >
             cm
           </button>
-          <button 
+          <button
             onClick={() => setUnit('ft')}
             className={`px-8 py-2 rounded-lg text-sm font-bold transition-all ${unit === 'ft' ? 'bg-white shadow-sm text-slate-900' : 'text-slate-500'}`}
           >
@@ -56,48 +108,68 @@ const OnboardingHeight: React.FC<{ onNext: (height: number) => void }> = ({ onNe
         </div>
       </div>
 
-      <div className="flex-1 flex items-center justify-between px-4 relative overflow-hidden">
-        <div className="flex-1 flex flex-col items-center justify-end h-full pb-4">
-          <div className="relative">
-            <svg className="w-48 h-auto text-slate-200" fill="currentColor" viewBox="0 0 200 500">
-              <path d="M100 20C80 20 65 35 65 55C65 75 80 90 100 90C120 90 135 75 135 55C135 35 120 20 100 20ZM100 100C70 100 45 120 40 150L30 300C28 320 45 335 65 330L80 325V480C80 490 90 500 100 500C110 500 120 490 120 480V325L135 330C155 335 172 320 170 300L160 150C155 120 130 100 100 100Z"></path>
-            </svg>
-            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 flex flex-col items-center pointer-events-none">
-              <span className="text-5xl font-black text-primary">{displayHeight()}</span>
-              <span className="text-sm font-bold uppercase tracking-widest text-slate-400">{unit === 'cm' ? 'Centimeters' : 'Feet & Inches'}</span>
+      <div className="flex-1 flex items-center justify-center relative px-4 overflow-hidden">
+        <div className="relative w-full max-w-[340px] h-full flex items-center">
+          {/* Silhouette background */}
+          <div className="absolute left-0 right-0 bottom-0 top-0 flex flex-col items-center justify-end pb-4 pointer-events-none z-0 transform -translate-x-[6.6rem] translate-y-14 scale-[1.0]">
+            <div className="relative">
+              <svg className=" w-52 h-auto text-slate-100" fill="currentColor" viewBox="0 0 200 500">
+                <path d="M100 20C80 20 65 35 65 55C65 75 80 90 100 90C120 90 135 75 135 55C135 35 120 20 100 20ZM100 100C70 100 45 120 40 150L30 300C28 320 45 335 65 330L80 325V480C80 490 90 500 100 500C110 500 120 490 120 480V325L135 330C155 335 172 320 170 300L160 150C155 120 130 100 100 100Z"></path>
+              </svg>
+              <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 flex flex-col items-center">
+                <span className="text-5xl font-black text-primary">{displayHeight()}</span>
+                <span className="text-sm font-bold uppercase tracking-widest text-slate-400">{unit === 'cm' ? 'Centimeters' : 'Feet & Inches'}</span>
+              </div>
             </div>
           </div>
-        </div>
 
-        <div className="w-24 h-full relative flex items-center">
-          <div className="h-[400px] w-full overflow-y-scroll no-scrollbar py-[180px] snap-y snap-mandatory scroll-smooth">
-            <div className="flex flex-col items-end pr-6">
-              {unit === 'cm' ? (
-                cmRange.map(h => (
-                  <div key={h} className="h-12 flex items-center justify-end gap-3 snap-center cursor-pointer" onClick={() => setHeight(h)}>
-                    <span className={`font-medium transition-all ${h === height ? 'text-primary text-2xl font-bold' : 'text-slate-300 text-sm'}`}>{h}</span>
-                    <div className={`h-0.5 rounded-full bg-slate-300 transition-all ${h === height ? 'w-12 bg-primary h-1' : 'w-8'}`}></div>
-                  </div>
-                ))
-              ) : (
-                ftRange.map(f => {
-                  const currentTotalInches = Math.round(height / 2.54);
-                  const isSelected = f.totalInches === currentTotalInches;
-                  return (
-                    <div key={`${f.ft}-${f.in}`} className="h-12 flex items-center justify-end gap-3 snap-center cursor-pointer" onClick={() => setHeight(Math.round(f.totalInches * 2.54))}>
-                      <span className={`font-medium transition-all ${isSelected ? 'text-primary text-2xl font-bold' : 'text-slate-300 text-sm'}`}>{f.ft}'{f.in}"</span>
-                      <div className={`h-0.5 rounded-full bg-slate-300 transition-all ${isSelected ? 'w-12 bg-primary h-1' : 'w-8'}`}></div>
+          {/* Scale Foreground */}
+          <div className="ml-auto w-[10.5rem] h-full relative flex items-center z-50">
+            <div className="absolute left-0 top-1/2 -translate-y-1/2 w-full h-14 border-y-2 border-primary/20 pointer-events-none z-50">
+              <div className="absolute right-0 top-1/2 -translate-y-1/2 w-8 h-1.5 bg-primary rounded-full shadow-lg shadow-primary/30"></div>
+            </div>
+            <div
+              ref={scrollRef}
+              onScroll={handleScroll}
+              className="h-[450px] w-full overflow-y-scroll no-scrollbar py-[200px] snap-y snap-mandatory scroll-smooth"
+            >
+              <div className="flex flex-col items-end pr-4">
+                {unit === 'cm' ? (
+                  cmRange.map(h => (
+                    <div key={h} className="h-12 flex items-center justify-end gap-3 snap-center cursor-pointer" onClick={() => {
+                      setHeight(h);
+                      const index = cmRange.indexOf(h);
+                      if (scrollRef.current) scrollRef.current.scrollTop = index * itemHeight;
+                    }}>
+                      <span className={`font-bold transition-all duration-200 ${h === height ? 'text-primary text-3xl' : 'text-slate-300 text-sm'}`}>{h}</span>
+                      <div className={`h-1 rounded-full transition-all duration-200 ${h === height ? 'w-16 bg-primary h-1.5' : 'w-8 bg-slate-200'}`}></div>
                     </div>
-                  );
-                })
-              )}
+                  ))
+                ) : (
+                  ftRange.map(f => {
+                    const currentTotalInches = Math.round(height / 2.54);
+                    const isSelected = f.totalInches === currentTotalInches;
+                    return (
+                      <div key={`${f.ft}-${f.in}`} className="h-12 flex items-center justify-end gap-3 snap-center cursor-pointer" onClick={() => {
+                        const val = Math.round(f.totalInches * 2.54);
+                        setHeight(val);
+                        const index = ftRange.findIndex(ft => ft.totalInches === f.totalInches);
+                        if (scrollRef.current) scrollRef.current.scrollTop = index * itemHeight;
+                      }}>
+                        <span className={`font-bold transition-all duration-200 ${isSelected ? 'text-primary text-2xl' : 'text-slate-300 text-sm'}`}>{f.ft}'{f.in}"</span>
+                        <div className={`h-1 rounded-full transition-all duration-200 ${isSelected ? 'w-16 bg-primary h-1.5' : 'w-8 bg-slate-200'}`}></div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
             </div>
           </div>
         </div>
       </div>
 
       <div className="mt-8 space-y-4">
-        <button 
+        <button
           onClick={() => onNext(height)}
           className="w-full bg-primary hover:bg-green-600 text-white font-bold py-5 rounded-2xl transition-all active:scale-[0.98] shadow-lg shadow-green-500/20 flex items-center justify-center gap-2 group"
         >

@@ -83,7 +83,7 @@ cache.getAge(key)                      // Get cache age in seconds
 
 ### Cache Storage
 - **Backend**: Browser localStorage
-- **Prefix**: `powerflex_cache_`
+- **Prefix**: `Challenge Gym_cache_`
 - **Format**: JSON with timestamp and TTL
 - **Persistence**: Survives page refresh and app restart
 - **Capacity**: ~5-10MB per domain
@@ -168,7 +168,7 @@ cache.getAge(CACHE_KEYS.PROFILE_DATA) // Returns seconds
 ### Browser Console Commands
 ```javascript
 // View all cached keys
-Object.keys(localStorage).filter(k => k.startsWith('powerflex_cache_'))
+Object.keys(localStorage).filter(k => k.startsWith('Challenge Gym_cache_'))
 
 // Clear all cache
 cache.clearAll()

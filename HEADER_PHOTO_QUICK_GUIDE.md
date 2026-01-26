@@ -10,7 +10,7 @@
 
 ```
 ┌─────────────────────────────────────────────────┐
-│  [Gym Icon] POWERFLEX              [Photo Btn]  │
+│  [Gym Icon] Challenge Gym              [Photo Btn]  │
 │              Elite Coach                        │
 └─────────────────────────────────────────────────┘
 ```

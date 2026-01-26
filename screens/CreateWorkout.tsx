@@ -14,11 +14,13 @@ const CreateWorkout: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNav
   const [weekNumber, setWeekNumber] = useState(1);
   const [dayOfWeek, setDayOfWeek] = useState(1);
   const [saving, setSaving] = useState(false);
-  
+
   // Filters
   const [searchTerm, setSearchTerm] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('All');
   const [levelFilter, setLevelFilter] = useState('All');
+  const [equipmentFilter, setEquipmentFilter] = useState('All');
+  const [userGender, setUserGender] = useState<'men' | 'women'>('men');
 
   const levels = ['Novice', 'Beginner', 'Intermediate', 'Advanced'];
 
@@ -42,12 +44,14 @@ const CreateWorkout: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNav
   };
 
   const categories = ['All', ...new Set(exercises.map(ex => ex.category))];
+  const equipments = ['All', ...new Set(exercises.map(ex => ex.equipment).filter(Boolean))];
 
   const filteredExercises = exercises.filter(ex => {
     const matchesSearch = ex.exercise_name.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesCategory = categoryFilter === 'All' || ex.category === categoryFilter;
     const matchesLevel = levelFilter === 'All' || ex.level === levelFilter;
-    return matchesSearch && matchesCategory && matchesLevel;
+    const matchesEquipment = equipmentFilter === 'All' || ex.equipment === equipmentFilter;
+    return matchesSearch && matchesCategory && matchesLevel && matchesEquipment;
   });
 
   const toggleExercise = (ex: any) => {
@@ -61,6 +65,54 @@ const CreateWorkout: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNav
 
   const updateSetsReps = (id: string, val: string) => {
     setSelectedExercises(selectedExercises.map(ex => ex.id === id ? { ...ex, sets_reps: val } : ex));
+  };
+
+  const openExerciseVideo = (videoUrl: string | null) => {
+    if (!videoUrl) {
+      alert('No video available for this exercise');
+      return;
+    }
+
+    let embedUrl = videoUrl;
+    if (videoUrl.includes('youtube.com/watch?v=')) {
+      const videoId = videoUrl.split('v=')[1].split('&')[0];
+      embedUrl = `https://www.youtube.com/embed/${videoId}`;
+    } else if (videoUrl.includes('youtu.be/')) {
+      const videoId = videoUrl.split('youtu.be/')[1].split('?')[0];
+      embedUrl = `https://www.youtube.com/embed/${videoId}`;
+    }
+
+    const htmlContent = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>Exercise Video</title>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <style>
+          * { margin: 0; padding: 0; box-sizing: border-box; }
+          body { background: #000; font-family: system-ui, -apple-system, sans-serif; padding: 20px; }
+          .container { max-width: 1200px; margin: 0 auto; }
+          .video-container { position: relative; width: 100%; padding-bottom: 56.25%; height: 0; overflow: hidden; border-radius: 12px; }
+          .video-container iframe { position: absolute; top: 0; left: 0; width: 100%; height: 100%; border: none; }
+          .back-btn { display: inline-block; margin-bottom: 20px; padding: 10px 20px; background: #3f46e1; color: #fff; text-decoration: none; border-radius: 8px; font-weight: bold; }
+          .back-btn:hover { background: #4f46e1; }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <a href="javascript:history.back()" class="back-btn">← Back</a>
+          <div class="video-container">
+            <iframe src="${embedUrl}" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
+          </div>
+        </div>
+      </body>
+      </html>
+    `;
+
+    const blob = new Blob([htmlContent], { type: 'text/html' });
+    const url = URL.createObjectURL(blob);
+    window.open(url, '_blank');
   };
 
   const handleSave = async () => {
@@ -140,21 +192,21 @@ const CreateWorkout: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNav
             <h2 className="text-lg font-bold">Workout Details</h2>
           </div>
           <div className="space-y-3">
-            <input 
-              className="w-full bg-slate-900/60 border-none rounded-2xl py-4 px-5 text-[15px] focus:ring-1 focus:ring-primary placeholder:text-slate-500" 
-              placeholder="Workout Name (e.g. My Custom Push)" 
+            <input
+              className="w-full bg-slate-900/60 border-none rounded-2xl py-4 px-5 text-[15px] focus:ring-1 focus:ring-primary placeholder:text-slate-500"
+              placeholder="Workout Name (e.g. My Custom Push)"
               value={workoutName}
               onChange={e => setWorkoutName(e.target.value)}
             />
-            <textarea 
-              className="w-full bg-slate-900/60 border-none rounded-2xl py-4 px-5 text-[15px] focus:ring-1 focus:ring-primary placeholder:text-slate-500 min-h-[100px]" 
-              placeholder="Description (optional)" 
+            <textarea
+              className="w-full bg-slate-900/60 border-none rounded-2xl py-4 px-5 text-[15px] focus:ring-1 focus:ring-primary placeholder:text-slate-500 min-h-[100px]"
+              placeholder="Description (optional)"
               value={description}
               onChange={e => setDescription(e.target.value)}
             />
             <div className="grid grid-cols-1 gap-2">
               <label className="text-[10px] font-black uppercase text-slate-500 tracking-widest ml-2 mb-1 block">Level</label>
-              <select 
+              <select
                 className="w-full bg-slate-900/60 border-none rounded-2xl py-4 px-5 text-[15px] focus:ring-1 focus:ring-primary"
                 value={difficulty}
                 onChange={e => setDifficulty(e.target.value)}
@@ -174,7 +226,7 @@ const CreateWorkout: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNav
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="text-[10px] font-black uppercase text-slate-500 tracking-widest ml-2 mb-1 block">Week Number</label>
-              <select 
+              <select
                 className="w-full bg-slate-900/60 border-none rounded-2xl py-4 px-5 text-[15px] focus:ring-1 focus:ring-primary"
                 value={weekNumber}
                 onChange={e => setWeekNumber(parseInt(e.target.value))}
@@ -184,7 +236,7 @@ const CreateWorkout: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNav
             </div>
             <div>
               <label className="text-[10px] font-black uppercase text-slate-500 tracking-widest ml-2 mb-1 block">Day of Week</label>
-              <select 
+              <select
                 className="w-full bg-slate-900/60 border-none rounded-2xl py-4 px-5 text-[15px] focus:ring-1 focus:ring-primary"
                 value={dayOfWeek}
                 onChange={e => setDayOfWeek(parseInt(e.target.value))}
@@ -201,23 +253,43 @@ const CreateWorkout: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNav
             <span className="w-6 h-6 bg-primary text-slate-950 rounded-full flex items-center justify-center text-xs font-black">3</span>
             <h2 className="text-lg font-bold">Select Exercises</h2>
           </div>
-          
+
+          <div className="flex gap-2 items-center">
+            <span className="text-[10px] font-black uppercase text-slate-500 tracking-widest">Form Guide:</span>
+            <button
+              onClick={() => setUserGender('men')}
+              className={`flex items-center gap-1 px-3 py-2 rounded-xl text-[10px] font-bold transition-colors ${userGender === 'men' ? 'bg-primary text-slate-950' : 'bg-slate-900/60 text-slate-400 hover:text-slate-200'}`}
+              title="Men's form guides"
+            >
+              <span className="material-symbols-rounded text-sm">male</span>
+              Men
+            </button>
+            <button
+              onClick={() => setUserGender('women')}
+              className={`flex items-center gap-1 px-3 py-2 rounded-xl text-[10px] font-bold transition-colors ${userGender === 'women' ? 'bg-primary text-slate-950' : 'bg-slate-900/60 text-slate-400 hover:text-slate-200'}`}
+              title="Women's form guides"
+            >
+              <span className="material-symbols-rounded text-sm">female</span>
+              Women
+            </button>
+          </div>
+
           <div className="space-y-3">
-            <input 
-              className="w-full bg-slate-900/60 border-none rounded-2xl py-3 px-5 text-[13px] focus:ring-1 focus:ring-primary placeholder:text-slate-500" 
-              placeholder="Search exercises..." 
+            <input
+              className="w-full bg-slate-900/60 border-none rounded-2xl py-3 px-5 text-[13px] focus:ring-1 focus:ring-primary placeholder:text-slate-500"
+              placeholder="Search exercises..."
               value={searchTerm}
               onChange={e => setSearchTerm(e.target.value)}
             />
             <div className="flex gap-2 overflow-x-auto no-scrollbar pb-1">
-              <select 
+              <select
                 className="bg-slate-900/60 border-none rounded-xl text-[10px] font-bold py-2 px-3 focus:ring-1 focus:ring-primary"
                 value={categoryFilter}
                 onChange={e => setCategoryFilter(e.target.value)}
               >
                 {categories.map(c => <option key={c} value={c}>{c}</option>)}
               </select>
-              <select 
+              <select
                 className="bg-slate-900/60 border-none rounded-xl text-[10px] font-bold py-2 px-3 focus:ring-1 focus:ring-primary"
                 value={levelFilter}
                 onChange={e => setLevelFilter(e.target.value)}
@@ -225,9 +297,16 @@ const CreateWorkout: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNav
                 <option value="All">All Levels</option>
                 {levels.map(l => <option key={l} value={l}>{l}</option>)}
               </select>
+              <select
+                className="bg-slate-900/60 border-none rounded-xl text-[10px] font-bold py-2 px-3 focus:ring-1 focus:ring-primary"
+                value={equipmentFilter}
+                onChange={e => setEquipmentFilter(e.target.value)}
+              >
+                {equipments.map(eq => <option key={eq} value={eq}>{eq}</option>)}
+              </select>
             </div>
           </div>
-          
+
           <div className="space-y-3 max-h-[400px] overflow-y-auto no-scrollbar pr-1">
             {loading ? (
               <div className="flex justify-center py-10"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div></div>
@@ -235,23 +314,49 @@ const CreateWorkout: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNav
               <div className="text-center py-10 text-slate-500 text-sm">No exercises found.</div>
             ) : filteredExercises.map(ex => {
               const isSelected = selectedExercises.find(s => s.id === ex.id);
+              const genderLink = userGender === 'men' ? ex.men_link : ex.women_link;
+              const genderIcon = userGender === 'men' ? 'male' : 'female';
               return (
-                <div key={ex.id} className={`p-4 rounded-3xl border transition-all ${isSelected ? 'bg-primary/10 border-primary' : 'bg-slate-900/40 border-slate-800/50'}`}>
-                  <div className="flex items-center gap-4">
+                <div key={ex.id} className={`p-3 rounded-3xl border transition-all ${isSelected ? 'bg-primary/10 border-primary' : 'bg-slate-900/40 border-slate-800/50'}`}>
+                  <div className="flex items-center gap-3">
                     <div className="w-12 h-12 bg-slate-800 rounded-2xl flex items-center justify-center p-2 overflow-hidden shrink-0">
                       {ex.icon_svg ? <div dangerouslySetInnerHTML={{ __html: ex.icon_svg }} className={`w-full h-full flex items-center justify-center [&>svg]:w-full [&>svg]:h-full ${isSelected ? 'text-primary' : 'text-slate-500'}`} /> : <span className="material-symbols-rounded text-slate-600">fitness_center</span>}
                     </div>
                     <div className="flex-1 min-w-0" onClick={() => toggleExercise(ex)}>
-                      <h4 className="font-bold text-sm truncate">{ex.exercise_name}</h4>
-                      <p className="text-[10px] text-slate-500 uppercase font-black mt-0.5">{ex.category} • {ex.level || 'Beginner'}</p>
+                      <h4 className="font-bold text-sm leading-5 line-clamp-2">{ex.exercise_name}</h4>
+                      <div className="flex items-center gap-2 mt-0.5">
+                        <p className="text-[10px] text-slate-500 uppercase font-black">{ex.category} • {ex.level || 'Beginner'}</p>
+                        {ex.equipment && <p className="text-[9px] text-slate-600">• {ex.equipment}</p>}
+                      </div>
                     </div>
-                    <button onClick={() => toggleExercise(ex)} className={`w-8 h-8 rounded-full flex items-center justify-center transition-colors shrink-0 ${isSelected ? 'bg-primary text-slate-950' : 'bg-slate-800 text-slate-500'}`}>
-                      <span className="material-symbols-rounded text-lg">{isSelected ? 'check' : 'add'}</span>
-                    </button>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      {genderLink && (
+                        <button
+                          onClick={() => window.open(genderLink, '_blank')}
+                          className="w-7 h-7 rounded-full flex items-center justify-center bg-slate-800 text-slate-400 hover:bg-slate-700 hover:text-slate-200 transition-colors"
+                          title={`Form guide for ${userGender}`}
+                        >
+                          <span className="material-symbols-rounded text-xs">{genderIcon}</span>
+                        </button>
+                      )}
+                      <button
+                        onClick={() => openExerciseVideo(ex.youtube_url)}
+                        className="w-7 h-7 rounded-full flex items-center justify-center bg-slate-800 text-slate-400 hover:bg-slate-700 hover:text-slate-200 transition-colors"
+                        title="Watch form video"
+                      >
+                        <span className="material-symbols-rounded text-xs">play_circle</span>
+                      </button>
+                      <button
+                        onClick={() => toggleExercise(ex)}
+                        className={`w-7 h-7 rounded-full flex items-center justify-center transition-colors ${isSelected ? 'bg-primary text-slate-950' : 'bg-slate-800 text-slate-500'}`}
+                      >
+                        <span className="material-symbols-rounded text-sm">{isSelected ? 'check' : 'add'}</span>
+                      </button>
+                    </div>
                   </div>
                   {isSelected && (
                     <div className="mt-3 pt-3 border-t border-primary/20">
-                      <input 
+                      <input
                         className="w-full bg-slate-950/50 border-none rounded-xl py-2 px-4 text-xs focus:ring-1 focus:ring-primary placeholder:text-slate-600"
                         placeholder="Sets & Reps (e.g. 3x12)"
                         value={isSelected.sets_reps}
@@ -265,7 +370,7 @@ const CreateWorkout: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNav
           </div>
         </section>
 
-        <button 
+        <button
           onClick={handleSave}
           disabled={saving}
           className="w-full bg-primary text-slate-950 py-5 rounded-[2rem] font-black uppercase tracking-widest text-sm shadow-xl shadow-primary/20 disabled:opacity-50 flex items-center justify-center gap-2"

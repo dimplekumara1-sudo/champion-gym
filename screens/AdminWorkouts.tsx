@@ -26,6 +26,8 @@ const AdminWorkouts: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNav
   const [searchTerm, setSearchTerm] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('All');
   const [levelFilter, setLevelFilter] = useState('All');
+  const [equipmentFilter, setEquipmentFilter] = useState('All');
+  const [userGender, setUserGender] = useState<'men' | 'women'>('men');
 
   // State for Assigning
   const [assigningTo, setAssigningTo] = useState<any>(null);
@@ -67,12 +69,14 @@ const AdminWorkouts: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNav
   };
 
   const categories = ['All', ...new Set(exercises.map(ex => ex.category))];
+  const equipments = ['All', ...new Set(exercises.map(ex => ex.equipment).filter(Boolean))];
 
   const filteredExercises = exercises.filter(ex => {
     const matchesSearch = ex.exercise_name.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesCategory = categoryFilter === 'All' || ex.category === categoryFilter;
     const matchesLevel = levelFilter === 'All' || ex.level === levelFilter;
-    return matchesSearch && matchesCategory && matchesLevel;
+    const matchesEquipment = equipmentFilter === 'All' || ex.equipment === equipmentFilter;
+    return matchesSearch && matchesCategory && matchesLevel && matchesEquipment;
   });
 
   const toggleExercise = (ex: any) => {
@@ -319,6 +323,26 @@ const AdminWorkouts: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNav
 
             <h3 className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-4">Exercises</h3>
 
+            <div className="flex gap-2 items-center mb-3">
+              <span className="text-[10px] font-black uppercase text-slate-500 tracking-widest">Form Guide:</span>
+              <button
+                onClick={() => setUserGender('men')}
+                className={`flex items-center gap-1 px-2 py-1 rounded-lg text-[9px] font-bold transition-colors ${userGender === 'men' ? 'bg-primary text-slate-950' : 'bg-slate-900 text-slate-400 hover:text-slate-200'}`}
+                title="Men's form guides"
+              >
+                <span className="material-symbols-rounded text-xs">male</span>
+                Men
+              </button>
+              <button
+                onClick={() => setUserGender('women')}
+                className={`flex items-center gap-1 px-2 py-1 rounded-lg text-[9px] font-bold transition-colors ${userGender === 'women' ? 'bg-primary text-slate-950' : 'bg-slate-900 text-slate-400 hover:text-slate-200'}`}
+                title="Women's form guides"
+              >
+                <span className="material-symbols-rounded text-xs">female</span>
+                Women
+              </button>
+            </div>
+
             <div className="space-y-3 mb-6">
               <input
                 placeholder="Search catalog..."
@@ -326,27 +350,36 @@ const AdminWorkouts: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNav
                 value={searchTerm}
                 onChange={e => setSearchTerm(e.target.value)}
               />
-              <div className="flex gap-2">
+              <div className="flex gap-2 flex-wrap">
                 <select
-                  className="flex-1 bg-slate-900 border-none rounded-xl p-2 text-[10px]"
+                  className="flex-1 min-w-[100px] bg-slate-900 border-none rounded-xl p-2 text-[10px]"
                   value={categoryFilter}
                   onChange={e => setCategoryFilter(e.target.value)}
                 >
                   {categories.map(c => <option key={c} value={c}>{c}</option>)}
                 </select>
                 <select
-                  className="flex-1 bg-slate-900 border-none rounded-xl p-2 text-[10px]"
+                  className="flex-1 min-w-[110px] bg-slate-900 border-none rounded-xl p-2 text-[10px]"
                   value={levelFilter}
                   onChange={e => setLevelFilter(e.target.value)}
                 >
                   <option value="All">All Levels</option>
                   {levels.map(l => <option key={l} value={l}>{l}</option>)}
                 </select>
+                <select
+                  className="flex-1 min-w-[110px] bg-slate-900 border-none rounded-xl p-2 text-[10px]"
+                  value={equipmentFilter}
+                  onChange={e => setEquipmentFilter(e.target.value)}
+                >
+                  {equipments.map(eq => <option key={eq} value={eq}>{eq}</option>)}
+                </select>
               </div>
 
               <div className="max-h-60 overflow-y-auto space-y-2 pr-1 custom-scrollbar">
                 {filteredExercises.map(ex => {
                   const isSelected = selectedExercises.find(s => (s.id === ex.id) || (s.exercise_id === ex.id));
+                  const genderLink = userGender === 'men' ? ex.men_link : ex.women_link;
+                  const genderIcon = userGender === 'men' ? 'male' : 'female';
                   return (
                     <div key={ex.id} className={`p-3 rounded-2xl border transition-all ${isSelected ? 'bg-primary/10 border-primary/30' : 'bg-slate-900/40 border-slate-700/50'}`}>
                       <div className="flex items-center gap-3">
@@ -361,12 +394,26 @@ const AdminWorkouts: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNav
                           )}
                         </div>
                         <div className="flex-1 min-w-0" onClick={() => toggleExercise(ex)}>
-                          <p className="text-[11px] font-bold truncate">{ex.exercise_name}</p>
-                          <p className="text-[9px] text-slate-500 uppercase font-black">{ex.category}</p>
+                          <p className="text-[11px] font-bold line-clamp-2">{ex.exercise_name}</p>
+                          <div className="flex items-center gap-2 mt-0.5">
+                            <p className="text-[9px] text-slate-500 uppercase font-black">{ex.category}</p>
+                            {ex.equipment && <p className="text-[8px] text-slate-600">• {ex.equipment}</p>}
+                          </div>
                         </div>
-                        <button onClick={() => toggleExercise(ex)} className={`w-6 h-6 rounded-full flex items-center justify-center ${isSelected ? 'bg-primary text-slate-900' : 'bg-slate-700 text-slate-400'}`}>
-                          <span className="material-symbols-rounded text-sm">{isSelected ? 'check' : 'add'}</span>
-                        </button>
+                        <div className="flex items-center gap-1 shrink-0">
+                          {genderLink && (
+                            <button
+                              onClick={() => window.open(genderLink, '_blank')}
+                              className="w-6 h-6 rounded-full flex items-center justify-center bg-slate-700 text-slate-400 hover:bg-slate-600 hover:text-slate-200 transition-colors"
+                              title={`Form guide for ${userGender}`}
+                            >
+                              <span className="material-symbols-rounded text-xs">{genderIcon}</span>
+                            </button>
+                          )}
+                          <button onClick={() => toggleExercise(ex)} className={`w-6 h-6 rounded-full flex items-center justify-center transition-colors ${isSelected ? 'bg-primary text-slate-900' : 'bg-slate-700 text-slate-400'}`}>
+                            <span className="material-symbols-rounded text-sm">{isSelected ? 'check' : 'add'}</span>
+                          </button>
+                        </div>
                       </div>
                       {isSelected && (
                         <input

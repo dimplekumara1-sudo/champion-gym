@@ -1,7 +1,7 @@
-# PowerFlex Gym Shop Management System - SQL Migrations Guide
+# Challenge Gym Gym Shop Management System - SQL Migrations Guide
 
 ## Overview
-This document provides all the SQL migrations needed to set up the complete shop management system for PowerFlex Elite Fitness Coach application.
+This document provides all the SQL migrations needed to set up the complete shop management system for Challenge Gym Elite Fitness Coach application.
 
 ## Migration File Location
 📁 **File:** `migration_gym_shop_009.sql`

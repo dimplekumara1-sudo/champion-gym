@@ -16,6 +16,7 @@ export type AppScreen =
   | 'DASHBOARD'
   | 'DAILY_TRACKER'
   | 'EXPLORE'
+  | 'CATEGORY_VIDEOS'
   | 'TRAINERS'
   | 'WORKOUT_PROGRAM'
   | 'WORKOUT_DETAIL'
@@ -57,9 +58,15 @@ export interface Profile {
   onboarding_completed: boolean;
   approval_status: 'pending' | 'approved' | 'rejected';
   payment_status: 'pending' | 'paid' | 'failed';
-  plan_id: string | null;
+  plan: string | null;
   plan_start_date: string | null;
   plan_expiry_date: string | null;
+  height: number | null;
+  weight: number | null;
+  target_weight: number | null;
+  goal: string | null;
+  gender: string | null;
+  phone_number: string | null;
   created_at: string;
 }
 

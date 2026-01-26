@@ -5,6 +5,7 @@ import { supabase } from '../lib/supabase';
 
 interface OnboardingPlanProps {
   onNext: () => void;
+  onBack: () => void;
   onboardingData?: {
     goal: string;
     gender: string;
@@ -14,7 +15,7 @@ interface OnboardingPlanProps {
   };
 }
 
-const OnboardingPlan: React.FC<OnboardingPlanProps> = ({ onNext, onboardingData }) => {
+const OnboardingPlan: React.FC<OnboardingPlanProps> = ({ onNext, onBack, onboardingData }) => {
   const [plans, setPlans] = useState<any[]>([]);
   const [selected, setSelected] = useState('');
   const [loading, setLoading] = useState(true);
@@ -81,9 +82,17 @@ const OnboardingPlan: React.FC<OnboardingPlanProps> = ({ onNext, onboardingData 
   return (
     <div className="min-h-screen bg-background-dark flex flex-col">
       <StatusBar />
-      <main className="flex-1 px-4 pt-12 pb-32 overflow-y-auto no-scrollbar">
-        <header className="mb-8 text-center">
-          <h1 className="text-3xl font-extrabold tracking-tight mb-2">Choose Your Plan</h1>
+      <main className="flex-1 px-4 pt-8 pb-32 overflow-y-auto no-scrollbar">
+        <header className="mb-8">
+          <div className="flex items-center mb-6">
+            <button 
+              onClick={onBack}
+              className="w-10 h-10 rounded-full bg-slate-800 flex items-center justify-center mr-4 active:scale-90 transition-transform"
+            >
+              <span className="material-symbols-rounded text-2xl text-white">arrow_back</span>
+            </button>
+            <h1 className="text-3xl font-extrabold tracking-tight">Choose Your Plan</h1>
+          </div>
           <p className="text-slate-400">Unlock your full potential with a fitness plan designed for your goals.</p>
         </header>
 

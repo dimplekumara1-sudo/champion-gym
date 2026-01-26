@@ -140,7 +140,7 @@ cache.clearPattern(`${CACHE_KEYS.WORKOUT_DETAIL}*`);
 ```javascript
 // In browser console
 Object.keys(localStorage)
-  .filter(k => k.startsWith('powerflex_cache_'))
+  .filter(k => k.startsWith('Challenge Gym_cache_'))
   .forEach(k => console.log(k, JSON.parse(localStorage[k])))
 ```
 

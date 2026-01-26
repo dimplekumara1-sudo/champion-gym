@@ -1,6 +1,5 @@
-
 {
-  "name": "PowerFlex - Elite Fitness Coach",
+  "name": "Challenge Gym - Elite Fitness Coach",
   "description": "A comprehensive fitness ecosystem featuring real-time tracking, personalized AI-driven routines, and professional trainer connectivity.",
   "requestFramePermissions": [
     "camera"

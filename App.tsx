@@ -10,6 +10,7 @@ import OnboardingPlan from './screens/OnboardingPlan';
 import Dashboard from './screens/Dashboard';
 import DailyTracker from './screens/DailyTracker';
 import ExploreScreen from './screens/ExploreScreen';
+import CategoryVideosScreen from './screens/CategoryVideosScreen';
 import LoginScreen from './screens/LoginScreen';
 import SignupScreen from './screens/SignupScreen';
 import GooglePasswordSetup from './screens/GooglePasswordSetup';
@@ -54,7 +55,7 @@ const App: React.FC = () => {
   });
   const [selectedWorkoutId, setSelectedWorkoutId] = useState<string | null>(null);
   const [selectedUserProgramId, setSelectedUserProgramId] = useState<string | null>(null);
-  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
+  const [selectedCategory, setSelectedCategory] = useState<{ id: string; name: string } | null>(null);
   const [workoutDuration, setWorkoutDuration] = useState<number>(0);
 
   const updateOnboardingData = (data: Partial<typeof onboardingData>) => {
@@ -171,20 +172,21 @@ const App: React.FC = () => {
       }} onSignUp={() => navigate('SIGNUP')} />;
       case 'SIGNUP': return <SignupScreen onSignup={() => navigate('ONBOARDING_GOAL')} onSignIn={() => navigate('LOGIN')} />;
       case 'GOOGLE_PASSWORD_SETUP': return <GooglePasswordSetup onComplete={() => navigate('ONBOARDING_GOAL')} onSkip={() => navigate('ONBOARDING_GOAL')} />;
-      case 'ONBOARDING_GOAL': return <OnboardingGoal onNext={(goal) => { updateOnboardingData({ goal }); navigate('ONBOARDING_GENDER'); }} />;
-      case 'ONBOARDING_GENDER': return <OnboardingGender onNext={(gender) => { updateOnboardingData({ gender }); navigate('ONBOARDING_HEIGHT'); }} />;
-      case 'ONBOARDING_HEIGHT': return <OnboardingHeight onNext={(height) => { updateOnboardingData({ height }); navigate('ONBOARDING_WEIGHT'); }} />;
-      case 'ONBOARDING_WEIGHT': return <OnboardingWeight onNext={(data) => { updateOnboardingData(data); navigate('ONBOARDING_PLAN'); }} />;
-      case 'ONBOARDING_PLAN': return <OnboardingPlan onboardingData={onboardingData} onNext={() => navigate('APPLICATION_STATUS')} />;
+      case 'ONBOARDING_GOAL': return <OnboardingGoal onNext={(goal) => { updateOnboardingData({ goal }); navigate('ONBOARDING_GENDER'); }} onBack={() => navigate('SIGNUP')} />;
+      case 'ONBOARDING_GENDER': return <OnboardingGender onNext={(gender) => { updateOnboardingData({ gender }); navigate('ONBOARDING_HEIGHT'); }} onBack={() => navigate('ONBOARDING_GOAL')} />;
+      case 'ONBOARDING_HEIGHT': return <OnboardingHeight onNext={(height) => { updateOnboardingData({ height }); navigate('ONBOARDING_WEIGHT'); }} onBack={() => navigate('ONBOARDING_GENDER')} />;
+      case 'ONBOARDING_WEIGHT': return <OnboardingWeight onNext={(data) => { updateOnboardingData(data); navigate('ONBOARDING_PLAN'); }} onBack={() => navigate('ONBOARDING_HEIGHT')} />;
+      case 'ONBOARDING_PLAN': return <OnboardingPlan onboardingData={onboardingData} onNext={() => navigate('APPLICATION_STATUS')} onBack={() => navigate('ONBOARDING_WEIGHT')} />;
       case 'APPLICATION_STATUS': return <ApplicationStatus onBack={() => navigate('SPLASH')} onHome={() => navigate('DASHBOARD')} />;
       case 'SUCCESS': return <SuccessScreen onNext={() => navigate('DASHBOARD')} />;
       case 'DASHBOARD': return <Dashboard onNavigate={navigate} />;
       case 'DAILY_TRACKER': return <DailyTracker onNavigate={navigate} />;
-      case 'EXPLORE': return <ExploreScreen onNavigate={(s) => { if (s === 'GYM_CATALOG') setSelectedCategory(null); navigate(s); }} onSelectWorkout={(id) => { setSelectedWorkoutId(id); setSelectedUserProgramId(null); navigate('WORKOUT_DETAIL'); }} onSelectCategory={(cat) => { setSelectedCategory(cat); navigate('GYM_CATALOG'); }} />;
+      case 'EXPLORE': return <ExploreScreen onNavigate={navigate} onSelectWorkout={(id) => { setSelectedWorkoutId(id); setSelectedUserProgramId(null); navigate('WORKOUT_DETAIL'); }} onSelectCategory={(categoryId, categoryName) => { setSelectedCategory({ id: categoryId, name: categoryName }); navigate('CATEGORY_VIDEOS'); }} />;
+      case 'CATEGORY_VIDEOS': return selectedCategory ? <CategoryVideosScreen categoryId={selectedCategory.id} categoryName={selectedCategory.name} onNavigate={navigate} /> : <ExploreScreen onNavigate={navigate} onSelectWorkout={(id) => { setSelectedWorkoutId(id); setSelectedUserProgramId(null); navigate('WORKOUT_DETAIL'); }} onSelectCategory={(categoryId, categoryName) => { setSelectedCategory({ id: categoryId, name: categoryName }); navigate('CATEGORY_VIDEOS'); }} />;
       case 'STATS': return <DailyTracker onNavigate={navigate} />;
       case 'TRAINERS': return <TrainersScreen onNavigate={navigate} />;
       case 'PROFILE': return <ProfileScreen onNavigate={navigate} />;
-      case 'GYM_CATALOG': return <GymCatalog onNavigate={navigate} initialCategory={selectedCategory} />;
+      case 'GYM_CATALOG': return <GymCatalog onNavigate={navigate} initialCategory={selectedCategory ? selectedCategory.name : null} />;
       case 'CREATE_WORKOUT': return <CreateWorkout onNavigate={navigate} />;
       case 'SUBSCRIPTION_DETAILS': return <SubscriptionDetails onNavigate={navigate} />;
       case 'WORKOUT_HISTORY': return <WorkoutHistory onNavigate={navigate} />;

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 /**
- * PowerFlex Storage Setup Script
+ * Challenge Gym Storage Setup Script
  * Creates the "profiles" storage bucket with proper RLS policies
  * 
  * Run this in your Supabase SQL Editor or use Supabase Dashboard
@@ -12,7 +12,7 @@
 // 
 // Manual Steps:
 // 1. Go to https://app.supabase.com
-// 2. Select your PowerFlex project
+// 2. Select your Challenge Gym project
 // 3. Go to Storage (left sidebar)
 // 4. Click "Create New Bucket"
 // 5. Name: "profiles"
@@ -71,12 +71,12 @@ ADD COLUMN IF NOT EXISTS avatar_url TEXT;
 CREATE INDEX IF NOT EXISTS idx_profiles_avatar_url ON profiles(avatar_url);
 `;
 
-console.log('PowerFlex Storage Setup Instructions\n');
+console.log('Challenge Gym Storage Setup Instructions\n');
 console.log('=======================================\n');
 console.log('STEP 1: Create Storage Bucket');
 console.log('------------------------------');
 console.log('1. Go to https://app.supabase.com');
-console.log('2. Select your PowerFlex project');
+console.log('2. Select your Challenge Gym project');
 console.log('3. Click "Storage" in the left sidebar');
 console.log('4. Click "Create New Bucket"');
 console.log('5. Fill in:');

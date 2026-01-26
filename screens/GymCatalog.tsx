@@ -4,12 +4,12 @@ import { supabase } from '../lib/supabase';
 import { AppScreen } from '../types';
 import StatusBar from '../components/StatusBar';
 
-const GymCatalog: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNavigate }) => {
+const GymCatalog: React.FC<{ onNavigate: (s: AppScreen) => void, initialCategory?: string | null }> = ({ onNavigate, initialCategory }) => {
   const [exercises, setExercises] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [userGender, setUserGender] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
-  const [categoryFilter, setCategoryFilter] = useState('All');
+  const [categoryFilter, setCategoryFilter] = useState(initialCategory || 'All');
   const [equipmentFilter, setEquipmentFilter] = useState('All');
   const [levelFilter, setLevelFilter] = useState('All');
   const [genderFilter, setGenderFilter] = useState('All');
@@ -19,6 +19,13 @@ const GymCatalog: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNaviga
     fetchExercises();
     fetchUserGender();
   }, []);
+
+  // Update categoryFilter when initialCategory changes
+  useEffect(() => {
+    if (initialCategory) {
+      setCategoryFilter(initialCategory);
+    }
+  }, [initialCategory]);
 
   const fetchUserGender = async () => {
     try {
