@@ -8,6 +8,13 @@ import { supabase } from '../lib/supabase';
 import { cache, CACHE_KEYS, CACHE_TTL } from '../lib/cache';
 import { notificationService, PlanNotification } from '../lib/notifications';
 
+interface DailyNutrition {
+  totalCalories: number;
+  totalProtein: number;
+  totalCarbs: number;
+  totalFat: number;
+}
+
 const Dashboard: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNavigate }) => {
   const [user, setUser] = useState<any>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
@@ -18,15 +25,29 @@ const Dashboard: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNavigat
   const [editData, setEditData] = useState({ height: 0, weight: 0, target_weight: 0 });
   const [notifications, setNotifications] = useState<PlanNotification[]>([]);
   const [showNotificationsModal, setShowNotificationsModal] = useState(false);
+  const [showBMIInfoModal, setShowBMIInfoModal] = useState(false);
+  const [dailyNutrition, setDailyNutrition] = useState<DailyNutrition>({
+    totalCalories: 0,
+    totalProtein: 0,
+    totalCarbs: 0,
+    totalFat: 0,
+  });
+  const [nutritionGoals, setNutritionGoals] = useState<any>({
+    daily_calories_target: 2000,
+    daily_protein_target: 150,
+    daily_carbs_target: 250,
+    daily_fat_target: 65,
+  });
 
   useEffect(() => {
     fetchProfile();
 
-    // Set up real-time subscription for profile updates
-    const setupSubscription = async () => {
+    // Set up real-time subscriptions for profile and diet tracking updates
+    const setupSubscriptions = async () => {
       const { data: { user: authUser } } = await supabase.auth.getUser();
       if (authUser) {
-        const subscription = supabase
+        // Profile changes subscription
+        const profileSubscription = supabase
           .channel(`profile_${authUser.id}`)
           .on(
             'postgres_changes',
@@ -45,18 +66,56 @@ const Dashboard: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNavigat
           )
           .subscribe();
 
-        return subscription;
+        // Diet tracking changes subscription - updates calories in real-time
+        const dietSubscription = supabase
+          .channel(`diet_${authUser.id}`)
+          .on(
+            'postgres_changes',
+            {
+              event: '*',
+              schema: 'public',
+              table: 'user_daily_diet_tracking',
+              filter: `user_id=eq.${authUser.id}`
+            },
+            () => {
+              // Refetch daily nutrition when food is added/removed
+              fetchDailyNutrition(authUser.id);
+            }
+          )
+          .subscribe();
+
+        // Nutrition goals changes subscription
+        const goalsSubscription = supabase
+          .channel(`goals_${authUser.id}`)
+          .on(
+            'postgres_changes',
+            {
+              event: '*',
+              schema: 'public',
+              table: 'nutrition_goals',
+              filter: `user_id=eq.${authUser.id}`
+            },
+            () => {
+              // Refetch nutrition goals when they change
+              // fetchNutritionGoals(authUser.id);
+            }
+          )
+          .subscribe();
+
+        return { profileSubscription, dietSubscription, goalsSubscription };
       }
     };
 
-    let subscription: any;
-    setupSubscription().then((sub) => {
-      subscription = sub;
+    let subscriptions: any;
+    setupSubscriptions().then((subs) => {
+      subscriptions = subs;
     });
 
     return () => {
-      if (subscription) {
-        subscription.unsubscribe();
+      if (subscriptions) {
+        subscriptions.profileSubscription?.unsubscribe();
+        subscriptions.dietSubscription?.unsubscribe();
+        subscriptions.goalsSubscription?.unsubscribe();
       }
     };
   }, []);
@@ -74,6 +133,12 @@ const Dashboard: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNavigat
 
       if (profileData) {
         setProfile(profileData);
+
+        // Fetch daily nutrition data
+        await fetchDailyNutrition(user.id);
+
+        // Fetch nutrition goals
+        // await fetchNutritionGoals(user.id);
 
         // Fetch notifications
         const userNotifications = await notificationService.getUserNotifications(user.id);
@@ -116,6 +181,70 @@ const Dashboard: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNavigat
           setCurrentProgram(cachedProgram);
         }
       }
+    }
+  };
+
+  const fetchDailyNutrition = async (userId: string) => {
+    try {
+      const today = new Date().toISOString().split('T')[0];
+      const { data, error } = await supabase
+        .from('user_daily_diet_tracking')
+        .select('calories, protein, carbs, fats')
+        .eq('user_id', userId)
+        .eq('date', today);
+
+      if (error) throw error;
+
+      if (data && data.length > 0) {
+        const totals = data.reduce(
+          (acc, meal) => ({
+            totalCalories: acc.totalCalories + (meal.calories || 0),
+            totalProtein: acc.totalProtein + (meal.protein || 0),
+            totalCarbs: acc.totalCarbs + (meal.carbs || 0),
+            totalFat: acc.totalFat + (meal.fats || 0),
+          }),
+          { totalCalories: 0, totalProtein: 0, totalCarbs: 0, totalFat: 0 }
+        );
+        setDailyNutrition(totals);
+      } else {
+        setDailyNutrition({
+          totalCalories: 0,
+          totalProtein: 0,
+          totalCarbs: 0,
+          totalFat: 0,
+        });
+      }
+
+
+      const fetchNutritionGoals = async (userId: string) => {
+        try {
+          const { data, error } = await supabase
+            .from('nutrition_goals')
+            .select('*')
+            .eq('user_id', userId)
+            .single();
+
+          if (error && error.code !== 'PGRST116') {
+            throw error;
+          }
+
+          if (data) {
+            setNutritionGoals(data);
+          } else {
+            // Default goals if none exist
+            setNutritionGoals({
+              daily_calories_target: 2000,
+              daily_protein_target: 150,
+              daily_carbs_target: 250,
+              daily_fat_target: 65,
+            });
+          }
+        } catch (error) {
+          console.error('Error fetching nutrition goals:', error);
+        }
+      };
+    } catch (error) {
+      console.error('Error fetching daily nutrition:', error);
     }
   };
 
@@ -251,7 +380,13 @@ const Dashboard: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNavigat
             <div className="w-full flex justify-between items-start mb-5">
               <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">BMI Status</span>
               <div className="flex gap-2">
-                <span className="material-symbols-rounded text-[16px] text-slate-500">info</span>
+                <button 
+                  onClick={() => setShowBMIInfoModal(true)} 
+                  className="material-symbols-rounded text-[16px] text-slate-500 hover:text-primary transition-colors"
+                  title="BMI Information"
+                >
+                  info
+                </button>
                 <button onClick={() => setIsEditModalOpen(true)} className="material-symbols-rounded text-[16px] text-primary active:scale-110 transition-transform">edit</button>
               </div>
             </div>
@@ -306,7 +441,7 @@ const Dashboard: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNavigat
           <div className="flex justify-between items-start mb-5">
             <div>
               <h3 className="text-sm font-bold text-slate-300 mb-1 uppercase tracking-wider">Today's Calories</h3>
-              <p className="text-4xl font-extrabold text-white">1,840 <span className="text-xs font-medium text-slate-500">/ 2200 kcal</span></p>
+              <p className="text-4xl font-extrabold text-white">{Math.round(dailyNutrition.totalCalories)} <span className="text-xs font-medium text-slate-500">/ {nutritionGoals.daily_calories_target} kcal</span></p>
             </div>
             <div className="flex gap-1 items-end h-12 pt-2">
               <div className="w-2.5 bg-slate-800 rounded-full h-[40%]"></div>
@@ -316,19 +451,39 @@ const Dashboard: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNavigat
               <div className="w-2.5 bg-primary rounded-full h-full shadow-[0_0_12px_rgba(34,197,94,0.4)]"></div>
             </div>
           </div>
+
+          {/* Nutrition Pie Chart - REMOVED */}
+
           <div className="grid grid-cols-3 gap-2 border-t border-[#1E293B] pt-4">
             <div className="text-center bg-slate-800/30 py-2 rounded-xl">
               <p className="text-[9px] text-slate-400 font-bold uppercase mb-0.5">Carbs</p>
-              <p className="text-xs font-bold text-primary">142g</p>
+              <p className="text-xs font-bold text-amber-400">{Math.round(dailyNutrition.totalCarbs)}g</p>
+              <p className="text-[8px] text-slate-500 mt-1">{dailyNutrition.totalCarbs > 0 ? ((dailyNutrition.totalCarbs * 4 / dailyNutrition.totalCalories) * 100).toFixed(0) : 0}%</p>
             </div>
             <div className="text-center bg-slate-800/30 py-2 rounded-xl">
               <p className="text-[9px] text-slate-400 font-bold uppercase mb-0.5">Protein</p>
-              <p className="text-xs font-bold text-primary">110g</p>
+              <p className="text-xs font-bold text-red-400">{Math.round(dailyNutrition.totalProtein)}g</p>
+              <p className="text-[8px] text-slate-500 mt-1">{dailyNutrition.totalProtein > 0 ? ((dailyNutrition.totalProtein * 4 / dailyNutrition.totalCalories) * 100).toFixed(0) : 0}%</p>
             </div>
             <div className="text-center bg-slate-800/30 py-2 rounded-xl">
               <p className="text-[9px] text-slate-400 font-bold uppercase mb-0.5">Fats</p>
-              <p className="text-xs font-bold text-primary">58g</p>
+              <p className="text-xs font-bold text-purple-400">{Math.round(dailyNutrition.totalFat)}g</p>
+              <p className="text-[8px] text-slate-500 mt-1">{dailyNutrition.totalFat > 0 ? ((dailyNutrition.totalFat * 9 / dailyNutrition.totalCalories) * 100).toFixed(0) : 0}%</p>
             </div>
+          </div>
+        </button>
+
+        {/* Nutrition Goals Card */}
+        <button
+          onClick={() => onNavigate('NUTRITION_GOALS')}
+          className="w-full text-left bg-[#151C2C] border border-[#1E293B] p-5 rounded-3xl mb-4 shadow-xl active:scale-[0.98] transition-transform group hover:bg-[#1a2438]"
+        >
+          <div className="flex justify-between items-center">
+            <div>
+              <h3 className="text-sm font-bold text-slate-300 mb-1 uppercase tracking-wider">Nutrition Goals</h3>
+              <p className="text-sm text-slate-400">Set your daily targets</p>
+            </div>
+            <span className="material-symbols-rounded text-primary text-2xl group-hover:scale-110 transition-transform">local_fire_department</span>
           </div>
         </button>
 
@@ -656,6 +811,88 @@ const Dashboard: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNavigat
                 className="w-full bg-primary text-slate-900 font-bold py-3 rounded-xl hover:bg-green-600 transition-colors"
               >
                 Take Action
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* BMI Info Modal */}
+      {showBMIInfoModal && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[100] flex items-center justify-center p-6">
+          <div className="bg-[#1f2937] w-full max-w-md rounded-3xl overflow-hidden border border-slate-800 shadow-2xl">
+            <div className="p-6 border-b border-slate-800">
+              <div className="flex items-center justify-between">
+                <h2 className="text-xl font-bold text-white">BMI Categories</h2>
+                <button
+                  onClick={() => setShowBMIInfoModal(false)}
+                  className="text-slate-400 hover:text-white"
+                >
+                  <span className="material-symbols-rounded">close</span>
+                </button>
+              </div>
+              <p className="text-sm text-slate-400 mt-2">Body Mass Index (BMI) ranges for adults</p>
+            </div>
+
+            <div className="p-6 space-y-4">
+              {/* BMI Ranges */}
+              <div className="space-y-3">
+                <div className="bg-blue-500/10 border border-blue-500/30 p-4 rounded-xl">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h3 className="font-bold text-blue-400">Underweight</h3>
+                      <p className="text-xs text-slate-400 mt-1">Below 18.5</p>
+                    </div>
+                    <span className="material-symbols-rounded text-blue-400 text-2xl">trending_down</span>
+                  </div>
+                </div>
+
+                <div className="bg-green-500/10 border border-green-500/30 p-4 rounded-xl">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h3 className="font-bold text-green-400">Healthy Weight</h3>
+                      <p className="text-xs text-slate-400 mt-1">18.5 - 24.9</p>
+                    </div>
+                    <span className="material-symbols-rounded text-green-400 text-2xl">check_circle</span>
+                  </div>
+                </div>
+
+                <div className="bg-amber-500/10 border border-amber-500/30 p-4 rounded-xl">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h3 className="font-bold text-amber-400">Overweight</h3>
+                      <p className="text-xs text-slate-400 mt-1">25.0 - 29.9</p>
+                    </div>
+                    <span className="material-symbols-rounded text-amber-400 text-2xl">warning</span>
+                  </div>
+                </div>
+
+                <div className="bg-red-500/10 border border-red-500/30 p-4 rounded-xl">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h3 className="font-bold text-red-400">Obese</h3>
+                      <p className="text-xs text-slate-400 mt-1">30.0 and above</p>
+                    </div>
+                    <span className="material-symbols-rounded text-red-400 text-2xl">error</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Additional Info */}
+              <div className="bg-slate-800/30 p-4 rounded-xl space-y-2">
+                <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">About BMI</p>
+                <p className="text-xs text-slate-300 leading-relaxed">
+                  BMI is calculated as weight (kg) ÷ height² (m²). It's a general guideline and may not account for muscle mass, bone density, or body composition differences.
+                </p>
+              </div>
+            </div>
+
+            <div className="border-t border-slate-800 p-6">
+              <button
+                onClick={() => setShowBMIInfoModal(false)}
+                className="w-full bg-primary hover:bg-green-600 text-slate-900 font-bold py-3 rounded-xl transition-colors"
+              >
+                Got it
               </button>
             </div>
           </div>

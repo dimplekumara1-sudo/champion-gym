@@ -15,6 +15,7 @@ export type AppScreen =
   | 'APPLICATION_STATUS'
   | 'DASHBOARD'
   | 'DAILY_TRACKER'
+  | 'NUTRITION_GOALS'
   | 'EXPLORE'
   | 'CATEGORY_VIDEOS'
   | 'TRAINERS'
@@ -24,6 +25,7 @@ export type AppScreen =
   | 'WORKOUT_FEEDBACK'
   | 'STATS'
   | 'PROFILE'
+  | 'CONFIG'
   | 'GYM_CATALOG'
   | 'CREATE_WORKOUT'
   | 'SUBSCRIPTION_DETAILS'
@@ -39,7 +41,9 @@ export type AppScreen =
   | 'ADMIN_CATEGORIES'
   | 'ADMIN_SHOP'
   | 'ADMIN_ORDERS'
-  | 'ADMIN_EXPLORE';
+  | 'ADMIN_EXPLORE'
+  | 'ADMIN_INDIAN_FOODS'
+  | 'ADMIN_FOOD_APPROVALS';
 
 export type NavTab = 'HOME' | 'EXPLORE' | 'ADD' | 'STATS' | 'MY_WORKOUTS';
 

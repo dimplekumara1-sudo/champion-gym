@@ -405,20 +405,6 @@ const AdminDashboard: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNa
             </div>
 
             <div
-              onClick={() => onNavigate('ADMIN_EXERCISES')}
-              className="flex items-center p-4 bg-white dark:bg-[#1E293B] rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800 active:scale-[0.98] transition-all"
-            >
-              <div className="w-10 h-10 rounded-xl bg-green-500/10 flex items-center justify-center mr-4">
-                <span className="material-symbols-rounded text-green-500 text-xl">fitness_center</span>
-              </div>
-              <div className="flex-1 text-left">
-                <h4 className="text-sm font-semibold text-dark">Exercise Database</h4>
-                <p className="text-xs text-slate-500 dark:text-slate-400">Upload and manage exercises</p>
-              </div>
-              <span className="material-symbols-rounded text-slate-400">chevron_right</span>
-            </div>
-
-            <div
               onClick={() => onNavigate('ADMIN_WORKOUTS')}
               className="flex items-center p-4 bg-white dark:bg-[#1E293B] rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800 active:scale-[0.98] transition-all"
             >
@@ -492,11 +478,11 @@ const AdminDashboard: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNa
         <button onClick={() => onNavigate('DASHBOARD')} className="w-14 h-14 bg-primary text-white rounded-full flex items-center justify-center shadow-lg shadow-primary/30 -mt-10 border-4 border-background-light dark:border-[#0F172A]">
           <span className="material-symbols-rounded text-3xl">home</span>
         </button>
-        <button onClick={() => onNavigate('ADMIN_USERS')} className="flex flex-col items-center space-y-1 text-slate-400 dark:text-slate-500 hover:text-primary transition-colors">
+        <button onClick={() => onNavigate('PROFILE')} className="flex flex-col items-center space-y-1 text-slate-400 dark:text-slate-500 hover:text-primary transition-colors">
           <span className="material-symbols-rounded">people</span>
           <span className="text-[10px] font-medium">Users</span>
         </button>
-        <button onClick={() => onNavigate('PROFILE')} className="flex flex-col items-center space-y-1 text-slate-400 dark:text-slate-500 hover:text-primary transition-colors">
+        <button onClick={() => onNavigate('CONFIG')} className="flex flex-col items-center space-y-1 text-slate-400 dark:text-slate-500 hover:text-primary transition-colors">
           <span className="material-symbols-rounded">settings</span>
           <span className="text-[10px] font-medium">Config</span>
         </button>

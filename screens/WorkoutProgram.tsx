@@ -213,7 +213,7 @@ const WorkoutProgram: React.FC<{ onNavigate: (s: AppScreen) => void, onSelectWor
               {dayPrograms.map((p: any, i: number) => (
                 <button
                   key={i}
-                  onClick={() => loadExerciseVideo(p.workouts.id)}
+                  onClick={() => onSelectWorkout(p.workouts.id, p.id)}
                   className="flex flex-col items-center min-w-[70px] gap-2 active:scale-95 transition-transform group"
                 >
                   <div className="text-xs text-slate-500 font-bold">Day {p.day_of_week}</div>

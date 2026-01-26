@@ -25,7 +25,7 @@ export const planService = {
 
             // Determine new start date - if expired, start from now, else start from expiry (queued)
             const newStartDate = expiryDate > now ? expiryDate : now;
-            
+
             // Get the plan to determine duration
             const { data: planData, error: planError } = await supabase
                 .from('plans')
@@ -191,7 +191,7 @@ export const planService = {
         try {
             const { data: profiles, error } = await supabase
                 .from('profiles')
-                .select('id, full_name, email, phone_number, plan_expiry_date, due_amount, payment_due_date')
+                .select('id, full_name, phone_number, plan_expiry_date, due_amount, payment_due_date')
                 .eq('plan_status', 'expired')
                 .gt('due_amount', 0)
                 .order('payment_due_date', { ascending: true });
@@ -212,7 +212,7 @@ export const planService = {
 
             const { data: profiles, error } = await supabase
                 .from('profiles')
-                .select('id, full_name, email, phone_number, plan, plan_expiry_date')
+                .select('id, full_name, phone_number, plan, plan_expiry_date')
                 .eq('plan_status', 'active')
                 .lte('plan_expiry_date', sevenDaysFromNow.toISOString())
                 .gt('plan_expiry_date', new Date().toISOString())
@@ -233,13 +233,13 @@ export const planService = {
         const startDate = new Date(currentProfile.plan_start_date);
 
         const newPrice = parseFloat(newPlan.price.toString().replace(/[^0-9.]/g, ''));
-        
+
         // If expired or no active plan
         if (expiryDate <= now || !currentProfile.plan_start_date || !currentProfile.plan_expiry_date) {
             const startDate = new Date();
             const endDate = new Date();
             endDate.setMonth(endDate.getMonth() + (newPlan.duration_months || 1));
-            
+
             return {
                 unused_value: 0,
                 payable_amount: newPrice,

@@ -10,6 +10,9 @@ const AdminExercises: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNa
   const [editingExercise, setEditingExercise] = useState<any>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [iframeUrl, setIframeUrl] = useState<string | null>(null);
+  const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
+  const [selectedEquipment, setSelectedEquipment] = useState<string[]>([]);
+  const [selectedLevels, setSelectedLevels] = useState<string[]>([]);
 
   useEffect(() => {
     fetchExercises();
@@ -109,10 +112,31 @@ const AdminExercises: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNa
     }
   };
 
-  const filteredExercises = exercises.filter(ex =>
-    ex.exercise_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    ex.category.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filteredExercises = exercises.filter(ex => {
+    const matchesSearch = ex.exercise_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      ex.category.toLowerCase().includes(searchTerm.toLowerCase());
+
+    const matchesCategory = selectedCategories.length === 0 || selectedCategories.includes(ex.category || '');
+    const matchesEquipment = selectedEquipment.length === 0 || selectedEquipment.includes(ex.equipment || '');
+    const matchesLevel = selectedLevels.length === 0 || selectedLevels.includes(ex.level || '');
+
+    return matchesSearch && matchesCategory && matchesEquipment && matchesLevel;
+  });
+
+  const getUniqueCategories = () => {
+    const categories = new Set(exercises.map(ex => ex.category).filter(Boolean));
+    return Array.from(categories).sort();
+  };
+
+  const getUniqueEquipment = () => {
+    const equipment = new Set(exercises.map(ex => ex.equipment).filter(Boolean));
+    return Array.from(equipment).sort();
+  };
+
+  const getUniqueLevels = () => {
+    const levels = new Set(exercises.map(ex => ex.level).filter(Boolean));
+    return Array.from(levels).sort();
+  };
 
   const getYoutubeId = (url: string) => {
     const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|&v=)([^#&?]*).*/;
@@ -156,6 +180,65 @@ const AdminExercises: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNa
           />
         </div>
 
+        {/* Filter Dropdowns */}
+        <div className="mb-4 flex gap-3 flex-wrap">
+          {/* Category Dropdown */}
+          <div className="flex-1 min-w-[200px]">
+            <select
+              value={selectedCategories.length === 0 ? '' : selectedCategories[0]}
+              onChange={(e) => setSelectedCategories(e.target.value ? [e.target.value] : [])}
+              className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-primary"
+            >
+              <option value="">All Categories</option>
+              {getUniqueCategories().map(category => (
+                <option key={category} value={category}>{category}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Equipment Dropdown */}
+          <div className="flex-1 min-w-[200px]">
+            <select
+              value={selectedEquipment.length === 0 ? '' : selectedEquipment[0]}
+              onChange={(e) => setSelectedEquipment(e.target.value ? [e.target.value] : [])}
+              className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-primary"
+            >
+              <option value="">All Equipment</option>
+              {getUniqueEquipment().map(equipment => (
+                <option key={equipment} value={equipment}>{equipment}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Level Dropdown */}
+          <div className="flex-1 min-w-[200px]">
+            <select
+              value={selectedLevels.length === 0 ? '' : selectedLevels[0]}
+              onChange={(e) => setSelectedLevels(e.target.value ? [e.target.value] : [])}
+              className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-primary"
+            >
+              <option value="">All Levels</option>
+              {getUniqueLevels().map(level => (
+                <option key={level} value={level}>{level}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Clear Filters Button */}
+          {(selectedCategories.length + selectedEquipment.length + selectedLevels.length) > 0 && (
+            <button
+              onClick={() => {
+                setSelectedCategories([]);
+                setSelectedEquipment([]);
+                setSelectedLevels([]);
+              }}
+              className="px-4 py-2 text-sm font-medium bg-slate-700/50 hover:bg-slate-700 rounded-lg transition-colors text-slate-300"
+            >
+              Clear Filters
+            </button>
+          )}
+        </div>
+
         <div className="space-y-3">
           {loading ? (
             <div className="flex justify-center py-10">
@@ -163,7 +246,7 @@ const AdminExercises: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNa
             </div>
           ) : filteredExercises.map(ex => (
             <div key={ex.id} className="bg-slate-800/50 p-4 rounded-2xl border border-slate-700 flex items-center gap-4">
-              <div className="w-12 h-12 bg-slate-700 rounded-xl flex items-center justify-center p-2 overflow-hidden">
+              <div className="w-12 h-12 bg-slate-700 rounded-xl flex items-center justify-center p-2 overflow-hidden flex-shrink-0">
                 {ex.icon_svg ? (
                   <div
                     dangerouslySetInnerHTML={{ __html: ex.icon_svg }}
@@ -174,10 +257,20 @@ const AdminExercises: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNa
                 )}
               </div>
               <div className="flex-1 min-w-0">
-                <h3 className="font-bold text-sm truncate">{ex.exercise_name}</h3>
-                <p className="text-[10px] text-slate-400 uppercase font-bold tracking-wider">{ex.category} • {ex.equipment}</p>
+                <div className="flex items-center gap-2 mb-1">
+                  <h3 className="font-bold text-sm">{ex.exercise_name}</h3>
+                  <div className="flex gap-1">
+                    {ex.men_link && (
+                      <span className="material-symbols-rounded text-xs bg-blue-500/20 text-blue-400 px-1.5 py-0.5 rounded text-sm">male</span>
+                    )}
+                    {ex.women_link && (
+                      <span className="material-symbols-rounded text-xs bg-pink-500/20 text-pink-400 px-1.5 py-0.5 rounded text-sm">female</span>
+                    )}
+                  </div>
+                </div>
+                <p className="text-[10px] text-slate-400 uppercase font-bold tracking-wider">{ex.category} • {ex.equipment} • {ex.level || 'All Levels'}</p>
               </div>
-              <div className="flex gap-1">
+              <div className="flex gap-1 flex-shrink-0">
                 <button
                   onClick={() => setEditingExercise(ex)}
                   className="p-2 hover:bg-slate-700 rounded-lg text-slate-400"

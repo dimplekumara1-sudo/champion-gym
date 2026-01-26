@@ -9,6 +9,7 @@ import OnboardingWeight from './screens/OnboardingWeight';
 import OnboardingPlan from './screens/OnboardingPlan';
 import Dashboard from './screens/Dashboard';
 import DailyTracker from './screens/DailyTracker';
+import NutritionGoals from './screens/NutritionGoals';
 import ExploreScreen from './screens/ExploreScreen';
 import CategoryVideosScreen from './screens/CategoryVideosScreen';
 import LoginScreen from './screens/LoginScreen';
@@ -38,6 +39,9 @@ import CartScreen from './screens/CartScreen';
 import OrderHistoryScreen from './screens/OrderHistoryScreen';
 import AdminOrders from './screens/AdminOrders';
 import AdminExplore from './screens/AdminExplore';
+import AdminIndianFoods from './screens/AdminIndianFoods';
+import AdminFoodApprovals from './screens/AdminFoodApprovals';
+import ConfigScreen from './screens/ConfigScreen';
 import { supabase } from './lib/supabase';
 
 const App: React.FC = () => {
@@ -181,11 +185,13 @@ const App: React.FC = () => {
       case 'SUCCESS': return <SuccessScreen onNext={() => navigate('DASHBOARD')} />;
       case 'DASHBOARD': return <Dashboard onNavigate={navigate} />;
       case 'DAILY_TRACKER': return <DailyTracker onNavigate={navigate} />;
+      case 'NUTRITION_GOALS': return <NutritionGoals onNavigate={navigate} />;
       case 'EXPLORE': return <ExploreScreen onNavigate={navigate} onSelectWorkout={(id) => { setSelectedWorkoutId(id); setSelectedUserProgramId(null); navigate('WORKOUT_DETAIL'); }} onSelectCategory={(categoryId, categoryName) => { setSelectedCategory({ id: categoryId, name: categoryName }); navigate('CATEGORY_VIDEOS'); }} />;
       case 'CATEGORY_VIDEOS': return selectedCategory ? <CategoryVideosScreen categoryId={selectedCategory.id} categoryName={selectedCategory.name} onNavigate={navigate} /> : <ExploreScreen onNavigate={navigate} onSelectWorkout={(id) => { setSelectedWorkoutId(id); setSelectedUserProgramId(null); navigate('WORKOUT_DETAIL'); }} onSelectCategory={(categoryId, categoryName) => { setSelectedCategory({ id: categoryId, name: categoryName }); navigate('CATEGORY_VIDEOS'); }} />;
       case 'STATS': return <DailyTracker onNavigate={navigate} />;
       case 'TRAINERS': return <TrainersScreen onNavigate={navigate} />;
       case 'PROFILE': return <ProfileScreen onNavigate={navigate} />;
+      case 'CONFIG': return <ConfigScreen onNavigate={navigate} />;
       case 'GYM_CATALOG': return <GymCatalog onNavigate={navigate} initialCategory={selectedCategory ? selectedCategory.name : null} />;
       case 'CREATE_WORKOUT': return <CreateWorkout onNavigate={navigate} />;
       case 'SUBSCRIPTION_DETAILS': return <SubscriptionDetails onNavigate={navigate} />;
@@ -203,6 +209,8 @@ const App: React.FC = () => {
       case 'ADMIN_SHOP': return <AdminShop onNavigate={navigate} />;
       case 'ADMIN_ORDERS': return <AdminOrders onNavigate={navigate} />;
       case 'ADMIN_EXPLORE': return <AdminExplore onNavigate={navigate} />;
+      case 'ADMIN_INDIAN_FOODS': return <AdminIndianFoods onNavigate={navigate} />;
+      case 'ADMIN_FOOD_APPROVALS': return <AdminFoodApprovals onNavigate={navigate} />;
       case 'STORE': return <StoreScreen onNavigate={navigate} />;
       case 'CART': return <CartScreen onNavigate={navigate} />;
       case 'ORDER_HISTORY': return <OrderHistoryScreen onNavigate={navigate} />;
