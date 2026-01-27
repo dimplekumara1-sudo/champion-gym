@@ -171,8 +171,8 @@ const AdminFoodApprovals: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ 
                     <button
                         onClick={() => setFilter('pending')}
                         className={`px-4 py-2 rounded-lg font-medium transition-colors ${filter === 'pending'
-                                ? 'bg-primary text-slate-900'
-                                : 'bg-slate-800 hover:bg-slate-700 text-slate-300'
+                            ? 'bg-primary text-slate-900'
+                            : 'bg-slate-800 hover:bg-slate-700 text-slate-300'
                             }`}
                     >
                         Pending ({pendingCount})
@@ -180,8 +180,8 @@ const AdminFoodApprovals: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ 
                     <button
                         onClick={() => setFilter('all')}
                         className={`px-4 py-2 rounded-lg font-medium transition-colors ${filter === 'all'
-                                ? 'bg-primary text-slate-900'
-                                : 'bg-slate-800 hover:bg-slate-700 text-slate-300'
+                            ? 'bg-primary text-slate-900'
+                            : 'bg-slate-800 hover:bg-slate-700 text-slate-300'
                             }`}
                     >
                         All
@@ -190,8 +190,8 @@ const AdminFoodApprovals: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ 
 
                 {message && (
                     <div className={`p-3 rounded-lg text-sm mb-4 ${message.startsWith('error')
-                            ? 'bg-red-500/10 border border-red-500/50 text-red-400'
-                            : 'bg-green-500/10 border border-green-500/50 text-green-400'
+                        ? 'bg-red-500/10 border border-red-500/50 text-red-400'
+                        : 'bg-green-500/10 border border-green-500/50 text-green-400'
                         }`}>
                         {message.replace(/^error:/, '')}
                     </div>
@@ -233,8 +233,8 @@ const AdminFoodApprovals: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ 
                                         </p>
                                     </div>
                                     <span className={`text-xs font-bold px-2 py-1 rounded ${submission.status === 'pending' ? 'bg-yellow-500/20 text-yellow-400' :
-                                            submission.status === 'approved' ? 'bg-green-500/20 text-green-400' :
-                                                'bg-red-500/20 text-red-400'
+                                        submission.status === 'approved' ? 'bg-green-500/20 text-green-400' :
+                                            'bg-red-500/20 text-red-400'
                                         }`}>
                                         {submission.status.toUpperCase()}
                                     </span>
@@ -341,6 +341,27 @@ const AdminFoodApprovals: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ 
                     </div>
                 </div>
             )}
+
+            <nav className="fixed bottom-0 w-full bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl border-t border-slate-200 dark:border-slate-800 pb-8 pt-3 px-6 max-w-[430px] mx-auto left-1/2 -translate-x-1/2">
+                <div className="flex justify-between items-center">
+                    <button onClick={() => onNavigate('ADMIN_DASHBOARD')} className="flex flex-col items-center gap-1 text-slate-400">
+                        <span className="material-symbols-rounded">dashboard</span>
+                        <span className="text-[10px] font-medium">Dashboard</span>
+                    </button>
+                    <button onClick={() => onNavigate('ADMIN_USERS')} className="flex flex-col items-center gap-1 text-slate-400">
+                        <span className="material-symbols-rounded">people_alt</span>
+                        <span className="text-[10px] font-medium">Members</span>
+                    </button>
+                    <button onClick={() => onNavigate('ADMIN_ORDERS')} className="flex flex-col items-center gap-1 text-slate-400">
+                        <span className="material-symbols-rounded">shopping_cart_checkout</span>
+                        <span className="text-[10px] font-medium">Orders</span>
+                    </button>
+                    <button onClick={() => onNavigate('ADMIN_SHOP')} className="flex flex-col items-center gap-1 text-primary">
+                        <span className="material-symbols-rounded">storefront</span>
+                        <span className="text-[10px] font-medium">Shop</span>
+                    </button>
+                </div>
+            </nav>
         </div>
     );
 };

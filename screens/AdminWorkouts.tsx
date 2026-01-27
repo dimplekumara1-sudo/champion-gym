@@ -1,5 +1,5 @@
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { supabase } from '../lib/supabase';
 import { AppScreen } from '../types';
 
@@ -9,6 +9,7 @@ const AdminWorkouts: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNav
   const [users, setUsers] = useState<any[]>([]);
   const [assignedPrograms, setAssignedPrograms] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadingExercises, setLoadingExercises] = useState(false);
 
   // State for Create/Edit Workout
   const [editingWorkout, setEditingWorkout] = useState<any>(null);
@@ -22,6 +23,13 @@ const AdminWorkouts: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNav
   const [youtubeUrl, setYoutubeUrl] = useState('');
   const [selectedExercises, setSelectedExercises] = useState<any[]>([]);
 
+  // Assignment states
+  const [assigningTo, setAssigningTo] = useState<any>(null);
+  const [selectedUserId, setSelectedUserId] = useState('');
+  const [userSearchTerm, setUserSearchTerm] = useState('');
+  const [weekNumber, setWeekNumber] = useState(1);
+  const [dayOfWeek, setDayOfWeek] = useState(1);
+
   // Filters for exercise selection
   const [searchTerm, setSearchTerm] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('All');
@@ -29,25 +37,73 @@ const AdminWorkouts: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNav
   const [equipmentFilter, setEquipmentFilter] = useState('All');
   const [userGender, setUserGender] = useState<'men' | 'women'>('men');
 
-  // State for Assigning
-  const [assigningTo, setAssigningTo] = useState<any>(null);
-  const [selectedUserId, setSelectedUserId] = useState('');
-  const [userSearchTerm, setUserSearchTerm] = useState('');
-  const [weekNumber, setWeekNumber] = useState(1);
-  const [dayOfWeek, setDayOfWeek] = useState(1);
+  const [page, setPage] = useState(0);
+  const [hasMore, setHasMore] = useState(true);
+  const [filterData, setFilterData] = useState<{categories: string[], equipments: string[], levels: string[]}>({
+    categories: [],
+    equipments: [],
+    levels: []
+  });
 
-  const levels = ['Novice', 'Beginner', 'Intermediate', 'Advanced'];
+  const PAGE_SIZE = 50;
 
   useEffect(() => {
     fetchData();
+    fetchFilterData();
   }, []);
+
+  useEffect(() => {
+    setPage(0);
+    fetchExercises(0, true);
+  }, [searchTerm, categoryFilter, levelFilter, equipmentFilter]);
+
+  const fetchFilterData = async () => {
+    try {
+      const { data } = await supabase.from('exercises').select('category, equipment, level');
+      if (data) {
+        const cats = new Set<string>();
+        const equips = new Set<string>();
+        const levels = new Set<string>();
+        data.forEach(ex => {
+          if (ex.category) cats.add(ex.category);
+          if (ex.equipment) {
+            equips.add(ex.equipment);
+            if (ex.equipment.toLowerCase() === 'cardio') cats.add('Cardio');
+          }
+          if (ex.level) levels.add(ex.level);
+        });
+        setFilterData({
+          categories: ['All', ...Array.from(cats)].sort(),
+          equipments: ['All', ...Array.from(equips)].sort(),
+          levels: Array.from(levels)
+        });
+      }
+    } catch (e) { console.error(e); }
+  };
+
+  const levels = useMemo(() => {
+    const order = ['Novice', 'Beginner', 'Intermediate', 'Advanced'];
+    return [
+      'All',
+      ...filterData.levels.sort((a, b) => {
+        const indexA = order.indexOf(a);
+        const indexB = order.indexOf(b);
+        if (indexA !== -1 && indexB !== -1) return indexA - indexB;
+        if (indexA !== -1) return -1;
+        if (indexB !== -1) return 1;
+        return a.localeCompare(b);
+      })
+    ];
+  }, [filterData.levels]);
+
+  const categories = filterData.categories;
+  const equipments = filterData.equipments;
 
   const fetchData = async () => {
     try {
       setLoading(true);
-      const [wRes, eRes, uRes, pRes] = await Promise.all([
+      const [wRes, uRes, pRes] = await Promise.all([
         supabase.from('workouts').select('*').order('created_at', { ascending: false }),
-        supabase.from('exercises').select('*').order('exercise_name', { ascending: true }),
         supabase.from('profiles').select('id, full_name').eq('role', 'user'),
         supabase.from('user_programs').select(`
           *,
@@ -57,7 +113,6 @@ const AdminWorkouts: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNav
       ]);
 
       setWorkouts(wRes.data || []);
-      setExercises(eRes.data || []);
       setUsers(uRes.data || []);
       if (uRes.data && uRes.data.length > 0) setSelectedUserId(uRes.data[0].id);
       setAssignedPrograms(pRes.data || []);
@@ -68,16 +123,41 @@ const AdminWorkouts: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNav
     }
   };
 
-  const categories = ['All', ...new Set(exercises.map(ex => ex.category))];
-  const equipments = ['All', ...new Set(exercises.map(ex => ex.equipment).filter(Boolean))];
+  const fetchExercises = async (pageToFetch: number, isNewSearch: boolean = false) => {
+    try {
+      setLoadingExercises(true);
+      let query = supabase.from('exercises').select('*', { count: 'exact' });
 
-  const filteredExercises = exercises.filter(ex => {
-    const matchesSearch = ex.exercise_name.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesCategory = categoryFilter === 'All' || ex.category === categoryFilter;
-    const matchesLevel = levelFilter === 'All' || ex.level === levelFilter;
-    const matchesEquipment = equipmentFilter === 'All' || ex.equipment === equipmentFilter;
-    return matchesSearch && matchesCategory && matchesLevel && matchesEquipment;
-  });
+      if (searchTerm) query = query.or(`exercise_name.ilike.%${searchTerm}%,category.ilike.%${searchTerm}%`);
+      if (categoryFilter !== 'All') {
+        if (categoryFilter === 'Cardio') query = query.or(`category.eq.Cardio,equipment.eq.Cardio`);
+        else query = query.eq('category', categoryFilter);
+      }
+      if (equipmentFilter !== 'All') query = query.eq('equipment', equipmentFilter);
+      if (levelFilter !== 'All') query = query.eq('level', levelFilter);
+
+      const { data, error, count } = await query
+        .order('exercise_name', { ascending: true })
+        .range(pageToFetch * PAGE_SIZE, (pageToFetch + 1) * PAGE_SIZE - 1);
+
+      if (error) throw error;
+      if (isNewSearch) setExercises(data || []);
+      else setExercises(prev => [...prev, ...(data || [])]);
+      setHasMore(count ? (pageToFetch + 1) * PAGE_SIZE < count : false);
+    } catch (error) {
+      console.error(error);
+    } finally {
+      setLoadingExercises(false);
+    }
+  };
+
+  const loadMore = () => {
+    if (!loadingExercises && hasMore) {
+      const nextPage = page + 1;
+      setPage(nextPage);
+      fetchExercises(nextPage);
+    }
+  };
 
   const toggleExercise = (ex: any) => {
     const exists = selectedExercises.find(s => s.id === ex.id);
@@ -258,180 +338,253 @@ const AdminWorkouts: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNav
 
       {/* Workout Designer Modal */}
       {editingWorkout && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[100] p-6 overflow-y-auto">
-          <div className="bg-slate-800 rounded-[2.5rem] p-8 max-w-md mx-auto border border-slate-700">
-            <h2 className="text-2xl font-bold mb-6">Workout Designer</h2>
-            <div className="space-y-4 mb-8">
-              <input
-                placeholder="Workout Name"
-                className="w-full bg-slate-900 border-none rounded-2xl p-4 text-sm"
-                value={workoutName}
-                onChange={e => setWorkoutName(e.target.value)}
-              />
-              <textarea
-                placeholder="Description..."
-                className="w-full bg-slate-900 border-none rounded-2xl p-4 h-24 text-sm"
-                value={description}
-                onChange={e => setDescription(e.target.value)}
-              />
-              <div className="grid grid-cols-2 gap-4">
-                <select
-                  className="w-full bg-slate-900 border-none rounded-xl p-4 text-sm"
-                  value={difficulty}
-                  onChange={e => setDifficulty(e.target.value)}
-                >
-                  {levels.map(l => <option key={l} value={l}>{l}</option>)}
-                </select>
-                <div className="flex items-center gap-3 bg-slate-900 px-4 rounded-xl">
-                  <input
-                    type="checkbox"
-                    id="isFeatured"
-                    checked={isFeatured}
-                    onChange={e => setIsFeatured(e.target.checked)}
-                    className="w-4 h-4 rounded border-slate-700 bg-slate-800 text-primary focus:ring-primary"
-                  />
-                  <label htmlFor="isFeatured" className="text-xs font-bold text-slate-400">Featured</label>
-                </div>
-              </div>
-              <input
-                placeholder="Image URL"
-                className="w-full bg-slate-900 border-none rounded-2xl p-4 text-sm"
-                value={imageUrl}
-                onChange={e => setImageUrl(e.target.value)}
-              />
-              <div className="grid grid-cols-2 gap-4">
-                <input
-                  placeholder="Duration (e.g. 45m)"
-                  className="w-full bg-slate-900 border-none rounded-2xl p-4 text-sm"
-                  value={duration}
-                  onChange={e => setDuration(e.target.value)}
-                />
-                <input
-                  placeholder="Kcal (e.g. 450 kcal)"
-                  className="w-full bg-slate-900 border-none rounded-2xl p-4 text-sm"
-                  value={kcal}
-                  onChange={e => setKcal(e.target.value)}
-                />
-              </div>
-              <input
-                placeholder="YouTube URL"
-                className="w-full bg-slate-900 border-none rounded-2xl p-4 text-sm"
-                value={youtubeUrl}
-                onChange={e => setYoutubeUrl(e.target.value)}
-              />
-            </div>
-
-            <h3 className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-4">Exercises</h3>
-
-            <div className="flex gap-2 items-center mb-3">
-              <span className="text-[10px] font-black uppercase text-slate-500 tracking-widest">Form Guide:</span>
-              <button
-                onClick={() => setUserGender('men')}
-                className={`flex items-center gap-1 px-2 py-1 rounded-lg text-[9px] font-bold transition-colors ${userGender === 'men' ? 'bg-primary text-slate-950' : 'bg-slate-900 text-slate-400 hover:text-slate-200'}`}
-                title="Men's form guides"
-              >
-                <span className="material-symbols-rounded text-xs">male</span>
-                Men
-              </button>
-              <button
-                onClick={() => setUserGender('women')}
-                className={`flex items-center gap-1 px-2 py-1 rounded-lg text-[9px] font-bold transition-colors ${userGender === 'women' ? 'bg-primary text-slate-950' : 'bg-slate-900 text-slate-400 hover:text-slate-200'}`}
-                title="Women's form guides"
-              >
-                <span className="material-symbols-rounded text-xs">female</span>
-                Women
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[100] p-6 overflow-y-auto custom-scrollbar">
+          <div className="bg-slate-800 rounded-[2.5rem] p-8 max-w-md mx-auto border border-slate-700 my-4 shadow-2xl">
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-2xl font-bold">Workout Designer</h2>
+              <button onClick={() => setEditingWorkout(null)} className="text-slate-400 hover:text-white">
+                <span className="material-symbols-rounded">close</span>
               </button>
             </div>
 
-            <div className="space-y-3 mb-6">
-              <input
-                placeholder="Search catalog..."
-                className="w-full bg-slate-900 border-none rounded-xl p-3 text-xs"
-                value={searchTerm}
-                onChange={e => setSearchTerm(e.target.value)}
-              />
-              <div className="flex gap-2 flex-wrap">
-                <select
-                  className="flex-1 min-w-[100px] bg-slate-900 border-none rounded-xl p-2 text-[10px]"
-                  value={categoryFilter}
-                  onChange={e => setCategoryFilter(e.target.value)}
-                >
-                  {categories.map(c => <option key={c} value={c}>{c}</option>)}
-                </select>
-                <select
-                  className="flex-1 min-w-[110px] bg-slate-900 border-none rounded-xl p-2 text-[10px]"
-                  value={levelFilter}
-                  onChange={e => setLevelFilter(e.target.value)}
-                >
-                  <option value="All">All Levels</option>
-                  {levels.map(l => <option key={l} value={l}>{l}</option>)}
-                </select>
-                <select
-                  className="flex-1 min-w-[110px] bg-slate-900 border-none rounded-xl p-2 text-[10px]"
-                  value={equipmentFilter}
-                  onChange={e => setEquipmentFilter(e.target.value)}
-                >
-                  {equipments.map(eq => <option key={eq} value={eq}>{eq}</option>)}
-                </select>
-              </div>
-
-              <div className="max-h-60 overflow-y-auto space-y-2 pr-1 custom-scrollbar">
-                {filteredExercises.map(ex => {
-                  const isSelected = selectedExercises.find(s => (s.id === ex.id) || (s.exercise_id === ex.id));
-                  const genderLink = userGender === 'men' ? ex.men_link : ex.women_link;
-                  const genderIcon = userGender === 'men' ? 'male' : 'female';
-                  return (
-                    <div key={ex.id} className={`p-3 rounded-2xl border transition-all ${isSelected ? 'bg-primary/10 border-primary/30' : 'bg-slate-900/40 border-slate-700/50'}`}>
-                      <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 bg-slate-800 rounded-lg flex items-center justify-center p-1 overflow-hidden shrink-0">
-                          {ex.icon_svg ? (
-                            <div
-                              dangerouslySetInnerHTML={{ __html: ex.icon_svg }}
-                              className="w-full h-full text-slate-400 flex items-center justify-center [&>svg]:w-full [&>svg]:h-full [&>svg]:fill-current"
-                            />
-                          ) : (
-                            <span className="material-symbols-rounded text-slate-600 text-sm">fitness_center</span>
-                          )}
-                        </div>
-                        <div className="flex-1 min-w-0" onClick={() => toggleExercise(ex)}>
-                          <p className="text-[11px] font-bold line-clamp-2">{ex.exercise_name}</p>
-                          <div className="flex items-center gap-2 mt-0.5">
-                            <p className="text-[9px] text-slate-500 uppercase font-black">{ex.category}</p>
-                            {ex.equipment && <p className="text-[8px] text-slate-600">• {ex.equipment}</p>}
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-1 shrink-0">
-                          {genderLink && (
-                            <button
-                              onClick={() => window.open(genderLink, '_blank')}
-                              className="w-6 h-6 rounded-full flex items-center justify-center bg-slate-700 text-slate-400 hover:bg-slate-600 hover:text-slate-200 transition-colors"
-                              title={`Form guide for ${userGender}`}
-                            >
-                              <span className="material-symbols-rounded text-xs">{genderIcon}</span>
-                            </button>
-                          )}
-                          <button onClick={() => toggleExercise(ex)} className={`w-6 h-6 rounded-full flex items-center justify-center transition-colors ${isSelected ? 'bg-primary text-slate-900' : 'bg-slate-700 text-slate-400'}`}>
-                            <span className="material-symbols-rounded text-sm">{isSelected ? 'check' : 'add'}</span>
-                          </button>
+            <div className="space-y-8 mb-10">
+              {/* Basic Information */}
+              <div className="space-y-4">
+                <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-primary/50 px-1">Basic Information</h3>
+                <div className="space-y-4">
+                  <div>
+                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest ml-4 mb-1 block">Workout Name</label>
+                    <input
+                      placeholder="e.g. Full Body Blast"
+                      className="w-full bg-slate-900 border-none rounded-2xl p-4 text-sm focus:ring-2 focus:ring-primary/20 transition-all"
+                      value={workoutName}
+                      onChange={e => setWorkoutName(e.target.value)}
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest ml-4 mb-1 block">Description</label>
+                    <textarea
+                      placeholder="Enter workout description..."
+                      className="w-full bg-slate-900 border-none rounded-2xl p-4 h-24 text-sm focus:ring-2 focus:ring-primary/20 transition-all resize-none"
+                      value={description}
+                      onChange={e => setDescription(e.target.value)}
+                    />
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest ml-4 mb-1 block">Difficulty</label>
+                      <select
+                        className="w-full bg-slate-900 border-none rounded-xl p-4 text-sm focus:ring-2 focus:ring-primary/20 transition-all"
+                        value={difficulty}
+                        onChange={e => setDifficulty(e.target.value)}
+                      >
+                        {levels.map(l => <option key={l} value={l}>{l}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest ml-4 mb-1 block">Featured</label>
+                      <div className="flex items-center justify-between bg-slate-900 h-[52px] px-4 rounded-xl">
+                        <span className="text-xs font-bold text-slate-400">Featured</span>
+                        <div className="relative inline-flex items-center cursor-pointer">
+                          <input
+                            type="checkbox"
+                            id="isFeatured"
+                            className="sr-only peer"
+                            checked={isFeatured}
+                            onChange={e => setIsFeatured(e.target.checked)}
+                          />
+                          <div className="w-10 h-5 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-primary"></div>
                         </div>
                       </div>
-                      {isSelected && (
-                        <input
-                          className="w-full bg-slate-950/40 border-none rounded-lg py-1.5 px-3 text-[10px] mt-2 placeholder:text-slate-600"
-                          placeholder="Sets & Reps (e.g. 3x12)"
-                          value={isSelected.sets_reps}
-                          onChange={e => updateSetsReps(ex.id, e.target.value)}
-                        />
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Details & Media */}
+              <div className="space-y-4">
+                <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-primary/50 px-1">Details & Media</h3>
+                <div className="space-y-4">
+                  <div>
+                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest ml-4 mb-1 block">Cover Image URL</label>
+                    <input
+                      placeholder="https://images.unsplash.com/..."
+                      className="w-full bg-slate-900 border-none rounded-2xl p-4 text-sm focus:ring-2 focus:ring-primary/20 transition-all"
+                      value={imageUrl}
+                      onChange={e => setImageUrl(e.target.value)}
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest ml-4 mb-1 block">YouTube Trailer URL</label>
+                    <input
+                      placeholder="https://youtube.com/watch?v=..."
+                      className="w-full bg-slate-900 border-none rounded-2xl p-4 text-sm focus:ring-2 focus:ring-primary/20 transition-all"
+                      value={youtubeUrl}
+                      onChange={e => setYoutubeUrl(e.target.value)}
+                    />
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest ml-4 mb-1 block">Duration</label>
+                      <input
+                        placeholder="e.g. 45m"
+                        className="w-full bg-slate-900 border-none rounded-2xl p-4 text-sm focus:ring-2 focus:ring-primary/20 transition-all"
+                        value={duration}
+                        onChange={e => setDuration(e.target.value)}
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest ml-4 mb-1 block">Calories</label>
+                      <input
+                        placeholder="e.g. 450 kcal"
+                        className="w-full bg-slate-900 border-none rounded-2xl p-4 text-sm focus:ring-2 focus:ring-primary/20 transition-all"
+                        value={kcal}
+                        onChange={e => setKcal(e.target.value)}
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Exercise Selection */}
+              <div className="space-y-4">
+                <div className="flex items-center justify-between px-1">
+                  <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-primary/50">Exercise Selection</h3>
+                  <span className="text-[10px] font-bold text-slate-500 bg-slate-900 px-2 py-0.5 rounded-full">{selectedExercises.length} selected</span>
+                </div>
+                
+                <div className="space-y-4">
+                  <div className="flex gap-2 items-center p-1 bg-slate-900 rounded-xl">
+                    <button
+                      onClick={() => setUserGender('men')}
+                      className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-[10px] font-black uppercase transition-all ${userGender === 'men' ? 'bg-primary text-slate-950 shadow-lg shadow-primary/20' : 'text-slate-500 hover:text-slate-300'}`}
+                    >
+                      <span className="material-symbols-rounded text-sm">male</span>
+                      Men
+                    </button>
+                    <button
+                      onClick={() => setUserGender('women')}
+                      className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-[10px] font-black uppercase transition-all ${userGender === 'women' ? 'bg-primary text-slate-950 shadow-lg shadow-primary/20' : 'text-slate-500 hover:text-slate-300'}`}
+                    >
+                      <span className="material-symbols-rounded text-sm">female</span>
+                      Women
+                    </button>
+                  </div>
+
+                  <div className="space-y-3">
+                    <div className="relative">
+                      <span className="material-symbols-rounded absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 text-sm">search</span>
+                      <input
+                        placeholder="Search catalog..."
+                        className="w-full bg-slate-900 border-none rounded-2xl py-3.5 pl-11 pr-4 text-sm focus:ring-2 focus:ring-primary/20 transition-all"
+                        value={searchTerm}
+                        onChange={e => setSearchTerm(e.target.value)}
+                      />
+                    </div>
+                    
+                    <div className="grid grid-cols-3 gap-2">
+                      <select
+                        className="bg-slate-900 border-none rounded-xl p-2.5 text-[10px] font-bold text-slate-400"
+                        value={categoryFilter}
+                        onChange={e => setCategoryFilter(e.target.value)}
+                      >
+                        {categories.map(c => <option key={c} value={c}>{c}</option>)}
+                      </select>
+                      <select
+                        className="bg-slate-900 border-none rounded-xl p-2.5 text-[10px] font-bold text-slate-400"
+                        value={levelFilter}
+                        onChange={e => setLevelFilter(e.target.value)}
+                      >
+                        <option value="All">All Levels</option>
+                        {levels.map(l => <option key={l} value={l}>{l}</option>)}
+                      </select>
+                      <select
+                        className="bg-slate-900 border-none rounded-xl p-2.5 text-[10px] font-bold text-slate-400"
+                        value={equipmentFilter}
+                        onChange={e => setEquipmentFilter(e.target.value)}
+                      >
+                        {equipments.map(eq => <option key={eq} value={eq}>{eq}</option>)}
+                      </select>
+                    </div>
+
+                    <div className="max-h-80 overflow-y-auto space-y-2.5 pr-1 custom-scrollbar">
+                      {exercises.map(ex => {
+                        const isSelected = selectedExercises.find(s => (s.id === ex.id) || (s.exercise_id === ex.id));
+                        const genderLink = userGender === 'men' ? ex.men_link : ex.women_link;
+                        const genderIcon = userGender === 'men' ? 'male' : 'female';
+                        return (
+                          <div key={ex.id} className={`p-3.5 rounded-2xl border transition-all ${isSelected ? 'bg-primary/10 border-primary/30' : 'bg-slate-900/40 border-slate-700/30'}`}>
+                            <div className="flex items-center gap-3">
+                              <div className="w-10 h-10 bg-slate-800 rounded-xl flex items-center justify-center p-1.5 shrink-0 border border-slate-700/50">
+                                {ex.icon_svg ? (
+                                  <div
+                                    dangerouslySetInnerHTML={{ __html: ex.icon_svg }}
+                                    className="w-full h-full text-slate-400 flex items-center justify-center [&>svg]:w-full [&>svg]:h-full [&>svg]:fill-current"
+                                  />
+                                ) : (
+                                  <span className="material-symbols-rounded text-slate-600">fitness_center</span>
+                                )}
+                              </div>
+                              <div className="flex-1 min-w-0 cursor-pointer" onClick={() => toggleExercise(ex)}>
+                                <p className="text-xs font-bold leading-tight line-clamp-1">{ex.exercise_name}</p>
+                                <div className="flex items-center gap-2 mt-1">
+                                  <p className="text-[9px] text-primary/60 uppercase font-black tracking-wider">{ex.category}</p>
+                                  {ex.equipment && <p className="text-[9px] text-slate-500 font-bold">• {ex.equipment}</p>}
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-2 shrink-0">
+                                {genderLink && (
+                                  <button
+                                    onClick={() => window.open(genderLink, '_blank')}
+                                    className="w-8 h-8 rounded-xl flex items-center justify-center bg-slate-800 text-slate-500 hover:text-white transition-colors"
+                                    title={`Form guide for ${userGender}`}
+                                  >
+                                    <span className="material-symbols-rounded text-sm">{genderIcon}</span>
+                                  </button>
+                                )}
+                                <button onClick={() => toggleExercise(ex)} className={`w-8 h-8 rounded-xl flex items-center justify-center transition-all ${isSelected ? 'bg-primary text-slate-900 shadow-lg shadow-primary/20' : 'bg-slate-700 text-slate-400'}`}>
+                                  <span className="material-symbols-rounded text-base">{isSelected ? 'check' : 'add'}</span>
+                                </button>
+                              </div>
+                            </div>
+                            {isSelected && (
+                              <div className="mt-3 pt-3 border-t border-primary/10">
+                                <label className="text-[9px] font-black uppercase text-primary/40 tracking-widest ml-1 mb-1 block">Sets & Reps</label>
+                                <input
+                                  className="w-full bg-slate-950/60 border-none rounded-xl py-2 px-3 text-xs placeholder:text-slate-700 text-primary font-bold focus:ring-1 focus:ring-primary/30"
+                                  placeholder="e.g. 3x12 or 4 sets of 15"
+                                  value={isSelected.sets_reps}
+                                  onChange={e => updateSetsReps(ex.id, e.target.value)}
+                                />
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+
+                      {hasMore && (
+                        <button
+                          onClick={loadMore}
+                          disabled={loadingExercises}
+                          className="w-full py-4 bg-slate-900/50 hover:bg-slate-900 border border-slate-700/30 text-slate-500 hover:text-slate-300 rounded-2xl font-black uppercase text-[10px] tracking-widest transition-all flex items-center justify-center gap-2"
+                        >
+                          {loadingExercises ? (
+                            <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-primary"></div>
+                          ) : (
+                            <span className="material-symbols-rounded text-sm">expand_more</span>
+                          )}
+                          {loadingExercises ? 'Loading...' : 'Load More Exercises'}
+                        </button>
                       )}
                     </div>
-                  );
-                })}
+                  </div>
+                </div>
               </div>
             </div>
 
-            <div className="flex gap-3">
-              <button onClick={() => setEditingWorkout(null)} className="flex-1 bg-slate-700 py-4 rounded-2xl font-black uppercase text-xs">Cancel</button>
-              <button onClick={handleSaveWorkout} className="flex-1 bg-primary text-slate-900 py-4 rounded-2xl font-black uppercase text-xs">Save Workout</button>
+            <div className="flex gap-3 sticky bottom-0 bg-slate-800 pt-4 border-t border-slate-700/50">
+              <button onClick={() => setEditingWorkout(null)} className="flex-1 bg-slate-700/50 hover:bg-slate-700 py-4 rounded-2xl font-black uppercase text-xs transition-colors">Cancel</button>
+              <button onClick={handleSaveWorkout} className="flex-1 bg-primary text-slate-900 py-4 rounded-2xl font-black uppercase text-xs shadow-lg shadow-primary/20 hover:scale-[1.02] transition-all">Save Workout</button>
             </div>
           </div>
         </div>
@@ -440,56 +593,79 @@ const AdminWorkouts: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNav
       {/* Assignment Modal */}
       {assigningTo && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[100] p-6 flex items-center justify-center">
-          <div className="bg-slate-800 rounded-[2.5rem] p-8 w-full max-w-sm border border-slate-700">
-            <h2 className="text-xl font-bold mb-2">Assign "{assigningTo.workout_name}"</h2>
-            <div className="space-y-4 mt-6">
-              <div className="relative">
-                <span className="material-symbols-rounded absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 text-sm">search</span>
-                <input
-                  className="w-full bg-slate-900 border-none rounded-xl py-2.5 pl-9 pr-4 text-xs"
-                  placeholder="Search user..."
-                  value={userSearchTerm}
-                  onChange={e => setUserSearchTerm(e.target.value)}
-                />
+          <div className="bg-slate-800 rounded-[2.5rem] p-8 w-full max-w-sm border border-slate-700 shadow-2xl">
+            <div className="flex justify-between items-start mb-6">
+              <div>
+                <h2 className="text-xl font-bold">Assign Workout</h2>
+                <p className="text-xs text-primary font-bold mt-1 uppercase tracking-wider">{assigningTo.workout_name}</p>
               </div>
-              <select
-                className="w-full bg-slate-900 border-none rounded-xl p-4 text-sm"
-                value={selectedUserId}
-                onChange={e => setSelectedUserId(e.target.value)}
-              >
-                {users
-                  .filter(u => (u.full_name || '').toLowerCase().includes(userSearchTerm.toLowerCase()))
-                  .map(u => <option key={u.id} value={u.id}>{u.full_name}</option>)}
-              </select>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="text-[9px] font-black uppercase text-slate-500 tracking-widest ml-2 mb-1 block">Week</label>
-                  <select
-                    className="w-full bg-slate-900 border-none rounded-xl p-4 text-sm"
-                    value={weekNumber}
-                    onChange={e => setWeekNumber(parseInt(e.target.value))}
-                  >
-                    {[1, 2, 3, 4, 5, 6, 7, 8].map(w => <option key={w} value={w}>Week {w}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label className="text-[9px] font-black uppercase text-slate-500 tracking-widest ml-2 mb-1 block">Day</label>
-                  <select
-                    className="w-full bg-slate-900 border-none rounded-xl p-4 text-sm"
-                    value={dayOfWeek}
-                    onChange={e => setDayOfWeek(parseInt(e.target.value))}
-                  >
-                    {[1, 2, 3, 4, 5, 6, 7].map(d => <option key={d} value={d}>Day {d}</option>)}
-                  </select>
-                </div>
-              </div>
-              <button
-                onClick={() => handleAssignWorkout(selectedUserId)}
-                className="w-full bg-primary text-slate-900 py-4 rounded-2xl font-black uppercase text-xs mt-4"
-              >
-                Confirm Assignment
+              <button onClick={() => setAssigningTo(null)} className="text-slate-400 hover:text-white">
+                <span className="material-symbols-rounded">close</span>
               </button>
-              <button onClick={() => setAssigningTo(null)} className="w-full text-slate-500 text-xs font-bold py-2">Close</button>
+            </div>
+
+            <div className="space-y-6">
+              <div className="space-y-4">
+                <div>
+                  <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest ml-4 mb-1 block">Search & Select User</label>
+                  <div className="relative mb-3">
+                    <span className="material-symbols-rounded absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 text-sm">search</span>
+                    <input
+                      className="w-full bg-slate-900 border-none rounded-2xl py-3.5 pl-11 pr-4 text-sm focus:ring-2 focus:ring-primary/20 transition-all"
+                      placeholder="Type to filter users..."
+                      value={userSearchTerm}
+                      onChange={e => setUserSearchTerm(e.target.value)}
+                    />
+                  </div>
+                  <select
+                    className="w-full bg-slate-900 border-none rounded-2xl p-4 text-sm focus:ring-2 focus:ring-primary/20 transition-all"
+                    value={selectedUserId}
+                    onChange={e => setSelectedUserId(e.target.value)}
+                  >
+                    {users
+                      .filter(u => (u.full_name || '').toLowerCase().includes(userSearchTerm.toLowerCase()))
+                      .map(u => <option key={u.id} value={u.id}>{u.full_name}</option>)}
+                  </select>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest ml-4 mb-1 block">Week Number</label>
+                    <select
+                      className="w-full bg-slate-900 border-none rounded-xl p-4 text-sm focus:ring-2 focus:ring-primary/20 transition-all font-bold"
+                      value={weekNumber}
+                      onChange={e => setWeekNumber(parseInt(e.target.value))}
+                    >
+                      {[1, 2, 3, 4, 5, 6, 7, 8].map(w => <option key={w} value={w}>Week {w}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest ml-4 mb-1 block">Day of Week</label>
+                    <select
+                      className="w-full bg-slate-900 border-none rounded-xl p-4 text-sm focus:ring-2 focus:ring-primary/20 transition-all font-bold"
+                      value={dayOfWeek}
+                      onChange={e => setDayOfWeek(parseInt(e.target.value))}
+                    >
+                      {[1, 2, 3, 4, 5, 6, 7].map(d => <option key={d} value={d}>Day {d}</option>)}
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              <div className="pt-2">
+                <button
+                  onClick={() => handleAssignWorkout(selectedUserId)}
+                  className="w-full bg-primary text-slate-900 py-4 rounded-2xl font-black uppercase text-xs shadow-lg shadow-primary/20 hover:scale-[1.02] transition-all"
+                >
+                  Confirm Assignment
+                </button>
+                <button 
+                  onClick={() => setAssigningTo(null)} 
+                  className="w-full text-slate-500 text-[10px] font-black uppercase tracking-widest py-4 mt-2 hover:text-slate-300 transition-colors"
+                >
+                  Cancel
+                </button>
+              </div>
             </div>
           </div>
         </div>

@@ -43,12 +43,14 @@ import AdminIndianFoods from './screens/AdminIndianFoods';
 import AdminFoodApprovals from './screens/AdminFoodApprovals';
 import ConfigScreen from './screens/ConfigScreen';
 import { supabase } from './lib/supabase';
+import { startSessionMonitoring, stopSessionMonitoring, clearSessionState } from './lib/sessionService';
 
 const App: React.FC = () => {
   const [currentScreen, setCurrentScreen] = useState<AppScreen>('SPLASH');
   const [session, setSession] = useState<any>(null);
   const [userRole, setUserRole] = useState<string | null>(null);
   const [showGooglePasswordSetup, setShowGooglePasswordSetup] = useState(false);
+  const [isInitialized, setIsInitialized] = useState(false);
   const [onboardingData, setOnboardingData] = useState({
     goal: '',
     gender: '',
@@ -67,11 +69,19 @@ const App: React.FC = () => {
   };
 
   useEffect(() => {
+    // Start session monitoring on app load
+    startSessionMonitoring();
+
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
       if (session) {
-        checkOnboardingStatus(session.user.id);
+        // Always check status on initial load to properly redirect approved users
+        checkOnboardingStatus(session.user.id, true);
+      } else {
+        // No session found, show splash screen
+        setCurrentScreen('SPLASH');
       }
+      setIsInitialized(true);
     });
 
     const {
@@ -79,17 +89,22 @@ const App: React.FC = () => {
     } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session);
       if (session) {
-        checkOnboardingStatus(session.user.id);
+        checkOnboardingStatus(session.user.id, false);
       } else {
+        clearSessionState();
         setCurrentScreen('SPLASH');
       }
     });
 
-    return () => subscription.unsubscribe();
+    return () => {
+      subscription.unsubscribe();
+      stopSessionMonitoring();
+    };
   }, []);
 
-  const checkOnboardingStatus = async (userId: string) => {
+  const checkOnboardingStatus = async (userId: string, isInitialLoad: boolean) => {
     try {
+      console.log(`[Navigation] Checking onboarding status for user ${userId}, isInitialLoad=${isInitialLoad}`);
       const { data, error } = await supabase
         .from('profiles')
         .select('onboarding_completed, role, plan, approval_status, plan_expiry_date, has_password')
@@ -98,6 +113,12 @@ const App: React.FC = () => {
 
       if (error) throw error;
 
+      console.log(`[Navigation] User profile:`, {
+        onboarding_completed: data?.onboarding_completed,
+        role: data?.role,
+        approval_status: data?.approval_status
+      });
+
       setUserRole(data?.role || 'user');
 
       // Check if user signed in with Google and doesn't have password
@@ -105,12 +126,18 @@ const App: React.FC = () => {
       const isGoogleAuth = user?.app_metadata?.provider === 'google';
 
       if (isGoogleAuth && !data?.has_password) {
+        console.log('[Navigation] Google auth without password, showing password setup');
         setShowGooglePasswordSetup(true);
         return;
       }
 
+      // Only redirect to ADMIN_DASHBOARD on initial load, not on auth state changes
+      // This prevents redirecting when switching browser tabs
       if (data?.role === 'admin') {
-        setCurrentScreen('ADMIN_DASHBOARD');
+        if (isInitialLoad) {
+          console.log('[Navigation] Admin user - navigating to ADMIN_DASHBOARD');
+          setCurrentScreen('ADMIN_DASHBOARD');
+        }
         return;
       }
 
@@ -120,23 +147,35 @@ const App: React.FC = () => {
       const isExpired = expiryDate && now > expiryDate;
 
       if (isExpired) {
+        console.log('[Navigation] Plan expired - navigating to ONBOARDING_PLAN');
         setCurrentScreen('ONBOARDING_PLAN');
         return;
       }
 
+      // FIXED: Direct users who are already approved and completed onboarding straight to dashboard
+      // Skip ApplicationStatus page for existing approved users
+      if (data?.onboarding_completed && data?.approval_status === 'approved') {
+        console.log('[Navigation] User approved and onboarding completed - DIRECT TO DASHBOARD');
+        setCurrentScreen('DASHBOARD');
+        return;
+      }
+
+      // For users still in onboarding process or waiting for approval
       if (data?.onboarding_completed) {
-        if (data?.approval_status === 'approved') {
-          setCurrentScreen('DASHBOARD');
-        } else {
-          setCurrentScreen('APPLICATION_STATUS');
-        }
+        // Onboarding completed but waiting for approval
+        console.log('[Navigation] Onboarding completed, waiting for approval - navigating to APPLICATION_STATUS');
+        setCurrentScreen('APPLICATION_STATUS');
       } else if (data?.plan) {
+        // Has selected a plan but hasn't completed onboarding
+        console.log('[Navigation] Plan selected, onboarding pending - navigating to APPLICATION_STATUS');
         setCurrentScreen('APPLICATION_STATUS');
       } else {
+        // New user, start onboarding
+        console.log('[Navigation] New user - navigating to ONBOARDING_GOAL');
         setCurrentScreen('ONBOARDING_GOAL');
       }
     } catch (error) {
-      console.error('Error checking onboarding status:', error);
+      console.error('[Navigation] Error checking onboarding status:', error);
       // For new users, the profile might not exist yet if trigger hasn't finished
       // or if it's their first time. Let's default to onboarding.
       setCurrentScreen('ONBOARDING_GOAL');
@@ -171,10 +210,20 @@ const App: React.FC = () => {
     switch (currentScreen) {
       case 'SPLASH': return <SplashScreen onGetStarted={() => navigate('SIGNUP')} onSignIn={() => navigate('LOGIN')} />;
       case 'LOGIN': return <LoginScreen onLogin={() => {
-        if (session?.user) checkOnboardingStatus(session.user.id);
-        else navigate('DASHBOARD');
+        if (session?.user) {
+          // Ensure we check status immediately after successful login
+          // This ensures approved users go directly to dashboard
+          checkOnboardingStatus(session.user.id, true);
+        }
       }} onSignUp={() => navigate('SIGNUP')} />;
-      case 'SIGNUP': return <SignupScreen onSignup={() => navigate('ONBOARDING_GOAL')} onSignIn={() => navigate('LOGIN')} />;
+      case 'SIGNUP': return <SignupScreen onSignup={() => {
+        // After signup, check status to see if user should go to onboarding or dashboard
+        if (session?.user) {
+          checkOnboardingStatus(session.user.id, true);
+        } else {
+          navigate('ONBOARDING_GOAL');
+        }
+      }} onSignIn={() => navigate('LOGIN')} />;
       case 'GOOGLE_PASSWORD_SETUP': return <GooglePasswordSetup onComplete={() => navigate('ONBOARDING_GOAL')} onSkip={() => navigate('ONBOARDING_GOAL')} />;
       case 'ONBOARDING_GOAL': return <OnboardingGoal onNext={(goal) => { updateOnboardingData({ goal }); navigate('ONBOARDING_GENDER'); }} onBack={() => navigate('SIGNUP')} />;
       case 'ONBOARDING_GENDER': return <OnboardingGender onNext={(gender) => { updateOnboardingData({ gender }); navigate('ONBOARDING_HEIGHT'); }} onBack={() => navigate('ONBOARDING_GOAL')} />;

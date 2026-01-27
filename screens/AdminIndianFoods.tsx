@@ -349,77 +349,122 @@ const AdminIndianFoods: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ on
                     </div>
 
                     {showAddSingle && (
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                            <input
-                                type="text"
-                                placeholder="Dish Name"
-                                value={singleFoodData.dish_name}
-                                onChange={(e) => setSingleFoodData({ ...singleFoodData, dish_name: e.target.value })}
-                                className="px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:border-primary"
-                            />
-                            <input
-                                type="number"
-                                placeholder="Calories (kcal)"
-                                value={singleFoodData.calories_kcal}
-                                onChange={(e) => setSingleFoodData({ ...singleFoodData, calories_kcal: parseFloat(e.target.value) || 0 })}
-                                className="px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:border-primary"
-                            />
-                            <input
-                                type="number"
-                                placeholder="Protein (g)"
-                                value={singleFoodData.protein_g}
-                                onChange={(e) => setSingleFoodData({ ...singleFoodData, protein_g: parseFloat(e.target.value) || 0 })}
-                                className="px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:border-primary"
-                            />
-                            <input
-                                type="number"
-                                placeholder="Carbohydrates (g)"
-                                value={singleFoodData.carbohydrates_g}
-                                onChange={(e) => setSingleFoodData({ ...singleFoodData, carbohydrates_g: parseFloat(e.target.value) || 0 })}
-                                className="px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:border-primary"
-                            />
-                            <input
-                                type="number"
-                                placeholder="Fats (g)"
-                                value={singleFoodData.fats_g}
-                                onChange={(e) => setSingleFoodData({ ...singleFoodData, fats_g: parseFloat(e.target.value) || 0 })}
-                                className="px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:border-primary"
-                            />
-                            <input
-                                type="number"
-                                placeholder="Fibre (g)"
-                                value={singleFoodData.fibre_g}
-                                onChange={(e) => setSingleFoodData({ ...singleFoodData, fibre_g: parseFloat(e.target.value) || 0 })}
-                                className="px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:border-primary"
-                            />
-                            <input
-                                type="number"
-                                placeholder="Sodium (mg)"
-                                value={singleFoodData.sodium_mg}
-                                onChange={(e) => setSingleFoodData({ ...singleFoodData, sodium_mg: parseFloat(e.target.value) || 0 })}
-                                className="px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:border-primary"
-                            />
-                            <input
-                                type="number"
-                                placeholder="Calcium (mg)"
-                                value={singleFoodData.calcium_mg}
-                                onChange={(e) => setSingleFoodData({ ...singleFoodData, calcium_mg: parseFloat(e.target.value) || 0 })}
-                                className="px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:border-primary"
-                            />
-                            <input
-                                type="number"
-                                placeholder="Iron (mg)"
-                                value={singleFoodData.iron_mg}
-                                onChange={(e) => setSingleFoodData({ ...singleFoodData, iron_mg: parseFloat(e.target.value) || 0 })}
-                                className="px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:border-primary"
-                            />
-                            <button
-                                onClick={addSingleFood}
-                                disabled={uploading || !singleFoodData.dish_name.trim()}
-                                className="col-span-1 md:col-span-2 lg:col-span-3 px-4 py-2 bg-green-600 hover:bg-green-700 disabled:bg-slate-600 text-white font-bold rounded-lg transition-colors"
-                            >
-                                {uploading ? '⏳ Adding...' : '✓ Add Food Item'}
-                            </button>
+                        <div className="space-y-6">
+                            <div className="p-4 bg-primary/10 border border-primary/20 rounded-xl">
+                                <p className="text-primary text-sm font-bold flex items-center gap-2">
+                                    <span className="material-symbols-rounded text-base">info</span>
+                                    Enter nutrition values per 100g of the food item
+                                </p>
+                            </div>
+
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                                <div className="space-y-2">
+                                    <label className="text-xs font-bold text-slate-400 uppercase tracking-widest ml-1">Dish Name</label>
+                                    <input
+                                        type="text"
+                                        placeholder="e.g. Paneer Tikka"
+                                        value={singleFoodData.dish_name}
+                                        onChange={(e) => setSingleFoodData({ ...singleFoodData, dish_name: e.target.value })}
+                                        className="w-full px-4 py-3 bg-slate-900/50 border border-slate-700 rounded-xl text-white placeholder-slate-600 focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
+                                    />
+                                </div>
+
+                                <div className="space-y-2">
+                                    <label className="text-xs font-bold text-slate-400 uppercase tracking-widest ml-1">Calories (kcal)</label>
+                                    <input
+                                        type="number"
+                                        placeholder="0.0"
+                                        value={singleFoodData.calories_kcal || ''}
+                                        onChange={(e) => setSingleFoodData({ ...singleFoodData, calories_kcal: parseFloat(e.target.value) || 0 })}
+                                        className="w-full px-4 py-3 bg-slate-900/50 border border-slate-700 rounded-xl text-white placeholder-slate-600 focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
+                                    />
+                                </div>
+
+                                <div className="space-y-2">
+                                    <label className="text-xs font-bold text-slate-400 uppercase tracking-widest ml-1">Protein (g)</label>
+                                    <input
+                                        type="number"
+                                        placeholder="0.0"
+                                        value={singleFoodData.protein_g || ''}
+                                        onChange={(e) => setSingleFoodData({ ...singleFoodData, protein_g: parseFloat(e.target.value) || 0 })}
+                                        className="w-full px-4 py-3 bg-slate-900/50 border border-slate-700 rounded-xl text-white placeholder-slate-600 focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
+                                    />
+                                </div>
+
+                                <div className="space-y-2">
+                                    <label className="text-xs font-bold text-slate-400 uppercase tracking-widest ml-1">Carbs (g)</label>
+                                    <input
+                                        type="number"
+                                        placeholder="0.0"
+                                        value={singleFoodData.carbohydrates_g || ''}
+                                        onChange={(e) => setSingleFoodData({ ...singleFoodData, carbohydrates_g: parseFloat(e.target.value) || 0 })}
+                                        className="w-full px-4 py-3 bg-slate-900/50 border border-slate-700 rounded-xl text-white placeholder-slate-600 focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
+                                    />
+                                </div>
+
+                                <div className="space-y-2">
+                                    <label className="text-xs font-bold text-slate-400 uppercase tracking-widest ml-1">Fats (g)</label>
+                                    <input
+                                        type="number"
+                                        placeholder="0.0"
+                                        value={singleFoodData.fats_g || ''}
+                                        onChange={(e) => setSingleFoodData({ ...singleFoodData, fats_g: parseFloat(e.target.value) || 0 })}
+                                        className="w-full px-4 py-3 bg-slate-900/50 border border-slate-700 rounded-xl text-white placeholder-slate-600 focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
+                                    />
+                                </div>
+
+                                <div className="space-y-2">
+                                    <label className="text-xs font-bold text-slate-400 uppercase tracking-widest ml-1">Fibre (g)</label>
+                                    <input
+                                        type="number"
+                                        placeholder="0.0"
+                                        value={singleFoodData.fibre_g || ''}
+                                        onChange={(e) => setSingleFoodData({ ...singleFoodData, fibre_g: parseFloat(e.target.value) || 0 })}
+                                        className="w-full px-4 py-3 bg-slate-900/50 border border-slate-700 rounded-xl text-white placeholder-slate-600 focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
+                                    />
+                                </div>
+
+                                <div className="space-y-2">
+                                    <label className="text-xs font-bold text-slate-400 uppercase tracking-widest ml-1">Sodium (mg)</label>
+                                    <input
+                                        type="number"
+                                        placeholder="0.0"
+                                        value={singleFoodData.sodium_mg || ''}
+                                        onChange={(e) => setSingleFoodData({ ...singleFoodData, sodium_mg: parseFloat(e.target.value) || 0 })}
+                                        className="w-full px-4 py-3 bg-slate-900/50 border border-slate-700 rounded-xl text-white placeholder-slate-600 focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
+                                    />
+                                </div>
+
+                                <div className="space-y-2">
+                                    <label className="text-xs font-bold text-slate-400 uppercase tracking-widest ml-1">Calcium (mg)</label>
+                                    <input
+                                        type="number"
+                                        placeholder="0.0"
+                                        value={singleFoodData.calcium_mg || ''}
+                                        onChange={(e) => setSingleFoodData({ ...singleFoodData, calcium_mg: parseFloat(e.target.value) || 0 })}
+                                        className="w-full px-4 py-3 bg-slate-900/50 border border-slate-700 rounded-xl text-white placeholder-slate-600 focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
+                                    />
+                                </div>
+
+                                <div className="space-y-2">
+                                    <label className="text-xs font-bold text-slate-400 uppercase tracking-widest ml-1">Iron (mg)</label>
+                                    <input
+                                        type="number"
+                                        placeholder="0.0"
+                                        value={singleFoodData.iron_mg || ''}
+                                        onChange={(e) => setSingleFoodData({ ...singleFoodData, iron_mg: parseFloat(e.target.value) || 0 })}
+                                        className="w-full px-4 py-3 bg-slate-900/50 border border-slate-700 rounded-xl text-white placeholder-slate-600 focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
+                                    />
+                                </div>
+
+                                <button
+                                    onClick={addSingleFood}
+                                    disabled={uploading || !singleFoodData.dish_name.trim()}
+                                    className="col-span-1 md:col-span-2 lg:col-span-3 mt-4 px-6 py-4 bg-primary text-slate-900 font-black uppercase tracking-widest rounded-2xl hover:bg-green-500 disabled:bg-slate-700 disabled:text-slate-500 transition-all shadow-lg shadow-primary/20 active:scale-[0.98]"
+                                >
+                                    {uploading ? '⏳ Adding Food...' : '✓ Add Food Item'}
+                                </button>
+                            </div>
                         </div>
                     )}
                 </div>
@@ -797,6 +842,27 @@ const AdminIndianFoods: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ on
                     )}
                 </div>
             </div>
+
+            <nav className="fixed bottom-0 w-full bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl border-t border-slate-200 dark:border-slate-800 pb-8 pt-3 px-6 max-w-[430px] mx-auto left-1/2 -translate-x-1/2">
+                <div className="flex justify-between items-center">
+                    <button onClick={() => onNavigate('ADMIN_DASHBOARD')} className="flex flex-col items-center gap-1 text-slate-400">
+                        <span className="material-symbols-rounded">dashboard</span>
+                        <span className="text-[10px] font-medium">Dashboard</span>
+                    </button>
+                    <button onClick={() => onNavigate('ADMIN_USERS')} className="flex flex-col items-center gap-1 text-slate-400">
+                        <span className="material-symbols-rounded">people_alt</span>
+                        <span className="text-[10px] font-medium">Members</span>
+                    </button>
+                    <button onClick={() => onNavigate('ADMIN_ORDERS')} className="flex flex-col items-center gap-1 text-slate-400">
+                        <span className="material-symbols-rounded">shopping_cart_checkout</span>
+                        <span className="text-[10px] font-medium">Orders</span>
+                    </button>
+                    <button onClick={() => onNavigate('ADMIN_SHOP')} className="flex flex-col items-center gap-1 text-primary">
+                        <span className="material-symbols-rounded">storefront</span>
+                        <span className="text-[10px] font-medium">Shop</span>
+                    </button>
+                </div>
+            </nav>
         </div>
     );
 };

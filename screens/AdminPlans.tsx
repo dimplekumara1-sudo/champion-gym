@@ -241,7 +241,7 @@ const AdminPlans: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNaviga
                   Cancel
                 </button>
                 <button
-                  onClick={handleUpdatePlan}
+                  onClick={editingPlan.isNew ? handleCreatePlan : handleUpdatePlan}
                   className="flex-1 bg-primary text-slate-900 font-bold py-3 rounded-xl text-sm"
                 >
                   Save

@@ -1,5 +1,5 @@
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { supabase } from '../lib/supabase';
 import { AppScreen } from '../types';
 import StatusBar from '../components/StatusBar';
@@ -7,6 +7,7 @@ import StatusBar from '../components/StatusBar';
 const CreateWorkout: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNavigate }) => {
   const [exercises, setExercises] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [workoutName, setWorkoutName] = useState('');
   const [description, setDescription] = useState('');
   const [difficulty, setDifficulty] = useState('Beginner');
@@ -22,37 +23,131 @@ const CreateWorkout: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNav
   const [equipmentFilter, setEquipmentFilter] = useState('All');
   const [userGender, setUserGender] = useState<'men' | 'women'>('men');
 
-  const levels = ['Novice', 'Beginner', 'Intermediate', 'Advanced'];
+  const [page, setPage] = useState(0);
+  const [hasMore, setHasMore] = useState(true);
+  const [filterData, setFilterData] = useState<{categories: string[], equipments: string[], levels: string[]}>({
+    categories: [],
+    equipments: [],
+    levels: []
+  });
+
+  const PAGE_SIZE = 50;
 
   useEffect(() => {
-    fetchExercises();
+    fetchFilterData();
   }, []);
 
-  const fetchExercises = async () => {
+  useEffect(() => {
+    setPage(0);
+    fetchExercises(0, true);
+  }, [searchTerm, categoryFilter, levelFilter, equipmentFilter]);
+
+  const fetchFilterData = async () => {
     try {
       const { data, error } = await supabase
         .from('exercises')
-        .select('*')
-        .order('exercise_name', { ascending: true });
+        .select('category, equipment, level');
+      
       if (error) throw error;
-      setExercises(data || []);
+      
+      if (data) {
+        const cats = new Set<string>();
+        const equips = new Set<string>();
+        const levels = new Set<string>();
+        
+        data.forEach(ex => {
+          if (ex.category) cats.add(ex.category);
+          if (ex.equipment) {
+            equips.add(ex.equipment);
+            if (ex.equipment.toLowerCase() === 'cardio') cats.add('Cardio');
+          }
+          if (ex.level) levels.add(ex.level);
+        });
+
+        setFilterData({
+          categories: ['All', ...Array.from(cats)].sort(),
+          equipments: ['All', ...Array.from(equips)].sort(),
+          levels: Array.from(levels).sort()
+        });
+      }
+    } catch (e) {
+      console.error('Error fetching filter data:', e);
+    }
+  };
+
+  const levels = useMemo(() => {
+    const order = ['Novice', 'Beginner', 'Intermediate', 'Advanced'];
+    return filterData.levels.sort((a, b) => {
+      const indexA = order.indexOf(a);
+      const indexB = order.indexOf(b);
+      if (indexA !== -1 && indexB !== -1) return indexA - indexB;
+      if (indexA !== -1) return -1;
+      if (indexB !== -1) return 1;
+      return a.localeCompare(b);
+    });
+  }, [filterData.levels]);
+
+  const categories = filterData.categories;
+  const equipments = filterData.equipments;
+
+  const fetchExercises = async (pageToFetch: number, isNewSearch: boolean = false) => {
+    try {
+      if (isNewSearch) setLoading(true);
+      else setLoadingMore(true);
+
+      let query = supabase
+        .from('exercises')
+        .select('*', { count: 'exact' });
+
+      // Apply Filters Server-side
+      if (searchTerm) {
+        query = query.or(`exercise_name.ilike.%${searchTerm}%,category.ilike.%${searchTerm}%`);
+      }
+
+      if (categoryFilter !== 'All') {
+        if (categoryFilter === 'Cardio') {
+          query = query.or(`category.eq.Cardio,equipment.eq.Cardio`);
+        } else {
+          query = query.eq('category', categoryFilter);
+        }
+      }
+
+      if (equipmentFilter !== 'All') {
+        query = query.eq('equipment', equipmentFilter);
+      }
+
+      if (levelFilter !== 'All') {
+        query = query.eq('level', levelFilter);
+      }
+
+      const { data, error, count } = await query
+        .order('exercise_name', { ascending: true })
+        .range(pageToFetch * PAGE_SIZE, (pageToFetch + 1) * PAGE_SIZE - 1);
+
+      if (error) throw error;
+
+      if (isNewSearch) {
+        setExercises(data || []);
+      } else {
+        setExercises(prev => [...prev, ...(data || [])]);
+      }
+
+      setHasMore(count ? (pageToFetch + 1) * PAGE_SIZE < count : false);
     } catch (error) {
       console.error('Error fetching exercises:', error);
     } finally {
       setLoading(false);
+      setLoadingMore(false);
     }
   };
 
-  const categories = ['All', ...new Set(exercises.map(ex => ex.category))];
-  const equipments = ['All', ...new Set(exercises.map(ex => ex.equipment).filter(Boolean))];
-
-  const filteredExercises = exercises.filter(ex => {
-    const matchesSearch = ex.exercise_name.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesCategory = categoryFilter === 'All' || ex.category === categoryFilter;
-    const matchesLevel = levelFilter === 'All' || ex.level === levelFilter;
-    const matchesEquipment = equipmentFilter === 'All' || ex.equipment === equipmentFilter;
-    return matchesSearch && matchesCategory && matchesLevel && matchesEquipment;
-  });
+  const loadMore = () => {
+    if (!loadingMore && hasMore) {
+      const nextPage = page + 1;
+      setPage(nextPage);
+      fetchExercises(nextPage);
+    }
+  };
 
   const toggleExercise = (ex: any) => {
     const exists = selectedExercises.find(s => s.id === ex.id);
@@ -121,14 +216,23 @@ const CreateWorkout: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNav
 
     try {
       setSaving(true);
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return alert('You must be logged in');
+      
+      // Get session instead of just user for better auth handling
+      const { data: { session }, error: authError } = await supabase.auth.getSession();
+      
+      if (authError || !session) {
+        console.error('Auth session error:', authError);
+        return alert('Your session has expired. Please log out and log back in.');
+      }
+
+      const user = session.user;
 
       const workoutData: any = {
         name: workoutName,
         description: description,
         category: 'Custom',
-        difficulty: difficulty
+        difficulty: difficulty,
+        user_id: user.id // Added user_id in case RLS requires it for inserts
       };
 
       const { data: workout, error: workoutError } = await supabase
@@ -137,7 +241,10 @@ const CreateWorkout: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNav
         .select()
         .single();
 
-      if (workoutError) throw workoutError;
+      if (workoutError) {
+        console.error('Workout insert error:', workoutError);
+        throw new Error(`Failed to create workout: ${workoutError.message}`);
+      }
 
       const exerciseInserts = selectedExercises.map((ex, idx) => ({
         workout_id: workout.id,
@@ -150,7 +257,10 @@ const CreateWorkout: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNav
         .from('workout_exercises')
         .insert(exerciseInserts);
 
-      if (exerciseError) throw exerciseError;
+      if (exerciseError) {
+        console.error('Exercise insert error:', exerciseError);
+        throw new Error(`Failed to add exercises: ${exerciseError.message}`);
+      }
 
       const { error: programError } = await supabase
         .from('user_programs')
@@ -162,13 +272,16 @@ const CreateWorkout: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNav
           status: 'pending'
         });
 
-      if (programError) throw programError;
+      if (programError) {
+        console.error('Program insert error:', programError);
+        throw new Error(`Failed to assign program: ${programError.message}`);
+      }
 
       alert('Workout plan created and assigned successfully!');
       onNavigate('WORKOUT_PROGRAM');
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error saving workout plan:', error);
-      alert('Failed to save workout plan. Please try again.');
+      alert(error.message || 'Failed to save workout plan. Please try again.');
     } finally {
       setSaving(false);
     }
@@ -307,66 +420,80 @@ const CreateWorkout: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNav
             </div>
           </div>
 
-          <div className="space-y-3 max-h-[400px] overflow-y-auto no-scrollbar pr-1">
+          <div className="space-y-3 pr-1">
             {loading ? (
               <div className="flex justify-center py-10"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div></div>
-            ) : filteredExercises.length === 0 ? (
+            ) : exercises.length === 0 ? (
               <div className="text-center py-10 text-slate-500 text-sm">No exercises found.</div>
-            ) : filteredExercises.map(ex => {
-              const isSelected = selectedExercises.find(s => s.id === ex.id);
-              const genderLink = userGender === 'men' ? ex.men_link : ex.women_link;
-              const genderIcon = userGender === 'men' ? 'male' : 'female';
-              return (
-                <div key={ex.id} className={`p-3 rounded-3xl border transition-all ${isSelected ? 'bg-primary/10 border-primary' : 'bg-slate-900/40 border-slate-800/50'}`}>
-                  <div className="flex items-center gap-3">
-                    <div className="w-12 h-12 bg-slate-800 rounded-2xl flex items-center justify-center p-2 overflow-hidden shrink-0">
-                      {ex.icon_svg ? <div dangerouslySetInnerHTML={{ __html: ex.icon_svg }} className={`w-full h-full flex items-center justify-center [&>svg]:w-full [&>svg]:h-full ${isSelected ? 'text-primary' : 'text-slate-500'}`} /> : <span className="material-symbols-rounded text-slate-600">fitness_center</span>}
-                    </div>
-                    <div className="flex-1 min-w-0" onClick={() => toggleExercise(ex)}>
-                      <h4 className="font-bold text-sm leading-5 line-clamp-2">{ex.exercise_name}</h4>
-                      <div className="flex items-center gap-2 mt-0.5">
-                        <p className="text-[10px] text-slate-500 uppercase font-black">{ex.category} • {ex.level || 'Beginner'}</p>
-                        {ex.equipment && <p className="text-[9px] text-slate-600">• {ex.equipment}</p>}
+            ) : (
+              <>
+                {exercises.map(ex => {
+                  const isSelected = selectedExercises.find(s => s.id === ex.id);
+                  const genderLink = userGender === 'men' ? ex.men_link : ex.women_link;
+                  const genderIcon = userGender === 'men' ? 'male' : 'female';
+                  return (
+                    <div key={ex.id} className={`p-3 rounded-3xl border transition-all ${isSelected ? 'bg-primary/10 border-primary' : 'bg-slate-900/40 border-slate-800/50'}`}>
+                      <div className="flex items-center gap-3">
+                        <div className="w-12 h-12 bg-slate-800 rounded-2xl flex items-center justify-center p-2 overflow-hidden shrink-0">
+                          {ex.icon_svg ? <div dangerouslySetInnerHTML={{ __html: ex.icon_svg }} className={`w-full h-full flex items-center justify-center [&>svg]:w-full [&>svg]:h-full ${isSelected ? 'text-primary' : 'text-slate-500'}`} /> : <span className="material-symbols-rounded text-slate-600">fitness_center</span>}
+                        </div>
+                        <div className="flex-1 min-w-0" onClick={() => toggleExercise(ex)}>
+                          <h4 className="font-bold text-sm leading-5 line-clamp-2">{ex.exercise_name}</h4>
+                          <div className="flex items-center gap-2 mt-0.5">
+                            <p className="text-[10px] text-slate-500 uppercase font-black">{ex.category} • {ex.level || 'Novice'}</p>
+                            {ex.equipment && <p className="text-[9px] text-slate-600">• {ex.equipment}</p>}
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          {genderLink && (
+                            <button
+                              onClick={() => openExerciseVideo(genderLink)}
+                              className="w-7 h-7 rounded-full flex items-center justify-center bg-slate-800 text-slate-400 hover:bg-slate-700 hover:text-slate-200 transition-colors"
+                              title={`Form guide for ${userGender}`}
+                            >
+                              <span className="material-symbols-rounded text-[16px]">{genderIcon}</span>
+                            </button>
+                          )}
+                          <button
+                            onClick={() => toggleExercise(ex)}
+                            className={`w-10 h-10 rounded-full flex items-center justify-center transition-all ${isSelected ? 'bg-primary text-slate-950 shadow-lg shadow-primary/20' : 'bg-slate-800 text-slate-400'}`}
+                          >
+                            <span className="material-symbols-rounded text-xl font-black">{isSelected ? 'check' : 'add'}</span>
+                          </button>
+                        </div>
                       </div>
-                    </div>
-                    <div className="flex items-center gap-1.5 shrink-0">
-                      {genderLink && (
-                        <button
-                          onClick={() => window.open(genderLink, '_blank')}
-                          className="w-7 h-7 rounded-full flex items-center justify-center bg-slate-800 text-slate-400 hover:bg-slate-700 hover:text-slate-200 transition-colors"
-                          title={`Form guide for ${userGender}`}
-                        >
-                          <span className="material-symbols-rounded text-xs">{genderIcon}</span>
-                        </button>
+                      {isSelected && (
+                        <div className="mt-3 pt-3 border-t border-primary/20 flex items-center gap-3">
+                          <input
+                            className="flex-1 bg-slate-950/50 border-none rounded-xl py-2 px-3 text-xs focus:ring-1 focus:ring-primary text-primary font-bold"
+                            placeholder="Sets x Reps (e.g. 3x12)"
+                            value={isSelected.sets_reps || ''}
+                            onChange={e => updateSetsReps(ex.id, e.target.value)}
+                          />
+                        </div>
                       )}
-                      <button
-                        onClick={() => openExerciseVideo(ex.youtube_url)}
-                        className="w-7 h-7 rounded-full flex items-center justify-center bg-slate-800 text-slate-400 hover:bg-slate-700 hover:text-slate-200 transition-colors"
-                        title="Watch form video"
-                      >
-                        <span className="material-symbols-rounded text-xs">play_circle</span>
-                      </button>
-                      <button
-                        onClick={() => toggleExercise(ex)}
-                        className={`w-7 h-7 rounded-full flex items-center justify-center transition-colors ${isSelected ? 'bg-primary text-slate-950' : 'bg-slate-800 text-slate-500'}`}
-                      >
-                        <span className="material-symbols-rounded text-sm">{isSelected ? 'check' : 'add'}</span>
-                      </button>
                     </div>
+                  );
+                })}
+
+                {hasMore && (
+                  <div className="flex justify-center pt-2">
+                    <button
+                      onClick={loadMore}
+                      disabled={loadingMore}
+                      className="w-full py-4 bg-slate-800/40 hover:bg-slate-800 border border-slate-700/50 text-slate-400 hover:text-white rounded-2xl font-bold text-xs transition-all flex items-center justify-center gap-2"
+                    >
+                      {loadingMore ? (
+                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary"></div>
+                      ) : (
+                        <span className="material-symbols-rounded text-sm">expand_more</span>
+                      )}
+                      {loadingMore ? 'Loading...' : 'Load More Exercises'}
+                    </button>
                   </div>
-                  {isSelected && (
-                    <div className="mt-3 pt-3 border-t border-primary/20">
-                      <input
-                        className="w-full bg-slate-950/50 border-none rounded-xl py-2 px-4 text-xs focus:ring-1 focus:ring-primary placeholder:text-slate-600"
-                        placeholder="Sets & Reps (e.g. 3x12)"
-                        value={isSelected.sets_reps}
-                        onChange={e => updateSetsReps(ex.id, e.target.value)}
-                      />
-                    </div>
-                  )}
-                </div>
-              );
-            })}
+                )}
+              </>
+            )}
           </div>
         </section>
 

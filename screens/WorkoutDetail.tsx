@@ -2,12 +2,14 @@
 import React, { useEffect, useState } from 'react';
 import StatusBar from '../components/StatusBar';
 import { supabase } from '../lib/supabase';
+import { convertToEmbedUrl, isYoutubeUrl } from '../lib/videoUtils';
 
 const WorkoutDetail: React.FC<{ workoutId: string | null, programId: string | null, onBack: () => void, onStart: (duration: number) => void }> = ({ workoutId, programId, onBack, onStart }) => {
   const [workout, setWorkout] = useState<any>(null);
   const [exercises, setExercises] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [currentVideo, setCurrentVideo] = useState<string | null>(null);
+  const [embedUrl, setEmbedUrl] = useState<string | null>(null);
   const [iframeUrl, setIframeUrl] = useState<string | null>(null);
   const [userGender, setUserGender] = useState<string | null>(null);
   const [startTime] = useState(Date.now());
@@ -19,6 +21,17 @@ const WorkoutDetail: React.FC<{ workoutId: string | null, programId: string | nu
     }
   }, [workoutId]);
 
+  useEffect(() => {
+    if (currentVideo && isYoutubeUrl(currentVideo)) {
+      const url = convertToEmbedUrl(currentVideo, true);
+      setEmbedUrl(url);
+    } else if (currentVideo) {
+      setEmbedUrl(currentVideo);
+    } else {
+      setEmbedUrl(null);
+    }
+  }, [currentVideo]);
+
   const fetchUserGender = async () => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
@@ -27,6 +40,60 @@ const WorkoutDetail: React.FC<{ workoutId: string | null, programId: string | nu
         setUserGender(data?.gender || 'Men');
       }
     } catch (e) { }
+  };
+
+  const openVideoInNewTab = (title: string, videoUrl: string) => {
+    let embedUrl = videoUrl;
+
+    // Convert YouTube URLs to embeddable format if needed
+    if (videoUrl.includes('youtube.com/watch?v=')) {
+      const videoId = videoUrl.split('v=')[1].split('&')[0];
+      embedUrl = `https://www.youtube.com/embed/${videoId}`;
+    } else if (videoUrl.includes('youtu.be/')) {
+      const videoId = videoUrl.split('youtu.be/')[1].split('?')[0];
+      embedUrl = `https://www.youtube.com/embed/${videoId}`;
+    } else if (!videoUrl.includes('embed')) {
+      window.open(videoUrl, '_blank');
+      return;
+    }
+
+    // Create HTML page for video display
+    const htmlContent = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>${title}</title>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <style>
+          * { margin: 0; padding: 0; box-sizing: border-box; }
+          body { background: #000; font-family: system-ui, -apple-system, sans-serif; padding: 20px; }
+          .container { max-width: 1200px; margin: 0 auto; }
+          .header { margin-bottom: 20px; }
+          .title { color: #fff; font-size: 28px; font-weight: bold; margin-bottom: 10px; }
+          .video-container { position: relative; width: 100%; padding-bottom: 56.25%; height: 0; overflow: hidden; border-radius: 12px; margin-bottom: 20px; }
+          .video-container iframe { position: absolute; top: 0; left: 0; width: 100%; height: 100%; border: none; }
+          .back-btn { display: inline-block; margin-bottom: 20px; padding: 10px 20px; background: #3f46e1; color: #fff; text-decoration: none; border-radius: 8px; font-weight: bold; }
+          .back-btn:hover { background: #4f46e1; }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <a href="javascript:history.back()" class="back-btn">← Back</a>
+          <div class="header">
+            <div class="title">${title}</div>
+          </div>
+          <div class="video-container">
+            <iframe src="${embedUrl}" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
+          </div>
+        </div>
+      </body>
+      </html>
+    `;
+
+    const blob = new Blob([htmlContent], { type: 'text/html' });
+    const url = URL.createObjectURL(blob);
+    window.open(url, '_blank');
   };
 
   const fetchWorkoutData = async () => {
@@ -107,13 +174,13 @@ const WorkoutDetail: React.FC<{ workoutId: string | null, programId: string | nu
 
       <main className="px-5 space-y-6">
         <div className="relative aspect-video w-full bg-slate-900 rounded-[2.5rem] overflow-hidden group shadow-2xl border border-slate-800">
-          {currentVideo ? (
+          {embedUrl ? (
             <iframe
               className="w-full h-full"
-              src={`https://www.youtube.com/embed/${getYoutubeId(currentVideo)}?autoplay=0&controls=1`}
+              src={embedUrl}
               title="Exercise Video"
               frameBorder="0"
-              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen"
               allowFullScreen
             ></iframe>
           ) : (
@@ -164,11 +231,30 @@ const WorkoutDetail: React.FC<{ workoutId: string | null, programId: string | nu
                   <p className="text-[13px] text-primary font-bold opacity-80">{ex.sets_reps} {ex.weight_info && `• ${ex.weight_info}`}</p>
                 </div>
                 <div className="flex gap-2">
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      const g = userGender?.toLowerCase();
+                      const genderVideo = (g === 'men' || g === 'male') ? ex.exercises.men_youtube_url :
+                        (g === 'women' || g === 'female') ? ex.exercises.women_youtube_url : null;
+                      const videoToSet = genderVideo || ex.exercises.youtube_url;
+                      if (videoToSet) {
+                        setCurrentVideo(videoToSet);
+                      } else {
+                        alert('No video available for this exercise');
+                      }
+                    }}
+                    className="flex items-center gap-1 bg-primary/10 px-2.5 py-1.5 rounded-xl border border-primary/20 hover:bg-primary/20 transition-colors active:scale-90"
+                  >
+                    <span className="material-symbols-rounded text-sm text-primary">play_circle</span>
+                    <span className="text-[10px] font-black uppercase text-primary">Video</span>
+                  </button>
+
                   {((!userGender || userGender.toLowerCase() === 'men' || userGender.toLowerCase() === 'male') && ex.exercises.men_link) ? (
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
-                        setIframeUrl(ex.exercises.men_link);
+                        setCurrentVideo(ex.exercises.men_link);
                       }}
                       className="p-2 hover:bg-slate-800 rounded-lg text-slate-500"
                     >
@@ -178,7 +264,7 @@ const WorkoutDetail: React.FC<{ workoutId: string | null, programId: string | nu
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
-                        setIframeUrl(ex.exercises.women_link);
+                        setCurrentVideo(ex.exercises.women_link);
                       }}
                       className="p-2 hover:bg-slate-800 rounded-lg text-slate-500"
                     >
@@ -189,7 +275,7 @@ const WorkoutDetail: React.FC<{ workoutId: string | null, programId: string | nu
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
-                        setIframeUrl(ex.exercises.women_link);
+                        setCurrentVideo(ex.exercises.women_link);
                       }}
                       className="p-2 hover:bg-slate-800 rounded-lg text-slate-500"
                     >

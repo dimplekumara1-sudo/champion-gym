@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
 import { AppScreen } from '../types';
 
@@ -39,11 +39,46 @@ const AdminShop: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNavigat
         icon: 'shopping_bag'
     });
 
-    useEffect(() => {
-        fetchAllData();
+    const fetchProducts = useCallback(async () => {
+        try {
+            const { data, error } = await supabase
+                .from('gym_products')
+                .select('*, category:gym_product_categories(name)')
+                .order('created_at', { ascending: false });
+            if (error) throw error;
+            setProducts(data || []);
+        } catch (error) {
+            console.error('Error fetching products:', error);
+        }
     }, []);
 
-    const fetchAllData = async () => {
+    const fetchCategories = useCallback(async () => {
+        try {
+            const { data, error } = await supabase
+                .from('gym_product_categories')
+                .select('*')
+                .order('display_order');
+            if (error) throw error;
+            setCategories(data || []);
+        } catch (error) {
+            console.error('Error fetching categories:', error);
+        }
+    }, []);
+
+    const fetchOrders = useCallback(async () => {
+        try {
+            const { data, error } = await supabase
+                .from('gym_orders')
+                .select('*')
+                .order('created_at', { ascending: false });
+            if (error) throw error;
+            setOrders(data || []);
+        } catch (error) {
+            console.error('Error fetching orders:', error);
+        }
+    }, []);
+
+    const fetchAllData = useCallback(async () => {
         try {
             setLoading(true);
             await Promise.all([
@@ -56,46 +91,11 @@ const AdminShop: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNavigat
         } finally {
             setLoading(false);
         }
-    };
+    }, [fetchProducts, fetchCategories, fetchOrders]);
 
-    const fetchProducts = async () => {
-        try {
-            const { data, error } = await supabase
-                .from('gym_products')
-                .select('*, category:gym_product_categories(name)')
-                .order('created_at', { ascending: false });
-            if (error) throw error;
-            setProducts(data || []);
-        } catch (error) {
-            console.error('Error fetching products:', error);
-        }
-    };
-
-    const fetchCategories = async () => {
-        try {
-            const { data, error } = await supabase
-                .from('gym_product_categories')
-                .select('*')
-                .order('display_order');
-            if (error) throw error;
-            setCategories(data || []);
-        } catch (error) {
-            console.error('Error fetching categories:', error);
-        }
-    };
-
-    const fetchOrders = async () => {
-        try {
-            const { data, error } = await supabase
-                .from('gym_orders')
-                .select('*')
-                .order('created_at', { ascending: false });
-            if (error) throw error;
-            setOrders(data || []);
-        } catch (error) {
-            console.error('Error fetching orders:', error);
-        }
-    };
+    useEffect(() => {
+        fetchAllData();
+    }, [fetchAllData]);
 
     // Product Management
     const handleSaveProduct = async () => {
@@ -267,128 +267,180 @@ const AdminShop: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNavigat
                                             {editingProduct?.id ? 'Edit Product' : 'New Product'}
                                         </h3>
 
-                                        <div className="space-y-4 mb-6">
-                                            <select
-                                                value={productForm.category_id}
-                                                onChange={(e) => setProductForm({ ...productForm, category_id: e.target.value })}
-                                                className="w-full bg-slate-900 border border-slate-700 rounded-lg p-3 text-white focus:border-primary outline-none"
-                                            >
-                                                <option value="">Select Category</option>
-                                                {categories.map(cat => (
-                                                    <option key={cat.id} value={cat.id}>{cat.name}</option>
-                                                ))}
-                                            </select>
-
-                                            <input
-                                                type="text"
-                                                placeholder="Product Name"
-                                                value={productForm.name}
-                                                onChange={(e) => setProductForm({ ...productForm, name: e.target.value })}
-                                                className="w-full bg-slate-900 border border-slate-700 rounded-lg p-3 text-white placeholder-slate-500 focus:border-primary outline-none"
-                                            />
-
-                                            <textarea
-                                                placeholder="Description"
-                                                value={productForm.description}
-                                                onChange={(e) => setProductForm({ ...productForm, description: e.target.value })}
-                                                className="w-full bg-slate-900 border border-slate-700 rounded-lg p-3 text-white placeholder-slate-500 focus:border-primary outline-none"
-                                                rows={3}
-                                            />
-
-                                            <div className="grid grid-cols-2 gap-4">
-                                                <input
-                                                    type="number"
-                                                    placeholder="MRP"
-                                                    value={productForm.mrp}
-                                                    onChange={(e) => setProductForm({ ...productForm, mrp: e.target.value })}
-                                                    className="bg-slate-900 border border-slate-700 rounded-lg p-3 text-white placeholder-slate-500 focus:border-primary outline-none"
-                                                />
-                                                <input
-                                                    type="number"
-                                                    placeholder="Sale Price"
-                                                    value={productForm.sale_price}
-                                                    onChange={(e) => setProductForm({ ...productForm, sale_price: e.target.value })}
-                                                    className="bg-slate-900 border border-slate-700 rounded-lg p-3 text-white placeholder-slate-500 focus:border-primary outline-none"
-                                                />
-                                            </div>
-
-                                            <div className="grid grid-cols-2 gap-4">
-                                                <input
-                                                    type="number"
-                                                    placeholder="Purchase Price (Optional)"
-                                                    value={productForm.purchase_price}
-                                                    onChange={(e) => setProductForm({ ...productForm, purchase_price: e.target.value })}
-                                                    className="bg-slate-900 border border-slate-700 rounded-lg p-3 text-white placeholder-slate-500 focus:border-primary outline-none"
-                                                />
-                                                <input
-                                                    type="number"
-                                                    placeholder="Stock Quantity"
-                                                    value={productForm.stock_quantity}
-                                                    onChange={(e) => setProductForm({ ...productForm, stock_quantity: e.target.value })}
-                                                    className="bg-slate-900 border border-slate-700 rounded-lg p-3 text-white placeholder-slate-500 focus:border-primary outline-none"
-                                                />
-                                            </div>
-
-                                            <div className="grid grid-cols-2 gap-4">
-                                                <div>
-                                                    <label className="text-xs font-bold text-slate-400 mb-2 block">GST (%)</label>
-                                                    <input
-                                                        type="number"
-                                                        placeholder="GST Percentage"
-                                                        min="0"
-                                                        max="100"
-                                                        step="0.5"
-                                                        value={productForm.gst_percentage}
-                                                        onChange={(e) => setProductForm({ ...productForm, gst_percentage: e.target.value })}
-                                                        className="w-full bg-slate-900 border border-slate-700 rounded-lg p-3 text-white placeholder-slate-500 focus:border-primary outline-none"
-                                                    />
-                                                    <p className="text-[10px] text-slate-500 mt-1">Default: 18%</p>
+                                        <div className="space-y-6 mb-8">
+                                            {/* Basic Information */}
+                                            <div className="space-y-4">
+                                                <div className="flex items-center gap-2 mb-2 text-primary">
+                                                    <span className="material-symbols-rounded text-sm">info</span>
+                                                    <h4 className="text-xs font-black uppercase tracking-widest">Basic Information</h4>
                                                 </div>
+
                                                 <div>
-                                                    <label className="text-xs font-bold text-slate-400 mb-2 block">Tax Amount (est.)</label>
-                                                    <div className="bg-slate-900 border border-slate-700 rounded-lg p-3 text-primary font-bold">
-                                                        ₹{productForm.sale_price && productForm.gst_percentage ? (parseFloat(productForm.sale_price) * parseFloat(productForm.gst_percentage) / 100).toFixed(2) : '0'}
+                                                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest ml-1 mb-1 block">Category</label>
+                                                    <select
+                                                        value={productForm.category_id}
+                                                        onChange={(e) => setProductForm({ ...productForm, category_id: e.target.value })}
+                                                        className="w-full bg-slate-900 border border-slate-700 rounded-xl p-3 text-white focus:border-primary outline-none transition-colors"
+                                                    >
+                                                        <option value="">Select Category</option>
+                                                        {categories.map(cat => (
+                                                            <option key={cat.id} value={cat.id}>{cat.name}</option>
+                                                        ))}
+                                                    </select>
+                                                </div>
+
+                                                <div>
+                                                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest ml-1 mb-1 block">Product Name</label>
+                                                    <input
+                                                        type="text"
+                                                        placeholder="e.g. Premium Whey Protein"
+                                                        value={productForm.name}
+                                                        onChange={(e) => setProductForm({ ...productForm, name: e.target.value })}
+                                                        className="w-full bg-slate-900 border border-slate-700 rounded-xl p-3 text-white placeholder-slate-600 focus:border-primary outline-none transition-colors"
+                                                    />
+                                                </div>
+
+                                                <div>
+                                                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest ml-1 mb-1 block">Description</label>
+                                                    <textarea
+                                                        placeholder="Detailed description of the product..."
+                                                        value={productForm.description}
+                                                        onChange={(e) => setProductForm({ ...productForm, description: e.target.value })}
+                                                        className="w-full bg-slate-900 border border-slate-700 rounded-xl p-3 text-white placeholder-slate-600 focus:border-primary outline-none transition-colors"
+                                                        rows={3}
+                                                    />
+                                                </div>
+                                            </div>
+
+                                            {/* Pricing & Inventory */}
+                                            <div className="space-y-4 pt-4 border-t border-slate-700/50">
+                                                <div className="flex items-center gap-2 mb-2 text-primary">
+                                                    <span className="material-symbols-rounded text-sm">payments</span>
+                                                    <h4 className="text-xs font-black uppercase tracking-widest">Pricing & Inventory</h4>
+                                                </div>
+
+                                                <div className="grid grid-cols-2 gap-4">
+                                                    <div>
+                                                        <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest ml-1 mb-1 block">MRP (₹)</label>
+                                                        <input
+                                                            type="number"
+                                                            placeholder="0.00"
+                                                            value={productForm.mrp}
+                                                            onChange={(e) => setProductForm({ ...productForm, mrp: e.target.value })}
+                                                            className="w-full bg-slate-900 border border-slate-700 rounded-xl p-3 text-white placeholder-slate-600 focus:border-primary outline-none transition-colors"
+                                                        />
+                                                    </div>
+                                                    <div>
+                                                        <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest ml-1 mb-1 block">Sale Price (₹)</label>
+                                                        <input
+                                                            type="number"
+                                                            placeholder="0.00"
+                                                            value={productForm.sale_price}
+                                                            onChange={(e) => setProductForm({ ...productForm, sale_price: e.target.value })}
+                                                            className="w-full bg-slate-900 border border-slate-700 rounded-xl p-3 text-white placeholder-slate-600 focus:border-primary outline-none transition-colors"
+                                                        />
+                                                    </div>
+                                                </div>
+
+                                                <div className="grid grid-cols-2 gap-4">
+                                                    <div>
+                                                        <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest ml-1 mb-1 block">Purchase Price (₹)</label>
+                                                        <input
+                                                            type="number"
+                                                            placeholder="0.00"
+                                                            value={productForm.purchase_price}
+                                                            onChange={(e) => setProductForm({ ...productForm, purchase_price: e.target.value })}
+                                                            className="w-full bg-slate-900 border border-slate-700 rounded-xl p-3 text-white placeholder-slate-600 focus:border-primary outline-none transition-colors"
+                                                        />
+                                                    </div>
+                                                    <div>
+                                                        <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest ml-1 mb-1 block">Stock Quantity</label>
+                                                        <input
+                                                            type="number"
+                                                            placeholder="0"
+                                                            value={productForm.stock_quantity}
+                                                            onChange={(e) => setProductForm({ ...productForm, stock_quantity: e.target.value })}
+                                                            className="w-full bg-slate-900 border border-slate-700 rounded-xl p-3 text-white placeholder-slate-600 focus:border-primary outline-none transition-colors"
+                                                        />
+                                                    </div>
+                                                </div>
+
+                                                <div className="grid grid-cols-2 gap-4">
+                                                    <div>
+                                                        <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest ml-1 mb-1 block">GST (%)</label>
+                                                        <input
+                                                            type="number"
+                                                            placeholder="18"
+                                                            min="0"
+                                                            max="100"
+                                                            step="0.5"
+                                                            value={productForm.gst_percentage}
+                                                            onChange={(e) => setProductForm({ ...productForm, gst_percentage: e.target.value })}
+                                                            className="w-full bg-slate-900 border border-slate-700 rounded-xl p-3 text-white placeholder-slate-600 focus:border-primary outline-none transition-colors"
+                                                        />
+                                                    </div>
+                                                    <div>
+                                                        <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest ml-1 mb-1 block">Estimated GST</label>
+                                                        <div className="bg-slate-900/40 border border-slate-800 rounded-xl p-3 text-primary font-bold">
+                                                            ₹{productForm.sale_price && productForm.gst_percentage ? (parseFloat(productForm.sale_price) * parseFloat(productForm.gst_percentage) / 100).toFixed(2) : '0'}
+                                                        </div>
                                                     </div>
                                                 </div>
                                             </div>
 
-                                            {/* Image Section */}
-                                            <div className="bg-slate-900 border border-slate-700 rounded-lg p-4 space-y-4">
-                                                <h4 className="font-bold text-sm">Product Image</h4>
+                                            {/* Media & Options */}
+                                            <div className="space-y-4 pt-4 border-t border-slate-700/50">
+                                                <div className="flex items-center gap-2 mb-2 text-primary">
+                                                    <span className="material-symbols-rounded text-sm">image</span>
+                                                    <h4 className="text-xs font-black uppercase tracking-widest">Media & Options</h4>
+                                                </div>
 
-                                                <input
-                                                    type="url"
-                                                    placeholder="Main Image URL (e.g., https://example.com/image.jpg)"
-                                                    value={productForm.main_image}
-                                                    onChange={(e) => {
-                                                        setProductForm({ ...productForm, main_image: e.target.value });
-                                                        setImagePreview(e.target.value);
-                                                    }}
-                                                    className="w-full bg-slate-800 border border-slate-600 rounded-lg p-3 text-white placeholder-slate-500 focus:border-primary outline-none text-sm"
-                                                />
+                                                <div>
+                                                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest ml-1 mb-1 block">Product Image URL</label>
+                                                    <input
+                                                        type="url"
+                                                        placeholder="https://example.com/image.jpg"
+                                                        value={productForm.main_image}
+                                                        onChange={(e) => {
+                                                            setProductForm({ ...productForm, main_image: e.target.value });
+                                                            setImagePreview(e.target.value);
+                                                        }}
+                                                        className="w-full bg-slate-900 border border-slate-700 rounded-xl p-3 text-white placeholder-slate-600 focus:border-primary outline-none transition-colors text-sm"
+                                                    />
+                                                </div>
 
                                                 {imagePreview && (
-                                                    <div className="relative">
+                                                    <div className="relative group">
                                                         <img
                                                             src={imagePreview}
                                                             alt="Preview"
-                                                            className="w-full h-40 object-cover rounded-lg border border-slate-600"
+                                                            className="w-full h-48 object-cover rounded-2xl border border-slate-700"
                                                             onError={() => setImagePreview('')}
                                                         />
-                                                        <p className="text-xs text-slate-400 mt-2">Image Preview</p>
+                                                        <div className="absolute top-2 right-2 bg-slate-950/80 backdrop-blur-md px-2 py-1 rounded-lg text-[10px] font-bold text-white border border-slate-800">
+                                                            Image Preview
+                                                        </div>
                                                     </div>
                                                 )}
-                                            </div>
 
-                                            <label className="flex items-center gap-3 bg-slate-900 p-3 rounded-lg border border-slate-700">
-                                                <input
-                                                    type="checkbox"
-                                                    checked={productForm.is_featured}
-                                                    onChange={(e) => setProductForm({ ...productForm, is_featured: e.target.checked })}
-                                                    className="accent-primary"
-                                                />
-                                                <span>Featured Product</span>
-                                            </label>
+                                                <label className="flex items-center justify-between bg-slate-900/50 p-4 rounded-2xl border border-slate-700 hover:border-slate-600 transition-colors cursor-pointer">
+                                                    <div className="flex items-center gap-3">
+                                                        <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${productForm.is_featured ? 'bg-primary/20 text-primary' : 'bg-slate-800 text-slate-500'}`}>
+                                                            <span className="material-symbols-rounded">star</span>
+                                                        </div>
+                                                        <div>
+                                                            <span className="text-sm font-bold block text-white">Featured Product</span>
+                                                            <span className="text-[10px] text-slate-500">Show on shop highlights</span>
+                                                        </div>
+                                                    </div>
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={productForm.is_featured}
+                                                        onChange={(e) => setProductForm({ ...productForm, is_featured: e.target.checked })}
+                                                        className="w-5 h-5 accent-primary rounded-lg"
+                                                    />
+                                                </label>
+                                            </div>
                                         </div>
 
                                         <div className="flex gap-3">
@@ -612,12 +664,12 @@ const AdminShop: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNavigat
                                                             </p>
                                                         </div>
                                                         <span className={`px-3 py-1 rounded-full text-xs font-bold ${order.order_status === 'delivered'
-                                                                ? 'text-green-500 bg-green-500/10'
-                                                                : order.order_status === 'cancelled'
-                                                                    ? 'text-red-500 bg-red-500/10'
-                                                                    : order.order_status === 'shipped'
-                                                                        ? 'text-blue-500 bg-blue-500/10'
-                                                                        : 'text-orange-500 bg-orange-500/10'
+                                                            ? 'text-green-500 bg-green-500/10'
+                                                            : order.order_status === 'cancelled'
+                                                                ? 'text-red-500 bg-red-500/10'
+                                                                : order.order_status === 'shipped'
+                                                                    ? 'text-blue-500 bg-blue-500/10'
+                                                                    : 'text-orange-500 bg-orange-500/10'
                                                             }`}>
                                                             {order.order_status.toUpperCase()}
                                                         </span>
@@ -626,10 +678,10 @@ const AdminShop: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNavigat
                                                     <div className="flex justify-between items-center">
                                                         <p className="text-sm text-slate-400">₹{order.total_amount.toFixed(2)}</p>
                                                         <span className={`text-xs font-bold px-2 py-1 rounded ${order.payment_status === 'paid'
-                                                                ? 'bg-green-500/20 text-green-500'
-                                                                : order.payment_status === 'failed'
-                                                                    ? 'bg-red-500/20 text-red-500'
-                                                                    : 'bg-orange-500/20 text-orange-500'
+                                                            ? 'bg-green-500/20 text-green-500'
+                                                            : order.payment_status === 'failed'
+                                                                ? 'bg-red-500/20 text-red-500'
+                                                                : 'bg-orange-500/20 text-orange-500'
                                                             }`}>
                                                             {order.payment_status.toUpperCase()}
                                                         </span>
@@ -685,6 +737,27 @@ const AdminShop: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNavigat
                     </>
                 )}
             </main>
+
+            <nav className="fixed bottom-0 w-full bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl border-t border-slate-200 dark:border-slate-800 pb-8 pt-3 px-6 max-w-[430px] mx-auto left-1/2 -translate-x-1/2">
+                <div className="flex justify-between items-center">
+                    <button onClick={() => onNavigate('ADMIN_DASHBOARD')} className="flex flex-col items-center gap-1 text-slate-400">
+                        <span className="material-symbols-rounded">dashboard</span>
+                        <span className="text-[10px] font-medium">Dashboard</span>
+                    </button>
+                    <button onClick={() => onNavigate('ADMIN_USERS')} className="flex flex-col items-center gap-1 text-slate-400">
+                        <span className="material-symbols-rounded">people_alt</span>
+                        <span className="text-[10px] font-medium">Members</span>
+                    </button>
+                    <button onClick={() => onNavigate('ADMIN_ORDERS')} className="flex flex-col items-center gap-1 text-slate-400">
+                        <span className="material-symbols-rounded">shopping_cart_checkout</span>
+                        <span className="text-[10px] font-medium">Orders</span>
+                    </button>
+                    <button onClick={() => onNavigate('ADMIN_SHOP')} className="flex flex-col items-center gap-1 text-primary">
+                        <span className="material-symbols-rounded">storefront</span>
+                        <span className="text-[10px] font-medium">Shop</span>
+                    </button>
+                </div>
+            </nav>
         </div>
     );
 };

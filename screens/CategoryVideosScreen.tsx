@@ -4,6 +4,7 @@ import Header from '../components/Header';
 import BottomNav from '../components/BottomNav';
 import { AppScreen } from '../types';
 import { supabase } from '../lib/supabase';
+import { getYoutubeId, convertToEmbedUrl, isYoutubeUrl } from '../lib/videoUtils';
 
 type VideoType = 'yoga' | 'weight-loss' | 'tips' | 'strength' | 'lesson' | 'training';
 
@@ -31,10 +32,8 @@ const CategoryVideosScreen: React.FC<{
     const [sortBy, setSortBy] = useState<'newest' | 'duration' | 'difficulty'>('newest');
     const [filterDifficulty, setFilterDifficulty] = useState<'all' | 'beginner' | 'intermediate' | 'advanced'>('all');
     const [filterPremium, setFilterPremium] = useState(false);
-
-    useEffect(() => {
-        fetchCategoryVideos();
-    }, [categoryId]);
+    const [selectedVideo, setSelectedVideo] = useState<ExploreVideo | null>(null);
+    const [embedUrl, setEmbedUrl] = useState<string | null>(null);
 
     const fetchCategoryVideos = async () => {
         try {
@@ -60,6 +59,21 @@ const CategoryVideosScreen: React.FC<{
         }
     };
 
+    useEffect(() => {
+        fetchCategoryVideos();
+    }, [categoryId]);
+
+    useEffect(() => {
+        if (selectedVideo && isYoutubeUrl(selectedVideo.video_url)) {
+            const url = convertToEmbedUrl(selectedVideo.video_url, true);
+            setEmbedUrl(url);
+        } else if (selectedVideo) {
+            setEmbedUrl(selectedVideo.video_url);
+        } else {
+            setEmbedUrl(null);
+        }
+    }, [selectedVideo]);
+
     const getVideoTypeBadgeColor = (type: string) => {
         const colors: Record<string, string> = {
             'yoga': 'bg-purple-500/20 text-purple-400',
@@ -82,68 +96,6 @@ const CategoryVideosScreen: React.FC<{
             'training': '🏋️'
         };
         return icons[type] || '🎬';
-    };
-
-    const openVideoInNewTab = (video: ExploreVideo) => {
-        let videoUrl = video.video_url;
-
-        if (videoUrl.includes('youtube.com/watch?v=')) {
-            const videoId = videoUrl.split('v=')[1].split('&')[0];
-            videoUrl = `https://www.youtube.com/embed/${videoId}`;
-        } else if (videoUrl.includes('youtu.be/')) {
-            const videoId = videoUrl.split('youtu.be/')[1].split('?')[0];
-            videoUrl = `https://www.youtube.com/embed/${videoId}`;
-        } else if (!videoUrl.includes('embed')) {
-            window.open(videoUrl, '_blank');
-            return;
-        }
-
-        const htmlContent = `
-      <!DOCTYPE html>
-      <html>
-      <head>
-        <title>${video.title}</title>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <style>
-          * { margin: 0; padding: 0; box-sizing: border-box; }
-          body { background: #000; font-family: system-ui, -apple-system, sans-serif; padding: 20px; }
-          .container { max-width: 1200px; margin: 0 auto; }
-          .header { margin-bottom: 20px; }
-          .title { color: #fff; font-size: 28px; font-weight: bold; margin-bottom: 10px; }
-          .meta { color: #888; font-size: 14px; display: flex; gap: 20px; flex-wrap: wrap; margin-bottom: 20px; }
-          .badge { display: inline-block; padding: 4px 12px; background: #1e293b; color: #cbd5e1; border-radius: 20px; font-size: 12px; font-weight: bold; }
-          .video-container { position: relative; width: 100%; padding-bottom: 56.25%; height: 0; overflow: hidden; border-radius: 12px; margin-bottom: 20px; }
-          .video-container iframe { position: absolute; top: 0; left: 0; width: 100%; height: 100%; border: none; }
-          .description { color: #cbd5e1; line-height: 1.6; font-size: 14px; }
-          .back-btn { display: inline-block; margin-bottom: 20px; padding: 10px 20px; background: #3f46e1; color: #fff; text-decoration: none; border-radius: 8px; font-weight: bold; }
-          .back-btn:hover { background: #4f46e1; }
-        </style>
-      </head>
-      <body>
-        <div class="container">
-          <a href="javascript:history.back()" class="back-btn">← Back</a>
-          <div class="header">
-            <div class="title">${video.title}</div>
-            <div class="meta">
-              <span class="badge">${video.type.replace('-', ' ')}</span>
-              ${video.difficulty ? `<span class="badge">${video.difficulty}</span>` : ''}
-              ${video.duration_minutes ? `<span class="badge">⏱️ ${video.duration_minutes}m</span>` : ''}
-              ${video.is_premium ? `<span class="badge">✨ Premium</span>` : ''}
-            </div>
-          </div>
-          <div class="video-container">
-            <iframe src="${videoUrl}" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
-          </div>
-          ${video.description ? `<div class="description"><p>${video.description}</p></div>` : ''}
-        </div>
-      </body>
-      </html>
-    `;
-
-        const blob = new Blob([htmlContent], { type: 'text/html' });
-        const url = URL.createObjectURL(blob);
-        window.open(url, '_blank');
     };
 
     const applySortAndFilter = (videosToFilter: ExploreVideo[]) => {
@@ -249,7 +201,7 @@ const CategoryVideosScreen: React.FC<{
                             {filteredAndSortedVideos.map(video => (
                                 <div
                                     key={video.id}
-                                    onClick={() => openVideoInNewTab(video)}
+                                    onClick={() => setSelectedVideo(video)}
                                     className="group relative aspect-video rounded-2xl overflow-hidden shadow-lg cursor-pointer border border-slate-700 hover:border-primary/50 transition-all hover:shadow-xl hover:shadow-primary/20"
                                 >
                                     {/* Thumbnail */}
@@ -319,6 +271,55 @@ const CategoryVideosScreen: React.FC<{
                     )}
                 </section>
             </main>
+
+            {/* Video Player Modal */}
+            {selectedVideo && (
+                <div className="fixed inset-0 bg-black z-[100] flex flex-col">
+                    <header className="px-5 py-4 flex items-center justify-between bg-slate-950 border-b border-slate-900 text-white">
+                        <div className="flex items-center gap-4">
+                            <button
+                                onClick={() => setSelectedVideo(null)}
+                                className="p-2 bg-slate-900 rounded-full hover:bg-slate-800 transition-colors"
+                            >
+                                <span className="material-symbols-rounded">close</span>
+                            </button>
+                            <div className="flex flex-col">
+                                <h2 className="font-bold text-sm line-clamp-1">{selectedVideo.title}</h2>
+                                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">{selectedVideo.type.replace('-', ' ')}</p>
+                            </div>
+                        </div>
+                    </header>
+
+                    <div className="flex-1 bg-black flex flex-col items-center justify-center p-4">
+                        <div className="relative w-full aspect-video bg-slate-900 rounded-3xl overflow-hidden shadow-2xl border border-slate-800">
+                            {embedUrl ? (
+                                <iframe
+                                    className="w-full h-full"
+                                    src={embedUrl}
+                                    title={selectedVideo.title}
+                                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen"
+                                    allowFullScreen
+                                    frameBorder="0"
+                                ></iframe>
+                            ) : (
+                                <div className="w-full h-full flex flex-col items-center justify-center text-slate-600">
+                                    <span className="material-symbols-rounded text-4xl mb-2">error_outline</span>
+                                    <p className="text-xs font-bold uppercase tracking-widest">Video unavailable</p>
+                                </div>
+                            )}
+                        </div>
+
+                        {selectedVideo.description && (
+                            <div className="mt-8 px-4 w-full max-w-2xl overflow-y-auto custom-scrollbar">
+                                <h3 className="text-primary text-[10px] font-black uppercase tracking-[0.2em] mb-3">Description</h3>
+                                <p className="text-slate-400 text-sm leading-relaxed">
+                                    {selectedVideo.description}
+                                </p>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            )}
 
             <BottomNav active="EXPLORE" onNavigate={onNavigate} />
 

@@ -478,7 +478,7 @@ const AdminDashboard: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNa
         <button onClick={() => onNavigate('DASHBOARD')} className="w-14 h-14 bg-primary text-white rounded-full flex items-center justify-center shadow-lg shadow-primary/30 -mt-10 border-4 border-background-light dark:border-[#0F172A]">
           <span className="material-symbols-rounded text-3xl">home</span>
         </button>
-        <button onClick={() => onNavigate('PROFILE')} className="flex flex-col items-center space-y-1 text-slate-400 dark:text-slate-500 hover:text-primary transition-colors">
+        <button onClick={() => onNavigate('ADMIN_USERS')} className="flex flex-col items-center space-y-1 text-slate-400 dark:text-slate-500 hover:text-primary transition-colors">
           <span className="material-symbols-rounded">people</span>
           <span className="text-[10px] font-medium">Users</span>
         </button>

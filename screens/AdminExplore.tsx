@@ -1,6 +1,7 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
 import { AppScreen } from '../types';
+import { getYoutubeId, convertToEmbedUrl, isYoutubeUrl, getYoutubeThumbnail } from '../lib/videoUtils';
 
 type TabType = 'categories' | 'videos' | 'featured';
 type VideoType = 'yoga' | 'weight-loss' | 'tips' | 'strength' | 'lesson' | 'training';
@@ -56,16 +57,13 @@ const AdminExplore: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNavi
     const [videoBadges, setVideoBadges] = useState('');
     const [videoIsPremium, setVideoIsPremium] = useState(false);
     const [videoIsFeatured, setVideoIsFeatured] = useState(false);
+    const [videoPreviewUrl, setVideoPreviewUrl] = useState<string | null>(null);
+    const [videoPreviewLoading, setVideoPreviewLoading] = useState(false);
 
     // Featured state
     const [featuredVideos, setFeaturedVideos] = useState<ExploreVideo[]>([]);
 
-    useEffect(() => {
-        fetchCategories();
-        fetchVideos();
-    }, []);
-
-    const fetchCategories = async () => {
+    const fetchCategories = useCallback(async () => {
         try {
             const { data, error } = await supabase
                 .from('workout_categories')
@@ -79,9 +77,9 @@ const AdminExplore: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNavi
         } finally {
             setLoading(false);
         }
-    };
+    }, []);
 
-    const fetchVideos = async () => {
+    const fetchVideos = useCallback(async () => {
         try {
             const { data, error } = await supabase
                 .from('explore_videos')
@@ -98,7 +96,12 @@ const AdminExplore: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNavi
         } catch (error) {
             console.error('Error fetching videos:', error);
         }
-    };
+    }, []);
+
+    useEffect(() => {
+        fetchCategories();
+        fetchVideos();
+    }, [fetchCategories, fetchVideos]);
 
     // Category functions
     const handleSaveCategory = async () => {
@@ -153,9 +156,18 @@ const AdminExplore: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNavi
 
     const handleVideoUrlChange = (url: string) => {
         setVideoUrl(url);
+
+        // Generate embed URL for preview if it's a valid YouTube URL
+        if (url && isYoutubeUrl(url)) {
+            const embedUrl = convertToEmbedUrl(url, false);
+            setVideoPreviewUrl(embedUrl);
+        } else {
+            setVideoPreviewUrl(null);
+        }
+
         // Auto-generate thumbnail if it's a YouTube URL and thumbnail is empty
-        if (!videoThumbnail) {
-            const thumbnail = generateYouTubeThumbnail(url);
+        if (!videoThumbnail && isYoutubeUrl(url)) {
+            const thumbnail = getYoutubeThumbnail(url);
             if (thumbnail) {
                 setVideoThumbnail(thumbnail);
             }
@@ -231,6 +243,7 @@ const AdminExplore: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNavi
         setVideoBadges('');
         setVideoIsPremium(false);
         setVideoIsFeatured(false);
+        setVideoPreviewUrl(null);
         setEditingVideo(null);
     };
 
@@ -503,97 +516,135 @@ const AdminExplore: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNavi
             {/* Video Modal */}
             {editingVideo && (
                 <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[100] p-6 flex items-center justify-center overflow-y-auto">
-                    <div className="bg-slate-800 rounded-[2.5rem] p-8 w-full max-w-sm border border-slate-700 my-8">
+                    <div className="bg-slate-800 rounded-[2.5rem] p-8 w-full max-w-2xl border border-slate-700 my-8">
                         <h2 className="text-xl font-bold mb-6">Video Lesson Editor</h2>
-                        <div className="space-y-4 mb-8 max-h-96 overflow-y-auto">
-                            <input
-                                placeholder="Video Title"
-                                className="w-full bg-slate-900 border border-slate-700 rounded-2xl p-4 text-sm text-white placeholder-slate-500"
-                                value={videoTitle}
-                                onChange={e => setVideoTitle(e.target.value)}
-                            />
-                            <textarea
-                                placeholder="Description"
-                                className="w-full bg-slate-900 border border-slate-700 rounded-2xl p-4 text-sm text-white placeholder-slate-500 resize-none h-20"
-                                value={videoDescription}
-                                onChange={e => setVideoDescription(e.target.value)}
-                            />
-                            <input
-                                placeholder="Video URL (YouTube or other)"
-                                className="w-full bg-slate-900 border border-slate-700 rounded-2xl p-4 text-sm text-white placeholder-slate-500"
-                                value={videoUrl}
-                                onChange={e => handleVideoUrlChange(e.target.value)}
-                            />
-                            <input
-                                placeholder="Thumbnail URL"
-                                className="w-full bg-slate-900 border border-slate-700 rounded-2xl p-4 text-sm text-white placeholder-slate-500"
-                                value={videoThumbnail}
-                                onChange={e => setVideoThumbnail(e.target.value)}
-                            />
-                            <select
-                                className="w-full bg-slate-900 border border-slate-700 rounded-2xl p-4 text-sm text-white"
-                                value={videoType}
-                                onChange={e => setVideoType(e.target.value as VideoType)}
-                            >
-                                <option value="yoga">Yoga</option>
-                                <option value="weight-loss">Weight Loss</option>
-                                <option value="tips">Tips</option>
-                                <option value="strength">Strength</option>
-                                <option value="lesson">Lesson</option>
-                                <option value="training">Training</option>
-                            </select>
-                            <select
-                                className="w-full bg-slate-900 border border-slate-700 rounded-2xl p-4 text-sm text-white"
-                                value={videoDifficulty}
-                                onChange={e => setVideoDifficulty(e.target.value as any)}
-                            >
-                                <option value="beginner">Beginner</option>
-                                <option value="intermediate">Intermediate</option>
-                                <option value="advanced">Advanced</option>
-                            </select>
-                            <input
-                                type="number"
-                                placeholder="Duration (minutes)"
-                                className="w-full bg-slate-900 border border-slate-700 rounded-2xl p-4 text-sm text-white placeholder-slate-500"
-                                value={videoDuration}
-                                onChange={e => setVideoDuration(e.target.value)}
-                            />
-                            <select
-                                className="w-full bg-slate-900 border border-slate-700 rounded-2xl p-4 text-sm text-white"
-                                value={videoCategory}
-                                onChange={e => setVideoCategory(e.target.value)}
-                            >
-                                <option value="">Select Category (Optional)</option>
-                                {categories.map(cat => (
-                                    <option key={cat.id} value={cat.id}>{cat.name}</option>
-                                ))}
-                            </select>
-                            <input
-                                placeholder="Badges (comma separated: New, Popular, Trending, etc.)"
-                                className="w-full bg-slate-900 border border-slate-700 rounded-2xl p-4 text-sm text-white placeholder-slate-500"
-                                value={videoBadges}
-                                onChange={e => setVideoBadges(e.target.value)}
-                            />
-                            <div className="flex items-center gap-3 bg-slate-900 p-4 rounded-2xl border border-slate-700">
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                            {/* Form Section */}
+                            <div className="space-y-4 max-h-96 overflow-y-auto">
                                 <input
-                                    type="checkbox"
-                                    id="videoPremium"
-                                    checked={videoIsPremium}
-                                    onChange={e => setVideoIsPremium(e.target.checked)}
+                                    placeholder="Video Title"
+                                    className="w-full bg-slate-900 border border-slate-700 rounded-2xl p-4 text-sm text-white placeholder-slate-500"
+                                    value={videoTitle}
+                                    onChange={e => setVideoTitle(e.target.value)}
                                 />
-                                <label htmlFor="videoPremium" className="text-sm font-bold text-slate-400">Premium Content</label>
+                                <textarea
+                                    placeholder="Description"
+                                    className="w-full bg-slate-900 border border-slate-700 rounded-2xl p-4 text-sm text-white placeholder-slate-500 resize-none h-20"
+                                    value={videoDescription}
+                                    onChange={e => setVideoDescription(e.target.value)}
+                                />
+                                <input
+                                    placeholder="Video URL (YouTube or other)"
+                                    className="w-full bg-slate-900 border border-slate-700 rounded-2xl p-4 text-sm text-white placeholder-slate-500"
+                                    value={videoUrl}
+                                    onChange={e => handleVideoUrlChange(e.target.value)}
+                                />
+                                <input
+                                    placeholder="Thumbnail URL"
+                                    className="w-full bg-slate-900 border border-slate-700 rounded-2xl p-4 text-sm text-white placeholder-slate-500"
+                                    value={videoThumbnail}
+                                    onChange={e => setVideoThumbnail(e.target.value)}
+                                />
+                                <select
+                                    className="w-full bg-slate-900 border border-slate-700 rounded-2xl p-4 text-sm text-white"
+                                    value={videoType}
+                                    onChange={e => setVideoType(e.target.value as VideoType)}
+                                >
+                                    <option value="yoga">Yoga</option>
+                                    <option value="weight-loss">Weight Loss</option>
+                                    <option value="tips">Tips</option>
+                                    <option value="strength">Strength</option>
+                                    <option value="lesson">Lesson</option>
+                                    <option value="training">Training</option>
+                                </select>
+                                <select
+                                    className="w-full bg-slate-900 border border-slate-700 rounded-2xl p-4 text-sm text-white"
+                                    value={videoDifficulty}
+                                    onChange={e => setVideoDifficulty(e.target.value as any)}
+                                >
+                                    <option value="beginner">Beginner</option>
+                                    <option value="intermediate">Intermediate</option>
+                                    <option value="advanced">Advanced</option>
+                                </select>
+                                <input
+                                    type="number"
+                                    placeholder="Duration (minutes)"
+                                    className="w-full bg-slate-900 border border-slate-700 rounded-2xl p-4 text-sm text-white placeholder-slate-500"
+                                    value={videoDuration}
+                                    onChange={e => setVideoDuration(e.target.value)}
+                                />
+                                <select
+                                    className="w-full bg-slate-900 border border-slate-700 rounded-2xl p-4 text-sm text-white"
+                                    value={videoCategory}
+                                    onChange={e => setVideoCategory(e.target.value)}
+                                >
+                                    <option value="">Select Category (Optional)</option>
+                                    {categories.map(cat => (
+                                        <option key={cat.id} value={cat.id}>{cat.name}</option>
+                                    ))}
+                                </select>
+                                <input
+                                    placeholder="Badges (comma separated: New, Popular, Trending, etc.)"
+                                    className="w-full bg-slate-900 border border-slate-700 rounded-2xl p-4 text-sm text-white placeholder-slate-500"
+                                    value={videoBadges}
+                                    onChange={e => setVideoBadges(e.target.value)}
+                                />
+                                <div className="flex items-center gap-3 bg-slate-900 p-4 rounded-2xl border border-slate-700">
+                                    <input
+                                        type="checkbox"
+                                        id="videoPremium"
+                                        checked={videoIsPremium}
+                                        onChange={e => setVideoIsPremium(e.target.checked)}
+                                    />
+                                    <label htmlFor="videoPremium" className="text-sm font-bold text-slate-400">Premium Content</label>
+                                </div>
+                                <div className="flex items-center gap-3 bg-slate-900 p-4 rounded-2xl border border-slate-700">
+                                    <input
+                                        type="checkbox"
+                                        id="videoFeatured"
+                                        checked={videoIsFeatured}
+                                        onChange={e => setVideoIsFeatured(e.target.checked)}
+                                    />
+                                    <label htmlFor="videoFeatured" className="text-sm font-bold text-slate-400">Featured</label>
+                                </div>
                             </div>
-                            <div className="flex items-center gap-3 bg-slate-900 p-4 rounded-2xl border border-slate-700">
-                                <input
-                                    type="checkbox"
-                                    id="videoFeatured"
-                                    checked={videoIsFeatured}
-                                    onChange={e => setVideoIsFeatured(e.target.checked)}
-                                />
-                                <label htmlFor="videoFeatured" className="text-sm font-bold text-slate-400">Featured</label>
+
+                            {/* Preview Section */}
+                            <div className="bg-slate-900 rounded-2xl border border-slate-700 p-4 flex flex-col h-full">
+                                <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3">Video Preview</p>
+                                {videoUrl ? (
+                                    videoPreviewUrl ? (
+                                        <div className="flex-1 rounded-xl overflow-hidden bg-black flex items-center justify-center">
+                                            <iframe
+                                                src={videoPreviewUrl}
+                                                className="w-full h-full border-none"
+                                                title="Video preview"
+                                                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen"
+                                                allowFullScreen
+                                            ></iframe>
+                                        </div>
+                                    ) : (
+                                        <div className="flex-1 rounded-xl bg-black flex flex-col items-center justify-center text-slate-500">
+                                            <span className="material-symbols-rounded text-4xl mb-2">error</span>
+                                            <p className="text-xs text-center">Invalid video URL.<br />Please enter a valid YouTube link.</p>
+                                        </div>
+                                    )
+                                ) : (
+                                    <div className="flex-1 rounded-xl bg-slate-800 flex flex-col items-center justify-center text-slate-500">
+                                        <span className="material-symbols-rounded text-4xl mb-2">videocam</span>
+                                        <p className="text-xs text-center">Enter a video URL to see preview</p>
+                                    </div>
+                                )}
+                                {videoThumbnail && (
+                                    <div className="mt-3">
+                                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Thumbnail</p>
+                                        <img src={videoThumbnail} alt="Thumbnail" className="w-full h-auto rounded-lg object-cover" />
+                                    </div>
+                                )}
                             </div>
                         </div>
-                        <div className="flex gap-3">
+
+                        <div className="flex gap-3 mt-6">
                             <button onClick={resetVideoForm} className="flex-1 bg-slate-700 py-4 rounded-2xl font-black uppercase text-xs hover:bg-slate-600">Cancel</button>
                             <button onClick={handleSaveVideo} className="flex-1 bg-primary text-slate-900 py-4 rounded-2xl font-black uppercase text-xs hover:bg-primary/90">Save</button>
                         </div>

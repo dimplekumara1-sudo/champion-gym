@@ -97,7 +97,7 @@ const Dashboard: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNavigat
             },
             () => {
               // Refetch nutrition goals when they change
-              // fetchNutritionGoals(authUser.id);
+              fetchNutritionGoals(authUser.id);
             }
           )
           .subscribe();
@@ -138,7 +138,7 @@ const Dashboard: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNavigat
         await fetchDailyNutrition(user.id);
 
         // Fetch nutrition goals
-        // await fetchNutritionGoals(user.id);
+        await fetchNutritionGoals(user.id);
 
         // Fetch notifications
         const userNotifications = await notificationService.getUserNotifications(user.id);
@@ -214,37 +214,36 @@ const Dashboard: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNavigat
           totalFat: 0,
         });
       }
-
-
-      const fetchNutritionGoals = async (userId: string) => {
-        try {
-          const { data, error } = await supabase
-            .from('nutrition_goals')
-            .select('*')
-            .eq('user_id', userId)
-            .single();
-
-          if (error && error.code !== 'PGRST116') {
-            throw error;
-          }
-
-          if (data) {
-            setNutritionGoals(data);
-          } else {
-            // Default goals if none exist
-            setNutritionGoals({
-              daily_calories_target: 2000,
-              daily_protein_target: 150,
-              daily_carbs_target: 250,
-              daily_fat_target: 65,
-            });
-          }
-        } catch (error) {
-          console.error('Error fetching nutrition goals:', error);
-        }
-      };
     } catch (error) {
       console.error('Error fetching daily nutrition:', error);
+    }
+  };
+
+  const fetchNutritionGoals = async (userId: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('nutrition_goals')
+        .select('*')
+        .eq('user_id', userId)
+        .single();
+
+      if (error && error.code !== 'PGRST116') {
+        throw error;
+      }
+
+      if (data) {
+        setNutritionGoals(data);
+      } else {
+        // Default goals if none exist
+        setNutritionGoals({
+          daily_calories_target: 2000,
+          daily_protein_target: 150,
+          daily_carbs_target: 250,
+          daily_fat_target: 65,
+        });
+      }
+    } catch (error) {
+      console.error('Error fetching nutrition goals:', error);
     }
   };
 

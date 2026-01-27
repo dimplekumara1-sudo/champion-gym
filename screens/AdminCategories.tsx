@@ -112,40 +112,73 @@ const AdminCategories: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onN
 
       {editingCategory && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[100] p-6 flex items-center justify-center">
-          <div className="bg-slate-800 rounded-[2.5rem] p-8 w-full max-w-sm border border-slate-700">
-            <h2 className="text-xl font-bold mb-6">Category Editor</h2>
-            <div className="space-y-4 mb-8">
-              <input
-                placeholder="Category Name"
-                className="w-full bg-slate-900 border-none rounded-2xl p-4 text-sm"
-                value={name}
-                onChange={e => setName(e.target.value)}
-              />
-              <input
-                placeholder="Icon Name (Material Symbol)"
-                className="w-full bg-slate-900 border-none rounded-2xl p-4 text-sm"
-                value={icon}
-                onChange={e => setIcon(e.target.value)}
-              />
-              <input
-                placeholder="Image URL"
-                className="w-full bg-slate-900 border-none rounded-2xl p-4 text-sm"
-                value={imageUrl}
-                onChange={e => setImageUrl(e.target.value)}
-              />
-              <div className="flex items-center gap-3 bg-slate-900 p-4 rounded-2xl">
-                <input
-                  type="checkbox"
-                  id="isActive"
-                  checked={isActive}
-                  onChange={e => setIsActive(e.target.checked)}
-                />
-                <label htmlFor="isActive" className="text-sm font-bold text-slate-400">Active</label>
+          <div className="bg-slate-800 rounded-[2.5rem] p-8 w-full max-w-sm border border-slate-700 max-h-[90vh] overflow-y-auto custom-scrollbar">
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-xl font-bold">Category Editor</h2>
+              <button onClick={() => setEditingCategory(null)} className="text-slate-400 hover:text-white">
+                <span className="material-symbols-rounded">close</span>
+              </button>
+            </div>
+
+            <div className="space-y-6 mb-8">
+              {/* Basic Information */}
+              <div className="space-y-4">
+                <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-primary/50 px-1">Basic Information</h3>
+                <div className="space-y-3">
+                  <div>
+                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest ml-4 mb-1 block">Category Name</label>
+                    <input
+                      placeholder="e.g. Yoga, HIIT, Strength"
+                      className="w-full bg-slate-900 border-none rounded-2xl p-4 text-sm focus:ring-2 focus:ring-primary/20 transition-all"
+                      value={name}
+                      onChange={e => setName(e.target.value)}
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest ml-4 mb-1 block">Icon Name (Material Symbol)</label>
+                    <input
+                      placeholder="e.g. self_improvement, fitness_center"
+                      className="w-full bg-slate-900 border-none rounded-2xl p-4 text-sm focus:ring-2 focus:ring-primary/20 transition-all"
+                      value={icon}
+                      onChange={e => setIcon(e.target.value)}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Media & Status */}
+              <div className="space-y-4">
+                <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-primary/50 px-1">Media & Status</h3>
+                <div className="space-y-3">
+                  <div>
+                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest ml-4 mb-1 block">Image URL</label>
+                    <input
+                      placeholder="https://images.unsplash.com/..."
+                      className="w-full bg-slate-900 border-none rounded-2xl p-4 text-sm focus:ring-2 focus:ring-primary/20 transition-all"
+                      value={imageUrl}
+                      onChange={e => setImageUrl(e.target.value)}
+                    />
+                  </div>
+                  <div className="flex items-center justify-between bg-slate-900 p-4 rounded-2xl">
+                    <label htmlFor="isActive" className="text-sm font-bold text-slate-400">Active Status</label>
+                    <div className="relative inline-flex items-center cursor-pointer">
+                      <input
+                        type="checkbox"
+                        id="isActive"
+                        className="sr-only peer"
+                        checked={isActive}
+                        onChange={e => setIsActive(e.target.checked)}
+                      />
+                      <div className="w-11 h-6 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary"></div>
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
+
             <div className="flex gap-3">
-              <button onClick={() => setEditingCategory(null)} className="flex-1 bg-slate-700 py-4 rounded-2xl font-black uppercase text-xs">Cancel</button>
-              <button onClick={handleSave} className="flex-1 bg-primary text-slate-900 py-4 rounded-2xl font-black uppercase text-xs">Save</button>
+              <button onClick={() => setEditingCategory(null)} className="flex-1 bg-slate-700/50 hover:bg-slate-700 py-4 rounded-2xl font-black uppercase text-xs transition-colors">Cancel</button>
+              <button onClick={handleSave} className="flex-1 bg-primary text-slate-900 py-4 rounded-2xl font-black uppercase text-xs shadow-lg shadow-primary/20 hover:scale-[1.02] transition-all">Save Category</button>
             </div>
           </div>
         </div>

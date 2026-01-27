@@ -211,22 +211,31 @@ const WorkoutProgram: React.FC<{ onNavigate: (s: AppScreen) => void, onSelectWor
             </div>
             <div className="flex gap-4 overflow-x-auto no-scrollbar pb-2">
               {dayPrograms.map((p: any, i: number) => (
-                <button
-                  key={i}
-                  onClick={() => onSelectWorkout(p.workouts.id, p.id)}
-                  className="flex flex-col items-center min-w-[70px] gap-2 active:scale-95 transition-transform group"
-                >
+                <div key={i} className="flex flex-col items-center min-w-[70px] gap-2 group">
                   <div className="text-xs text-slate-500 font-bold">Day {p.day_of_week}</div>
-                  <div className={`w-16 h-20 rounded-2xl flex flex-col items-center justify-center gap-1 border transition-all ${p.status === 'completed' ? 'bg-primary/20 border-primary/40' : 'bg-slate-800/40 border-slate-700/30'
-                    }`}>
+                  <button
+                    onClick={() => onSelectWorkout(p.workouts.id, p.id)}
+                    className={`w-16 h-20 rounded-2xl flex flex-col items-center justify-center gap-1 border transition-all active:scale-95 ${p.status === 'completed' ? 'bg-primary/20 border-primary/40' : 'bg-slate-800/40 border-slate-700/30'
+                      }`}
+                  >
                     <span className={`material-symbols-rounded text-xl ${p.status === 'completed' ? 'text-primary' : 'text-slate-500'}`} style={{ fontVariationSettings: p.status === 'completed' ? "'FILL' 1" : "'FILL' 0" }}>
                       {p.status === 'completed' ? 'check_circle' : 'fitness_center'}
                     </span>
                     <span className={`text-[8px] uppercase tracking-wider font-black px-1 text-center w-full line-clamp-2 ${p.status === 'completed' ? 'text-primary' : 'text-slate-500'}`}>
                       {p.workouts?.name || 'Workout'}
                     </span>
-                  </div>
-                </button>
+                  </button>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      loadExerciseVideo(p.workouts.id);
+                    }}
+                    className="flex items-center gap-1 bg-primary/10 px-2 py-1 rounded-lg border border-primary/20 hover:bg-primary/20 transition-colors active:scale-90"
+                  >
+                    <span className="material-symbols-rounded text-[14px] text-primary">play_circle</span>
+                    <span className="text-[8px] font-black uppercase text-primary">Video</span>
+                  </button>
+                </div>
               ))}
             </div>
           </div>

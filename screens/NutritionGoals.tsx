@@ -43,6 +43,22 @@ const NutritionGoals: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNa
         fetchUser();
     }, []);
 
+    // Auto-calculate calories from macros
+    useEffect(() => {
+        if (editing) {
+            const calculatedCalories = (editData.daily_protein_target * 4) + 
+                                     (editData.daily_carbs_target * 4) + 
+                                     (editData.daily_fat_target * 9);
+            
+            if (calculatedCalories !== editData.daily_calories_target) {
+                setEditData(prev => ({
+                    ...prev,
+                    daily_calories_target: calculatedCalories
+                }));
+            }
+        }
+    }, [editData.daily_protein_target, editData.daily_carbs_target, editData.daily_fat_target, editing]);
+
     const fetchNutritionGoals = async (uid: string) => {
         try {
             setLoading(true);
@@ -277,9 +293,10 @@ const NutritionGoals: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNa
                                         max="10000"
                                         step="100"
                                         value={editData.daily_calories_target}
-                                        onChange={(e) => setEditData({ ...editData, daily_calories_target: parseInt(e.target.value) })}
-                                        className="w-full h-2 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-primary"
+                                        readOnly
+                                        className="w-full h-2 bg-slate-800 rounded-lg appearance-none cursor-not-allowed accent-primary opacity-60"
                                     />
+                                    <p className="text-[9px] text-slate-500 mt-2 italic text-center">Calorie goal is automatically calculated based on your macros</p>
                                     <div className="flex justify-between text-[10px] text-slate-500 mt-2">
                                         <span>1000</span>
                                         <span>10000</span>

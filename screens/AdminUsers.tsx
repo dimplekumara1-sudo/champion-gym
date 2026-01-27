@@ -592,9 +592,13 @@ const AdminUsers: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNaviga
             <span className="material-symbols-rounded">people_alt</span>
             <span className="text-[10px] font-medium">Members</span>
           </button>
-          <button onClick={() => onNavigate('PROFILE')} className="flex flex-col items-center gap-1 text-slate-400">
-            <span className="material-symbols-rounded">settings</span>
-            <span className="text-[10px] font-medium">Settings</span>
+          <button onClick={() => onNavigate('ADMIN_ORDERS')} className="flex flex-col items-center gap-1 text-slate-400">
+            <span className="material-symbols-rounded">shopping_cart_checkout</span>
+            <span className="text-[10px] font-medium">Orders</span>
+          </button>
+          <button onClick={() => onNavigate('ADMIN_SHOP')} className="flex flex-col items-center gap-1 text-slate-400">
+            <span className="material-symbols-rounded">storefront</span>
+            <span className="text-[10px] font-medium">Shop</span>
           </button>
         </div>
       </nav>
