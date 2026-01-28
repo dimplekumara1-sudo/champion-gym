@@ -88,12 +88,13 @@ const WorkoutProgram: React.FC<{ onNavigate: (s: AppScreen) => void, onSelectWor
 
   const loadExerciseVideo = async (workoutId: string) => {
     try {
-      // Fetch exercises for this workout
+      // Fetch exercises for this workout with proper error handling
       const { data, error } = await supabase
         .from('workout_exercises')
         .select(`
-          *,
-          exercise:exercises(
+          id,
+          exercise_id,
+          exercises:exercise_id (
             id,
             exercise_name,
             men_youtube_url,
@@ -102,29 +103,41 @@ const WorkoutProgram: React.FC<{ onNavigate: (s: AppScreen) => void, onSelectWor
           )
         `)
         .eq('workout_id', workoutId)
-        .limit(1)
-        .single();
+        .limit(1);
 
-      if (error || !data) {
+      if (error) {
+        console.error('Error fetching exercises:', error);
+        alert('Failed to load exercises: ' + error.message);
+        return;
+      }
+
+      if (!data || data.length === 0) {
         alert('No exercises found for this workout');
         return;
       }
 
-      const exercise = data.exercise;
+      const exerciseRecord = data[0];
+      const exercise = exerciseRecord.exercises;
+
+      if (!exercise) {
+        alert('Exercise data not found');
+        return;
+      }
+
       // Select video based on user gender
-      const videoUrl = userGender === 'female'
+      const videoUrl = userGender?.toLowerCase() === 'female'
         ? exercise.women_youtube_url || exercise.youtube_url
         : exercise.men_youtube_url || exercise.youtube_url;
 
       // Open video in new tab instead of modal
       if (videoUrl) {
-        openVideoInNewTab(exercise.exercise_name, videoUrl);
+        openVideoInNewTab(exercise.exercise_name || 'Exercise Video', videoUrl);
       } else {
         alert('No video available for this exercise');
       }
     } catch (error) {
       console.error('Error loading exercise video:', error);
-      alert('Failed to load exercise video');
+      alert('Failed to load exercise video: ' + (error instanceof Error ? error.message : 'Unknown error'));
     }
   };
 

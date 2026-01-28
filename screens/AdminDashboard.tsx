@@ -461,6 +461,22 @@ const AdminDashboard: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNa
               </div>
               <span className="material-symbols-rounded text-slate-400">chevron_right</span>
             </div>
+
+
+
+            <div
+              onClick={() => onNavigate('ADMIN_PT')}
+              className="flex items-center p-4 bg-white dark:bg-[#1E293B] rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800 active:scale-[0.98] transition-all cursor-pointer"
+            >
+              <div className="w-10 h-10 rounded-xl bg-green-500/10 flex items-center justify-center mr-4">
+                <span className="material-symbols-rounded text-green-500 text-xl">groups</span>
+              </div>
+              <div className="flex-1 text-left">
+                <h4 className="text-sm font-semibold text-dark">PT Management</h4>
+                <p className="text-xs text-slate-500 dark:text-slate-400">Trainers & Sessions</p>
+              </div>
+              <span className="material-symbols-rounded text-slate-400">chevron_right</span>
+            </div>
           </div>
         </div>
       </main>

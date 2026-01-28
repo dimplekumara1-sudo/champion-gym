@@ -115,15 +115,20 @@ const WorkoutDetail: React.FC<{ workoutId: string | null, programId: string | nu
         supabase.from('workouts').select('*').eq('id', workoutId).single(),
         supabase.from('workout_exercises').select(`
           *,
-          exercises (*)
+          exercises:exercise_id (*)
         `).eq('workout_id', workoutId).order('sort_order')
       ]);
 
+      if (wRes.error) {
+        console.error('Error fetching workout:', wRes.error);
+        throw new Error(`Failed to fetch workout: ${wRes.error.message}`);
+      }
+
       setWorkout(wRes.data);
-      const exerciseData = eRes.data?.map(ex => ({
+      const exerciseData = (eRes.data || []).map(ex => ({
         ...ex,
         done: false
-      })) || [];
+      }));
       setExercises(exerciseData);
 
       // Prioritize workout video, then first exercise video (gender-specific)

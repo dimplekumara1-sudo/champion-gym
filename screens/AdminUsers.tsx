@@ -22,6 +22,7 @@ const AdminUsers: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNaviga
   const [collectionAmount, setCollectionAmount] = useState('');
   const [collectionMethod, setCollectionMethod] = useState('cash');
   const [userPaymentHistory, setUserPaymentHistory] = useState<any[]>([]);
+  const [exportModal, setExportModal] = useState(false);
 
   useEffect(() => {
     fetchUsers();
@@ -448,6 +449,74 @@ const AdminUsers: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNaviga
     return Math.ceil(diff / (1000 * 60 * 60 * 24));
   };
 
+  const exportToCSV = () => {
+    try {
+      const headers = ['Full Name', 'Email', 'Phone', 'Plan', 'Status', 'Payment Status', 'Paid Amount', 'Due Amount', 'Expiry Date', 'Role'];
+      const data = filteredUsers.map(user => [
+        user.full_name || '',
+        user.email || '',
+        user.phone_number || '',
+        user.plan || 'Free',
+        user.approval_status || 'pending',
+        user.payment_status || 'unpaid',
+        user.paid_amount || 0,
+        user.due_amount || 0,
+        user.plan_expiry_date ? new Date(user.plan_expiry_date).toLocaleDateString() : 'N/A',
+        user.role || 'user'
+      ]);
+
+      const csvContent = [
+        headers.join(','),
+        ...data.map(row => row.map(cell => `"${cell}"`).join(','))
+      ].join('\n');
+
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const link = document.createElement('a');
+      const url = URL.createObjectURL(blob);
+      link.setAttribute('href', url);
+      link.setAttribute('download', `users_${new Date().toISOString().split('T')[0]}.csv`);
+      link.style.visibility = 'hidden';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      alert('Data exported to CSV successfully!');
+      setExportModal(false);
+    } catch (error) {
+      console.error('Error exporting to CSV:', error);
+      alert('Failed to export data');
+    }
+  };
+
+  const exportToXLSX = async () => {
+    try {
+      // Dynamic import for xlsx library
+      const XLSX = await import('xlsx');
+
+      const data = filteredUsers.map(user => ({
+        'Full Name': user.full_name || '',
+        'Email': user.email || '',
+        'Phone': user.phone_number || '',
+        'Plan': user.plan || 'Free',
+        'Status': user.approval_status || 'pending',
+        'Payment Status': user.payment_status || 'unpaid',
+        'Paid Amount': user.paid_amount || 0,
+        'Due Amount': user.due_amount || 0,
+        'Expiry Date': user.plan_expiry_date ? new Date(user.plan_expiry_date).toLocaleDateString() : 'N/A',
+        'Role': user.role || 'user'
+      }));
+
+      const ws = XLSX.utils.json_to_sheet(data);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'Users');
+      XLSX.writeFile(wb, `users_${new Date().toISOString().split('T')[0]}.xlsx`);
+      alert('Data exported to XLSX successfully!');
+      setExportModal(false);
+    } catch (error) {
+      console.error('Error exporting to XLSX:', error);
+      alert('Failed to export data. Make sure xlsx library is installed (npm install xlsx)');
+    }
+  };
+
   const isExpiringSoon = (expiryDate: string) => {
     const days = getDaysUntilExpiry(expiryDate);
     return days > 0 && days <= 5;
@@ -462,9 +531,14 @@ const AdminUsers: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNaviga
       <header className="px-5 pt-4 pb-2">
         <div className="flex items-center justify-between mb-6">
           <h1 className="text-2xl font-bold tracking-tight text-white">User Management</h1>
-          <button onClick={() => onNavigate('ADMIN_DASHBOARD')} className="bg-slate-800 text-white p-2 rounded-full flex items-center justify-center">
-            <span className="material-symbols-rounded">arrow_back</span>
-          </button>
+          <div className="flex gap-2">
+            <button onClick={() => setExportModal(true)} className="bg-slate-800 text-white p-2 rounded-full flex items-center justify-center hover:bg-slate-700 transition-colors" title="Export data">
+              <span className="material-symbols-rounded">download</span>
+            </button>
+            <button onClick={() => onNavigate('ADMIN_DASHBOARD')} className="bg-slate-800 text-white p-2 rounded-full flex items-center justify-center hover:bg-slate-700 transition-colors">
+              <span className="material-symbols-rounded">arrow_back</span>
+            </button>
+          </div>
         </div>
         <div className="relative mb-4">
           <span className="material-symbols-rounded absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">search</span>
@@ -1048,6 +1122,48 @@ const AdminUsers: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNaviga
                   Confirm
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Export Modal */}
+      {exportModal && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[110] flex items-center justify-center p-6">
+          <div className="bg-[#1f2937] w-full max-w-sm rounded-3xl overflow-hidden border border-slate-800 shadow-2xl">
+            <div className="p-6">
+              <h2 className="text-xl font-bold text-white mb-2">Export Data</h2>
+              <p className="text-slate-400 text-sm mb-6">Select format to export {filteredUsers.length} users</p>
+
+              <div className="space-y-3 mb-6">
+                <button
+                  onClick={exportToCSV}
+                  className="w-full bg-slate-800 hover:bg-slate-700 text-white font-bold py-4 rounded-xl transition-colors flex items-center justify-center gap-3 border border-slate-700"
+                >
+                  <span className="material-symbols-rounded">description</span>
+                  <div className="text-left">
+                    <p className="text-sm font-bold">Export as CSV</p>
+                    <p className="text-xs text-slate-400">Compatible with Excel & spreadsheets</p>
+                  </div>
+                </button>
+                <button
+                  onClick={exportToXLSX}
+                  className="w-full bg-slate-800 hover:bg-slate-700 text-white font-bold py-4 rounded-xl transition-colors flex items-center justify-center gap-3 border border-slate-700"
+                >
+                  <span className="material-symbols-rounded">table_chart</span>
+                  <div className="text-left">
+                    <p className="text-sm font-bold">Export as XLSX</p>
+                    <p className="text-xs text-slate-400">Formatted Excel spreadsheet</p>
+                  </div>
+                </button>
+              </div>
+
+              <button
+                onClick={() => setExportModal(false)}
+                className="w-full bg-primary text-slate-900 font-bold py-3 rounded-xl hover:bg-green-600 transition-colors"
+              >
+                Cancel
+              </button>
             </div>
           </div>
         </div>

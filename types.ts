@@ -43,7 +43,9 @@ export type AppScreen =
   | 'ADMIN_ORDERS'
   | 'ADMIN_EXPLORE'
   | 'ADMIN_INDIAN_FOODS'
-  | 'ADMIN_FOOD_APPROVALS';
+  | 'ADMIN_FOOD_APPROVALS'
+  | 'ADMIN_PT'
+  | 'ADMIN_ANNOUNCEMENTS';
 
 export type NavTab = 'HOME' | 'EXPLORE' | 'ADD' | 'STATS' | 'MY_WORKOUTS';
 
@@ -83,4 +85,22 @@ export interface Plan {
   popular: boolean;
   duration_months: number;
   updated_at: string;
+}
+
+export interface WaterIntake {
+  id: number;
+  user_id: string;
+  amount_ml: number;
+  date: string;
+  created_at: string;
+}
+
+export interface Announcement {
+  id: number;
+  title: string;
+  content: string;
+  priority: 'low' | 'medium' | 'high';
+  is_active: boolean;
+  created_at: string;
+  created_by: string | null;
 }

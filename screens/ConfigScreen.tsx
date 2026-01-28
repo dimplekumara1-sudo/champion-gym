@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { AppScreen } from '../types';
+import { AppScreen, Announcement } from '../types';
 import { supabase } from '../lib/supabase';
 
 interface ConfigScreenProps {
@@ -11,9 +11,18 @@ const ConfigScreen: React.FC<ConfigScreenProps> = ({ onNavigate }) => {
     const [foodCount, setFoodCount] = useState(0);
     const [reviewCount, setReviewCount] = useState(0);
     const [loading, setLoading] = useState(true);
+    const [announcements, setAnnouncements] = useState<Announcement[]>([]);
+    const [showAnnouncementModal, setShowAnnouncementModal] = useState(false);
+    const [editingAnnouncement, setEditingAnnouncement] = useState<Partial<Announcement> | null>(null);
+    
+    const [title, setTitle] = useState('');
+    const [content, setContent] = useState('');
+    const [priority, setPriority] = useState<'low' | 'medium' | 'high'>('medium');
+    const [isActive, setIsActive] = useState(true);
 
     useEffect(() => {
         fetchCounts();
+        fetchAnnouncements();
     }, []);
 
     const fetchCounts = async () => {
@@ -33,6 +42,89 @@ const ConfigScreen: React.FC<ConfigScreenProps> = ({ onNavigate }) => {
         } finally {
             setLoading(false);
         }
+    };
+
+    const fetchAnnouncements = async () => {
+        try {
+            const { data, error } = await supabase
+                .from('announcements')
+                .select('*')
+                .order('created_at', { ascending: false });
+
+            if (error) throw error;
+            setAnnouncements(data || []);
+        } catch (error) {
+            console.error('Error fetching announcements:', error);
+        }
+    };
+
+    const handleSaveAnnouncement = async () => {
+        if (!title || !content) return alert('Title and Content are required');
+        try {
+            const { data: { user } } = await supabase.auth.getUser();
+            const announcementData = { 
+                title, 
+                content, 
+                priority, 
+                is_active: isActive,
+                created_by: user?.id
+            };
+
+            if (editingAnnouncement?.id) {
+                const { error } = await supabase
+                    .from('announcements')
+                    .update(announcementData)
+                    .eq('id', editingAnnouncement.id);
+                if (error) throw error;
+            } else {
+                const { error } = await supabase
+                    .from('announcements')
+                    .insert([announcementData]);
+                if (error) throw error;
+            }
+            
+            setEditingAnnouncement(null);
+            resetAnnouncementForm();
+            fetchAnnouncements();
+        } catch (error) {
+            console.error('Error saving announcement:', error);
+            alert('Failed to save announcement');
+        }
+    };
+
+    const handleDeleteAnnouncement = async (id: number) => {
+        if (!window.confirm('Are you sure you want to delete this announcement?')) return;
+        try {
+            const { error } = await supabase
+                .from('announcements')
+                .delete()
+                .eq('id', id);
+            if (error) throw error;
+            fetchAnnouncements();
+        } catch (error) {
+            console.error('Error deleting announcement:', error);
+        }
+    };
+
+    const resetAnnouncementForm = () => {
+        setTitle('');
+        setContent('');
+        setPriority('medium');
+        setIsActive(true);
+    };
+
+    const openAnnouncementModal = (announcement?: Announcement) => {
+        if (announcement) {
+            setEditingAnnouncement(announcement);
+            setTitle(announcement.title);
+            setContent(announcement.content);
+            setPriority(announcement.priority);
+            setIsActive(announcement.is_active);
+        } else {
+            setEditingAnnouncement({});
+            resetAnnouncementForm();
+        }
+        setShowAnnouncementModal(true);
     };
 
     return (
@@ -143,6 +235,31 @@ const ConfigScreen: React.FC<ConfigScreenProps> = ({ onNavigate }) => {
                                 <h2 className="text-lg font-bold mb-2">Food Approvals</h2>
                                 <p className="text-sm text-slate-400">
                                     Review and approve user-submitted food items before adding them to the database.
+                                </p>
+                            </div>
+                            <div className="flex-shrink-0 mt-1">
+                                <span className="material-symbols-rounded text-slate-500 group-hover:text-primary transition-colors">
+                                    arrow_forward
+                                </span>
+                            </div>
+                        </div>
+                    </button>
+
+                    {/* Announcements Button */}
+                    <button
+                        onClick={() => onNavigate('ADMIN_ANNOUNCEMENTS')}
+                        className="w-full p-6 rounded-lg border border-white/10 hover:border-primary/50 bg-white/5 hover:bg-primary/10 transition-all group"
+                    >
+                        <div className="flex items-start gap-4">
+                            <div className="flex-shrink-0 mt-1">
+                                <span className="material-symbols-rounded text-3xl text-orange-500 group-hover:scale-110 transition-transform">
+                                    campaign
+                                </span>
+                            </div>
+                            <div className="text-left flex-1">
+                                <h2 className="text-lg font-bold mb-2">Announcements</h2>
+                                <p className="text-sm text-slate-400">
+                                    Broadcast gym news and updates to all members.
                                 </p>
                             </div>
                             <div className="flex-shrink-0 mt-1">

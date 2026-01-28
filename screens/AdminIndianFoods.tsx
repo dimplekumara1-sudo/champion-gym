@@ -24,6 +24,7 @@ const AdminIndianFoods: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ on
     const [showAddSingle, setShowAddSingle] = useState(false);
     const [showEditModal, setShowEditModal] = useState(false);
     const [editingFood, setEditingFood] = useState<IndianFood | null>(null);
+    const [exportModal, setExportModal] = useState(false);
     const [singleFoodData, setSingleFoodData] = useState({
         dish_name: '',
         calories_kcal: 0,
@@ -291,6 +292,78 @@ const AdminIndianFoods: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ on
         setShowEditModal(true);
     };
 
+    const exportToCSV = () => {
+        try {
+            const headers = ['Dish Name', 'Calories (kcal)', 'Protein (g)', 'Carbohydrates (g)', 'Fats (g)', 'Free Sugar (g)', 'Fiber (g)', 'Sodium (mg)', 'Calcium (mg)', 'Iron (mg)', 'Vitamin C (mg)', 'Folate (mcg)'];
+            const data = foods.map(food => [
+                food.dish_name || '',
+                food.calories_kcal || 0,
+                food.protein_g || 0,
+                food.carbohydrates_g || 0,
+                food.fats_g || 0,
+                food.free_sugar_g || 0,
+                food.fibre_g || 0,
+                food.sodium_mg || 0,
+                food.calcium_mg || 0,
+                food.iron_mg || 0,
+                food.vitamin_c_mg || 0,
+                food.folate_mcg || 0
+            ]);
+
+            const csvContent = [
+                headers.join(','),
+                ...data.map(row => row.map(cell => `"${cell}"`).join(','))
+            ].join('\n');
+
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement('a');
+            const url = URL.createObjectURL(blob);
+            link.setAttribute('href', url);
+            link.setAttribute('download', `indian_foods_${new Date().toISOString().split('T')[0]}.csv`);
+            link.style.visibility = 'hidden';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            alert('Data exported to CSV successfully!');
+            setExportModal(false);
+        } catch (error) {
+            console.error('Error exporting to CSV:', error);
+            alert('Failed to export data');
+        }
+    };
+
+    const exportToXLSX = async () => {
+        try {
+            // Dynamic import for xlsx library
+            const XLSX = await import('xlsx');
+
+            const data = foods.map(food => ({
+                'Dish Name': food.dish_name || '',
+                'Calories (kcal)': food.calories_kcal || 0,
+                'Protein (g)': food.protein_g || 0,
+                'Carbohydrates (g)': food.carbohydrates_g || 0,
+                'Fats (g)': food.fats_g || 0,
+                'Free Sugar (g)': food.free_sugar_g || 0,
+                'Fiber (g)': food.fibre_g || 0,
+                'Sodium (mg)': food.sodium_mg || 0,
+                'Calcium (mg)': food.calcium_mg || 0,
+                'Iron (mg)': food.iron_mg || 0,
+                'Vitamin C (mg)': food.vitamin_c_mg || 0,
+                'Folate (mcg)': food.folate_mcg || 0
+            }));
+
+            const ws = XLSX.utils.json_to_sheet(data);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, 'Indian Foods');
+            XLSX.writeFile(wb, `indian_foods_${new Date().toISOString().split('T')[0]}.xlsx`);
+            alert('Data exported to XLSX successfully!');
+            setExportModal(false);
+        } catch (error) {
+            console.error('Error exporting to XLSX:', error);
+            alert('Failed to export data. Make sure xlsx library is installed (npm install xlsx)');
+        }
+    };
+
     const totalPages = Math.ceil(totalItems / itemsPerPage);
 
     return (
@@ -302,18 +375,29 @@ const AdminIndianFoods: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ on
                         <div className="flex items-center space-x-3">
                             <button
                                 onClick={() => onNavigate('ADMIN_DASHBOARD')}
-                                className="p-2 hover:bg-slate-700/50 rounded-lg transition-colors"
+                                aria-label="Back to Admin Dashboard"
+                                className="p-2 hover:bg-slate-700/50 rounded-lg transition-colors focus-visible:ring-2 focus-visible:ring-primary"
                             >
-                                ← Back
+                                <span aria-hidden="true">←</span> Back
                             </button>
                             <div>
                                 <h1 className="text-3xl font-bold text-white">Indian Foods Management</h1>
                                 <p className="text-slate-400 text-sm">Upload and manage food nutrition data</p>
                             </div>
                         </div>
-                        <div className="text-right">
-                            <div className="text-2xl font-bold text-primary">{totalItems}</div>
-                            <div className="text-sm text-slate-400">Total Items</div>
+                        <div className="flex gap-2 items-center">
+                            <button
+                                onClick={() => setExportModal(true)}
+                                aria-label="Export data"
+                                className="p-3 hover:bg-slate-700/50 rounded-lg transition-colors focus-visible:ring-2 focus-visible:ring-primary"
+                                title="Export data"
+                            >
+                                <span className="material-symbols-rounded">download</span>
+                            </button>
+                            <div className="text-right">
+                                <div className="text-2xl font-bold text-primary">{totalItems}</div>
+                                <div className="text-sm text-slate-400">Total Items</div>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -337,7 +421,7 @@ const AdminIndianFoods: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ on
                 <div className="mb-8 bg-slate-800/50 border border-slate-700 rounded-lg p-6">
                     <div className="flex justify-between items-center mb-6">
                         <h2 className="text-2xl font-bold flex items-center space-x-2">
-                            <span>➕</span>
+                            <span aria-hidden="true">➕</span>
                             <span>Add Single Food Item</span>
                         </h2>
                         <button
@@ -370,90 +454,122 @@ const AdminIndianFoods: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ on
                                 </div>
 
                                 <div className="space-y-2">
-                                    <label className="text-xs font-bold text-slate-400 uppercase tracking-widest ml-1">Calories (kcal)</label>
+                                    <label htmlFor="calories" className="text-xs font-bold text-slate-400 uppercase tracking-widest ml-1">Calories (kcal)</label>
                                     <input
+                                        id="calories"
                                         type="number"
+                                        name="calories_kcal"
+                                        inputMode="decimal"
                                         placeholder="0.0"
                                         value={singleFoodData.calories_kcal || ''}
                                         onChange={(e) => setSingleFoodData({ ...singleFoodData, calories_kcal: parseFloat(e.target.value) || 0 })}
-                                        className="w-full px-4 py-3 bg-slate-900/50 border border-slate-700 rounded-xl text-white placeholder-slate-600 focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
+                                        autoComplete="off"
+                                        className="w-full px-4 py-3 bg-slate-900/50 border border-slate-700 rounded-xl text-white placeholder-slate-600 focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary transition-all"
                                     />
                                 </div>
 
                                 <div className="space-y-2">
-                                    <label className="text-xs font-bold text-slate-400 uppercase tracking-widest ml-1">Protein (g)</label>
+                                    <label htmlFor="protein" className="text-xs font-bold text-slate-400 uppercase tracking-widest ml-1">Protein (g)</label>
                                     <input
+                                        id="protein"
                                         type="number"
+                                        name="protein_g"
+                                        inputMode="decimal"
                                         placeholder="0.0"
                                         value={singleFoodData.protein_g || ''}
                                         onChange={(e) => setSingleFoodData({ ...singleFoodData, protein_g: parseFloat(e.target.value) || 0 })}
-                                        className="w-full px-4 py-3 bg-slate-900/50 border border-slate-700 rounded-xl text-white placeholder-slate-600 focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
+                                        autoComplete="off"
+                                        className="w-full px-4 py-3 bg-slate-900/50 border border-slate-700 rounded-xl text-white placeholder-slate-600 focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary transition-all"
                                     />
                                 </div>
 
                                 <div className="space-y-2">
-                                    <label className="text-xs font-bold text-slate-400 uppercase tracking-widest ml-1">Carbs (g)</label>
+                                    <label htmlFor="carbs" className="text-xs font-bold text-slate-400 uppercase tracking-widest ml-1">Carbs (g)</label>
                                     <input
+                                        id="carbs"
                                         type="number"
+                                        name="carbohydrates_g"
+                                        inputMode="decimal"
                                         placeholder="0.0"
                                         value={singleFoodData.carbohydrates_g || ''}
                                         onChange={(e) => setSingleFoodData({ ...singleFoodData, carbohydrates_g: parseFloat(e.target.value) || 0 })}
-                                        className="w-full px-4 py-3 bg-slate-900/50 border border-slate-700 rounded-xl text-white placeholder-slate-600 focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
+                                        autoComplete="off"
+                                        className="w-full px-4 py-3 bg-slate-900/50 border border-slate-700 rounded-xl text-white placeholder-slate-600 focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary transition-all"
                                     />
                                 </div>
 
                                 <div className="space-y-2">
-                                    <label className="text-xs font-bold text-slate-400 uppercase tracking-widest ml-1">Fats (g)</label>
+                                    <label htmlFor="fats" className="text-xs font-bold text-slate-400 uppercase tracking-widest ml-1">Fats (g)</label>
                                     <input
+                                        id="fats"
                                         type="number"
+                                        name="fats_g"
+                                        inputMode="decimal"
                                         placeholder="0.0"
                                         value={singleFoodData.fats_g || ''}
                                         onChange={(e) => setSingleFoodData({ ...singleFoodData, fats_g: parseFloat(e.target.value) || 0 })}
-                                        className="w-full px-4 py-3 bg-slate-900/50 border border-slate-700 rounded-xl text-white placeholder-slate-600 focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
+                                        autoComplete="off"
+                                        className="w-full px-4 py-3 bg-slate-900/50 border border-slate-700 rounded-xl text-white placeholder-slate-600 focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary transition-all"
                                     />
                                 </div>
 
                                 <div className="space-y-2">
-                                    <label className="text-xs font-bold text-slate-400 uppercase tracking-widest ml-1">Fibre (g)</label>
+                                    <label htmlFor="fibre" className="text-xs font-bold text-slate-400 uppercase tracking-widest ml-1">Fibre (g)</label>
                                     <input
+                                        id="fibre"
                                         type="number"
+                                        name="fibre_g"
+                                        inputMode="decimal"
                                         placeholder="0.0"
                                         value={singleFoodData.fibre_g || ''}
                                         onChange={(e) => setSingleFoodData({ ...singleFoodData, fibre_g: parseFloat(e.target.value) || 0 })}
-                                        className="w-full px-4 py-3 bg-slate-900/50 border border-slate-700 rounded-xl text-white placeholder-slate-600 focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
+                                        autoComplete="off"
+                                        className="w-full px-4 py-3 bg-slate-900/50 border border-slate-700 rounded-xl text-white placeholder-slate-600 focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary transition-all"
                                     />
                                 </div>
 
                                 <div className="space-y-2">
-                                    <label className="text-xs font-bold text-slate-400 uppercase tracking-widest ml-1">Sodium (mg)</label>
+                                    <label htmlFor="sodium" className="text-xs font-bold text-slate-400 uppercase tracking-widest ml-1">Sodium (mg)</label>
                                     <input
+                                        id="sodium"
                                         type="number"
+                                        name="sodium_mg"
+                                        inputMode="decimal"
                                         placeholder="0.0"
                                         value={singleFoodData.sodium_mg || ''}
                                         onChange={(e) => setSingleFoodData({ ...singleFoodData, sodium_mg: parseFloat(e.target.value) || 0 })}
-                                        className="w-full px-4 py-3 bg-slate-900/50 border border-slate-700 rounded-xl text-white placeholder-slate-600 focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
+                                        autoComplete="off"
+                                        className="w-full px-4 py-3 bg-slate-900/50 border border-slate-700 rounded-xl text-white placeholder-slate-600 focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary transition-all"
                                     />
                                 </div>
 
                                 <div className="space-y-2">
-                                    <label className="text-xs font-bold text-slate-400 uppercase tracking-widest ml-1">Calcium (mg)</label>
+                                    <label htmlFor="calcium" className="text-xs font-bold text-slate-400 uppercase tracking-widest ml-1">Calcium (mg)</label>
                                     <input
+                                        id="calcium"
                                         type="number"
+                                        name="calcium_mg"
+                                        inputMode="decimal"
                                         placeholder="0.0"
                                         value={singleFoodData.calcium_mg || ''}
                                         onChange={(e) => setSingleFoodData({ ...singleFoodData, calcium_mg: parseFloat(e.target.value) || 0 })}
-                                        className="w-full px-4 py-3 bg-slate-900/50 border border-slate-700 rounded-xl text-white placeholder-slate-600 focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
+                                        autoComplete="off"
+                                        className="w-full px-4 py-3 bg-slate-900/50 border border-slate-700 rounded-xl text-white placeholder-slate-600 focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary transition-all"
                                     />
                                 </div>
 
                                 <div className="space-y-2">
-                                    <label className="text-xs font-bold text-slate-400 uppercase tracking-widest ml-1">Iron (mg)</label>
+                                    <label htmlFor="iron" className="text-xs font-bold text-slate-400 uppercase tracking-widest ml-1">Iron (mg)</label>
                                     <input
+                                        id="iron"
                                         type="number"
+                                        name="iron_mg"
+                                        inputMode="decimal"
                                         placeholder="0.0"
                                         value={singleFoodData.iron_mg || ''}
                                         onChange={(e) => setSingleFoodData({ ...singleFoodData, iron_mg: parseFloat(e.target.value) || 0 })}
-                                        className="w-full px-4 py-3 bg-slate-900/50 border border-slate-700 rounded-xl text-white placeholder-slate-600 focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
+                                        autoComplete="off"
+                                        className="w-full px-4 py-3 bg-slate-900/50 border border-slate-700 rounded-xl text-white placeholder-slate-600 focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary transition-all"
                                     />
                                 </div>
 
@@ -462,7 +578,7 @@ const AdminIndianFoods: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ on
                                     disabled={uploading || !singleFoodData.dish_name.trim()}
                                     className="col-span-1 md:col-span-2 lg:col-span-3 mt-4 px-6 py-4 bg-primary text-slate-900 font-black uppercase tracking-widest rounded-2xl hover:bg-green-500 disabled:bg-slate-700 disabled:text-slate-500 transition-all shadow-lg shadow-primary/20 active:scale-[0.98]"
                                 >
-                                    {uploading ? '⏳ Adding Food...' : '✓ Add Food Item'}
+                                    {uploading ? '⏳ Adding Food…' : '✓ Add Food Item'}
                                 </button>
                             </div>
                         </div>
@@ -472,7 +588,7 @@ const AdminIndianFoods: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ on
                 {/* Upload Section */}
                 <div className="mb-8 bg-slate-800/50 border border-slate-700 rounded-lg p-6">
                     <h2 className="text-2xl font-bold mb-6 flex items-center space-x-2">
-                        <span>📤</span>
+                        <span aria-hidden="true">📤</span>
                         <span>Upload Food Data</span>
                     </h2>
 
@@ -494,9 +610,9 @@ const AdminIndianFoods: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ on
                                     />
                                     <label
                                         htmlFor="file-upload"
-                                        className="block border-2 border-dashed border-slate-600 rounded-lg p-8 text-center cursor-pointer hover:border-primary hover:bg-primary/5 transition-all"
+                                        className="block border-2 border-dashed border-slate-600 rounded-lg p-8 text-center cursor-pointer hover:border-primary hover:bg-primary/5 transition-all focus-within:ring-2 focus-within:ring-primary"
                                     >
-                                        <div className="text-4xl mb-2">📁</div>
+                                        <div className="text-4xl mb-2" aria-hidden="true">📁</div>
                                         <div className="font-semibold text-slate-300">Click to upload or drag and drop</div>
                                         <div className="text-sm text-slate-400 mt-1">CSV or XLSX files supported</div>
                                     </label>
@@ -505,9 +621,9 @@ const AdminIndianFoods: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ on
 
                             <button
                                 onClick={downloadCSVTemplate}
-                                className="mt-4 w-full px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg transition-colors text-sm font-semibold"
+                                className="mt-4 w-full px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg transition-colors text-sm font-semibold focus-visible:ring-2 focus-visible:ring-slate-500"
                             >
-                                📥 Download CSV Template
+                                <span aria-hidden="true">📥</span> Download CSV Template
                             </button>
                         </div>
 
@@ -530,8 +646,7 @@ const AdminIndianFoods: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ on
                 {showPreview && parsedRecords.length > 0 && (
                     <div className="mb-8 bg-slate-800/50 border border-slate-700 rounded-lg p-6">
                         <h2 className="text-2xl font-bold mb-4 flex items-center space-x-2">
-                            <span>👀</span>
-                            <span>Preview ({parsedRecords.length} items)</span>
+                            <span aria-hidden="true">👀</span>
                         </h2>
 
                         <div className="overflow-x-auto mb-4">
@@ -569,16 +684,16 @@ const AdminIndianFoods: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ on
                             <button
                                 onClick={uploadParsedRecords}
                                 disabled={uploading}
-                                className="flex-1 px-6 py-3 bg-green-600 hover:bg-green-700 disabled:bg-slate-600 rounded-lg font-semibold transition-colors"
+                                className="flex-1 px-6 py-3 bg-green-600 hover:bg-green-700 disabled:bg-slate-600 rounded-lg font-semibold transition-colors focus-visible:ring-2 focus-visible:ring-green-500"
                             >
-                                {uploading ? '⏳ Uploading...' : '✓ Upload All Items'}
+                                {uploading ? '⏳ Uploading…' : '✓ Upload All Items'}
                             </button>
                             <button
                                 onClick={() => {
                                     setShowPreview(false);
                                     setParsedRecords([]);
                                 }}
-                                className="px-6 py-3 bg-slate-700 hover:bg-slate-600 rounded-lg font-semibold transition-colors"
+                                className="px-6 py-3 bg-slate-700 hover:bg-slate-600 rounded-lg font-semibold transition-colors focus-visible:ring-2 focus-visible:ring-slate-500"
                             >
                                 Cancel
                             </button>
@@ -589,26 +704,30 @@ const AdminIndianFoods: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ on
                 {/* Search Section */}
                 <div className="mb-8 bg-slate-800/50 border border-slate-700 rounded-lg p-6">
                     <h2 className="text-2xl font-bold mb-4 flex items-center space-x-2">
-                        <span>🔍</span>
+                        <span aria-hidden="true">🔍</span>
                         <span>Search & Manage Foods</span>
                     </h2>
 
                     <div className="flex gap-4 mb-4">
                         <input
                             type="text"
-                            placeholder="Search by dish name..."
+                            name="search"
+                            aria-label="Search foods"
+                            placeholder="Search by dish name…"
                             value={searchTerm}
                             onChange={(e) => {
                                 setSearchTerm(e.target.value);
                                 setCurrentPage(1);
                             }}
-                            className="flex-1 px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg focus:outline-none focus:border-primary text-white placeholder-slate-400"
+                            autoComplete="off"
+                            className="flex-1 px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg focus:outline-none focus:border-primary focus-visible:ring-2 focus-visible:ring-primary text-white placeholder-slate-400"
                         />
                         <button
                             onClick={deleteAllFoods}
-                            className="px-6 py-2 bg-red-600/20 border border-red-600/50 hover:bg-red-600/30 rounded-lg font-semibold transition-colors text-red-300"
+                            aria-label="Delete all food items"
+                            className="px-6 py-2 bg-red-600/20 border border-red-600/50 hover:bg-red-600/30 rounded-lg font-semibold transition-colors text-red-300 focus-visible:ring-2 focus-visible:ring-red-500"
                         >
-                            🗑️ Clear All
+                            <span aria-hidden="true">🗑️</span> Clear All
                         </button>
                     </div>
                 </div>
@@ -616,12 +735,12 @@ const AdminIndianFoods: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ on
                 {/* Foods Table */}
                 <div className="bg-slate-800/50 border border-slate-700 rounded-lg p-6">
                     <h2 className="text-2xl font-bold mb-4 flex items-center space-x-2">
-                        <span>🥗</span>
+                        <span aria-hidden="true">🥗</span>
                         <span>Food Items ({totalItems})</span>
                     </h2>
 
                     {loading ? (
-                        <div className="text-center py-8 text-slate-400">Loading foods...</div>
+                        <div className="text-center py-8 text-slate-400">Loading foods…</div>
                     ) : foods.length === 0 ? (
                         <div className="text-center py-8 text-slate-400">
                             {searchTerm ? 'No foods found matching your search' : 'No food items yet. Upload some using the form above.'}
@@ -668,15 +787,17 @@ const AdminIndianFoods: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ on
                                                         <div className="flex items-center justify-center gap-2">
                                                             <button
                                                                 onClick={() => startEdit(food)}
-                                                                className="px-2 py-1 text-xs bg-blue-600/20 border border-blue-600/50 hover:bg-blue-600/30 rounded transition-colors text-blue-300"
+                                                                aria-label={`Edit ${food.dish_name}`}
+                                                                className="px-2 py-1 text-xs bg-blue-600/20 border border-blue-600/50 hover:bg-blue-600/30 rounded transition-colors text-blue-300 focus-visible:ring-2 focus-visible:ring-blue-500"
                                                             >
-                                                                ✏️
+                                                                <span aria-hidden="true">✏️</span>
                                                             </button>
                                                             <button
                                                                 onClick={() => setDeleteConfirm(food.id)}
-                                                                className="px-2 py-1 text-xs bg-red-600/20 border border-red-600/50 hover:bg-red-600/30 rounded transition-colors text-red-300"
+                                                                aria-label={`Delete ${food.dish_name}`}
+                                                                className="px-2 py-1 text-xs bg-red-600/20 border border-red-600/50 hover:bg-red-600/30 rounded transition-colors text-red-300 focus-visible:ring-2 focus-visible:ring-red-500"
                                                             >
-                                                                🗑️
+                                                                <span aria-hidden="true">🗑️</span>
                                                             </button>
                                                         </div>
                                                     )}
@@ -696,100 +817,126 @@ const AdminIndianFoods: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ on
 
                                             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
                                                 <div>
-                                                    <label className="block text-sm font-medium text-slate-300 mb-1">Dish Name *</label>
+                                                    <label htmlFor="edit-dish-name" className="block text-sm font-medium text-slate-300 mb-1">Dish Name *</label>
                                                     <input
+                                                        id="edit-dish-name"
                                                         type="text"
+                                                        name="dish_name"
                                                         value={editingFood.dish_name}
                                                         onChange={(e) => setEditingFood({ ...editingFood, dish_name: e.target.value })}
-                                                        className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded text-white placeholder-slate-400 focus:border-blue-500 focus:outline-none"
-                                                        placeholder="Dish name"
+                                                        className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded text-white placeholder-slate-400 focus:border-blue-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+                                                        placeholder="Dish name…"
                                                     />
                                                 </div>
                                                 <div>
-                                                    <label className="block text-sm font-medium text-slate-300 mb-1">Calories (kcal) *</label>
+                                                    <label htmlFor="edit-calories" className="block text-sm font-medium text-slate-300 mb-1">Calories (kcal) *</label>
                                                     <input
+                                                        id="edit-calories"
                                                         type="number"
+                                                        name="calories_kcal"
                                                         step="0.01"
+                                                        inputMode="decimal"
                                                         value={editingFood.calories_kcal}
                                                         onChange={(e) => setEditingFood({ ...editingFood, calories_kcal: parseFloat(e.target.value) || 0 })}
-                                                        className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded text-white placeholder-slate-400 focus:border-blue-500 focus:outline-none"
+                                                        className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded text-white placeholder-slate-400 focus:border-blue-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
                                                         placeholder="0.00"
                                                     />
                                                 </div>
                                                 <div>
-                                                    <label className="block text-sm font-medium text-slate-300 mb-1">Protein (g) *</label>
+                                                    <label htmlFor="edit-protein" className="block text-sm font-medium text-slate-300 mb-1">Protein (g) *</label>
                                                     <input
+                                                        id="edit-protein"
                                                         type="number"
+                                                        name="protein_g"
                                                         step="0.01"
+                                                        inputMode="decimal"
                                                         value={editingFood.protein_g}
                                                         onChange={(e) => setEditingFood({ ...editingFood, protein_g: parseFloat(e.target.value) || 0 })}
-                                                        className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded text-white placeholder-slate-400 focus:border-blue-500 focus:outline-none"
+                                                        className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded text-white placeholder-slate-400 focus:border-blue-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
                                                         placeholder="0.00"
                                                     />
                                                 </div>
                                                 <div>
-                                                    <label className="block text-sm font-medium text-slate-300 mb-1">Carbohydrates (g) *</label>
+                                                    <label htmlFor="edit-carbs" className="block text-sm font-medium text-slate-300 mb-1">Carbohydrates (g) *</label>
                                                     <input
+                                                        id="edit-carbs"
                                                         type="number"
+                                                        name="carbohydrates_g"
                                                         step="0.01"
+                                                        inputMode="decimal"
                                                         value={editingFood.carbohydrates_g}
                                                         onChange={(e) => setEditingFood({ ...editingFood, carbohydrates_g: parseFloat(e.target.value) || 0 })}
-                                                        className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded text-white placeholder-slate-400 focus:border-blue-500 focus:outline-none"
+                                                        className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded text-white placeholder-slate-400 focus:border-blue-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
                                                         placeholder="0.00"
                                                     />
                                                 </div>
                                                 <div>
-                                                    <label className="block text-sm font-medium text-slate-300 mb-1">Fat (g) *</label>
+                                                    <label htmlFor="edit-fats" className="block text-sm font-medium text-slate-300 mb-1">Fat (g) *</label>
                                                     <input
+                                                        id="edit-fats"
                                                         type="number"
+                                                        name="fats_g"
                                                         step="0.01"
+                                                        inputMode="decimal"
                                                         value={editingFood.fats_g}
                                                         onChange={(e) => setEditingFood({ ...editingFood, fats_g: parseFloat(e.target.value) || 0 })}
-                                                        className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded text-white placeholder-slate-400 focus:border-blue-500 focus:outline-none"
+                                                        className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded text-white placeholder-slate-400 focus:border-blue-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
                                                         placeholder="0.00"
                                                     />
                                                 </div>
                                                 <div>
-                                                    <label className="block text-sm font-medium text-slate-300 mb-1">Fibre (g)</label>
+                                                    <label htmlFor="edit-fibre" className="block text-sm font-medium text-slate-300 mb-1">Fibre (g)</label>
                                                     <input
+                                                        id="edit-fibre"
                                                         type="number"
+                                                        name="fibre_g"
                                                         step="0.01"
+                                                        inputMode="decimal"
                                                         value={editingFood.fibre_g || 0}
                                                         onChange={(e) => setEditingFood({ ...editingFood, fibre_g: parseFloat(e.target.value) || 0 })}
-                                                        className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded text-white placeholder-slate-400 focus:border-blue-500 focus:outline-none"
+                                                        className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded text-white placeholder-slate-400 focus:border-blue-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
                                                         placeholder="0.00"
                                                     />
                                                 </div>
                                                 <div>
-                                                    <label className="block text-sm font-medium text-slate-300 mb-1">Sodium (mg)</label>
+                                                    <label htmlFor="edit-sodium" className="block text-sm font-medium text-slate-300 mb-1">Sodium (mg)</label>
                                                     <input
+                                                        id="edit-sodium"
                                                         type="number"
+                                                        name="sodium_mg"
                                                         step="0.01"
+                                                        inputMode="decimal"
                                                         value={editingFood.sodium_mg || 0}
                                                         onChange={(e) => setEditingFood({ ...editingFood, sodium_mg: parseFloat(e.target.value) || 0 })}
-                                                        className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded text-white placeholder-slate-400 focus:border-blue-500 focus:outline-none"
+                                                        className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded text-white placeholder-slate-400 focus:border-blue-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
                                                         placeholder="0.00"
                                                     />
                                                 </div>
                                                 <div>
-                                                    <label className="block text-sm font-medium text-slate-300 mb-1">Calcium (mg)</label>
+                                                    <label htmlFor="edit-calcium" className="block text-sm font-medium text-slate-300 mb-1">Calcium (mg)</label>
                                                     <input
+                                                        id="edit-calcium"
                                                         type="number"
+                                                        name="calcium_mg"
                                                         step="0.01"
+                                                        inputMode="decimal"
                                                         value={editingFood.calcium_mg || 0}
                                                         onChange={(e) => setEditingFood({ ...editingFood, calcium_mg: parseFloat(e.target.value) || 0 })}
-                                                        className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded text-white placeholder-slate-400 focus:border-blue-500 focus:outline-none"
+                                                        className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded text-white placeholder-slate-400 focus:border-blue-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
                                                         placeholder="0.00"
                                                     />
                                                 </div>
                                                 <div>
-                                                    <label className="block text-sm font-medium text-slate-300 mb-1">Iron (mg)</label>
+                                                    <label htmlFor="edit-iron" className="block text-sm font-medium text-slate-300 mb-1">Iron (mg)</label>
                                                     <input
+                                                        id="edit-iron"
                                                         type="number"
+                                                        name="iron_mg"
                                                         step="0.01"
+                                                        inputMode="decimal"
                                                         value={editingFood.iron_mg || 0}
                                                         onChange={(e) => setEditingFood({ ...editingFood, iron_mg: parseFloat(e.target.value) || 0 })}
-                                                        className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded text-white placeholder-slate-400 focus:border-blue-500 focus:outline-none"
+                                                        className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded text-white placeholder-slate-400 focus:border-blue-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
                                                         placeholder="0.00"
                                                     />
                                                 </div>
@@ -798,17 +945,59 @@ const AdminIndianFoods: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ on
                                             <div className="flex gap-3 justify-end">
                                                 <button
                                                     onClick={() => setShowEditModal(false)}
-                                                    className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition-colors"
+                                                    className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition-colors focus-visible:ring-2 focus-visible:ring-slate-500"
                                                 >
                                                     Cancel
                                                 </button>
                                                 <button
                                                     onClick={updateFood}
-                                                    className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
+                                                    className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors focus-visible:ring-2 focus-visible:ring-blue-500"
                                                 >
                                                     Save Changes
                                                 </button>
                                             </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Export Modal */}
+                            {exportModal && (
+                                <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[110] flex items-center justify-center p-6">
+                                    <div className="bg-slate-800 w-full max-w-sm rounded-3xl overflow-hidden border border-slate-700 shadow-2xl">
+                                        <div className="p-6">
+                                            <h2 className="text-xl font-bold text-white mb-2">Export Data</h2>
+                                            <p className="text-slate-400 text-sm mb-6">Select format to export {foods.length} food items</p>
+
+                                            <div className="space-y-3 mb-6">
+                                                <button
+                                                    onClick={exportToCSV}
+                                                    className="w-full bg-slate-700 hover:bg-slate-600 text-white font-bold py-4 rounded-xl transition-colors flex items-center justify-center gap-3 border border-slate-600"
+                                                >
+                                                    <span className="material-symbols-rounded">description</span>
+                                                    <div className="text-left">
+                                                        <p className="text-sm font-bold">Export as CSV</p>
+                                                        <p className="text-xs text-slate-400">Compatible with Excel & spreadsheets</p>
+                                                    </div>
+                                                </button>
+                                                <button
+                                                    onClick={exportToXLSX}
+                                                    className="w-full bg-slate-700 hover:bg-slate-600 text-white font-bold py-4 rounded-xl transition-colors flex items-center justify-center gap-3 border border-slate-600"
+                                                >
+                                                    <span className="material-symbols-rounded">table_chart</span>
+                                                    <div className="text-left">
+                                                        <p className="text-sm font-bold">Export as XLSX</p>
+                                                        <p className="text-xs text-slate-400">Formatted Excel spreadsheet</p>
+                                                    </div>
+                                                </button>
+                                            </div>
+
+                                            <button
+                                                onClick={() => setExportModal(false)}
+                                                className="w-full bg-primary text-slate-900 font-bold py-3 rounded-xl hover:bg-green-600 transition-colors"
+                                            >
+                                                Cancel
+                                            </button>
                                         </div>
                                     </div>
                                 </div>
@@ -824,16 +1013,18 @@ const AdminIndianFoods: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ on
                                         <button
                                             onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
                                             disabled={currentPage === 1}
-                                            className="px-4 py-2 bg-slate-700 hover:bg-slate-600 disabled:bg-slate-800 disabled:text-slate-500 rounded-lg transition-colors"
+                                            aria-label="Previous page"
+                                            className="px-4 py-2 bg-slate-700 hover:bg-slate-600 disabled:bg-slate-800 disabled:text-slate-500 rounded-lg transition-colors focus-visible:ring-2 focus-visible:ring-slate-500"
                                         >
-                                            ← Previous
+                                            <span aria-hidden="true">←</span> Previous
                                         </button>
                                         <button
                                             onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))}
                                             disabled={currentPage === totalPages}
-                                            className="px-4 py-2 bg-slate-700 hover:bg-slate-600 disabled:bg-slate-800 disabled:text-slate-500 rounded-lg transition-colors"
+                                            aria-label="Next page"
+                                            className="px-4 py-2 bg-slate-700 hover:bg-slate-600 disabled:bg-slate-800 disabled:text-slate-500 rounded-lg transition-colors focus-visible:ring-2 focus-visible:ring-slate-500"
                                         >
-                                            Next →
+                                            Next <span aria-hidden="true">→</span>
                                         </button>
                                     </div>
                                 </div>
@@ -845,20 +1036,20 @@ const AdminIndianFoods: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ on
 
             <nav className="fixed bottom-0 w-full bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl border-t border-slate-200 dark:border-slate-800 pb-8 pt-3 px-6 max-w-[430px] mx-auto left-1/2 -translate-x-1/2">
                 <div className="flex justify-between items-center">
-                    <button onClick={() => onNavigate('ADMIN_DASHBOARD')} className="flex flex-col items-center gap-1 text-slate-400">
-                        <span className="material-symbols-rounded">dashboard</span>
+                    <button onClick={() => onNavigate('ADMIN_DASHBOARD')} aria-label="Admin Dashboard" className="flex flex-col items-center gap-1 text-slate-400 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-900 focus-visible:ring-slate-400 rounded">
+                        <span className="material-symbols-rounded" aria-hidden="true">dashboard</span>
                         <span className="text-[10px] font-medium">Dashboard</span>
                     </button>
-                    <button onClick={() => onNavigate('ADMIN_USERS')} className="flex flex-col items-center gap-1 text-slate-400">
-                        <span className="material-symbols-rounded">people_alt</span>
+                    <button onClick={() => onNavigate('ADMIN_USERS')} aria-label="Manage Members" className="flex flex-col items-center gap-1 text-slate-400 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-900 focus-visible:ring-slate-400 rounded">
+                        <span className="material-symbols-rounded" aria-hidden="true">people_alt</span>
                         <span className="text-[10px] font-medium">Members</span>
                     </button>
-                    <button onClick={() => onNavigate('ADMIN_ORDERS')} className="flex flex-col items-center gap-1 text-slate-400">
-                        <span className="material-symbols-rounded">shopping_cart_checkout</span>
+                    <button onClick={() => onNavigate('ADMIN_ORDERS')} aria-label="Manage Orders" className="flex flex-col items-center gap-1 text-slate-400 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-900 focus-visible:ring-slate-400 rounded">
+                        <span className="material-symbols-rounded" aria-hidden="true">shopping_cart_checkout</span>
                         <span className="text-[10px] font-medium">Orders</span>
                     </button>
-                    <button onClick={() => onNavigate('ADMIN_SHOP')} className="flex flex-col items-center gap-1 text-primary">
-                        <span className="material-symbols-rounded">storefront</span>
+                    <button onClick={() => onNavigate('ADMIN_SHOP')} aria-label="Manage Shop" className="flex flex-col items-center gap-1 text-primary focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-900 focus-visible:ring-primary rounded">
+                        <span className="material-symbols-rounded" aria-hidden="true">storefront</span>
                         <span className="text-[10px] font-medium">Shop</span>
                     </button>
                 </div>

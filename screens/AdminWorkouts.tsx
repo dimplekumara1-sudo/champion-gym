@@ -160,16 +160,17 @@ const AdminWorkouts: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNav
   };
 
   const toggleExercise = (ex: any) => {
-    const exists = selectedExercises.find(s => s.id === ex.id);
+    const exId = ex.id || ex.exercise_id;
+    const exists = selectedExercises.find(s => (s.id === exId) || (s.exercise_id === exId));
     if (exists) {
-      setSelectedExercises(selectedExercises.filter(s => s.id !== ex.id));
+      setSelectedExercises(selectedExercises.filter(s => (s.id !== exId) && (s.exercise_id !== exId)));
     } else {
-      setSelectedExercises([...selectedExercises, { ...ex, sets_reps: '3x12' }]);
+      setSelectedExercises([...selectedExercises, { ...ex, id: exId, sets_reps: '3x12' }]);
     }
   };
 
   const updateSetsReps = (id: string, val: string) => {
-    setSelectedExercises(selectedExercises.map(ex => ex.id === id ? { ...ex, sets_reps: val } : ex));
+    setSelectedExercises(selectedExercises.map(ex => (ex.id === id || ex.exercise_id === id) ? { ...ex, sets_reps: val } : ex));
   };
 
   const handleSaveWorkout = async () => {
@@ -253,6 +254,21 @@ const AdminWorkouts: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNav
     }
   };
 
+  const handleDeleteWorkout = async (id: string) => {
+    if (!confirm('Are you sure you want to delete this workout? This will also remove it from any assigned user programs.')) return;
+    try {
+      // Supabase should handle cascading deletes if foreign keys are set up correctly,
+      // but let's be safe and delete related exercises and assignments first if needed
+      // or just try to delete the workout directly if cascade is on.
+      const { error } = await supabase.from('workouts').delete().eq('id', id);
+      if (error) throw error;
+      fetchData();
+    } catch (error) {
+      console.error('Error deleting workout:', error);
+      alert('Failed to delete workout. It might be assigned to a user.');
+    }
+  };
+
   return (
     <div className="min-h-screen bg-slate-900 text-white pb-20">
       <header className="px-6 py-4 flex items-center justify-between border-b border-slate-800">
@@ -272,14 +288,22 @@ const AdminWorkouts: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNav
         {workouts.map(w => (
           <div key={w.id} className="bg-slate-800 p-5 rounded-3xl border border-slate-700">
             <div className="flex justify-between items-start mb-2">
-              <h3 className="font-bold text-lg">{w.name}</h3>
-              <span className="text-[10px] font-black bg-primary/20 text-primary px-2 py-1 rounded-md uppercase tracking-wider">{w.difficulty}</span>
+              <div className="flex-1">
+                <h3 className="font-bold text-lg">{w.name}</h3>
+                <span className="text-[10px] font-black bg-primary/20 text-primary px-2 py-1 rounded-md uppercase tracking-wider">{w.difficulty}</span>
+              </div>
+              <button
+                onClick={() => handleDeleteWorkout(w.id)}
+                className="text-slate-500 hover:text-red-500 transition-colors p-2"
+              >
+                <span className="material-symbols-rounded text-xl">delete</span>
+              </button>
             </div>
             <p className="text-xs text-slate-400 mt-1">{w.description}</p>
             <div className="flex gap-2 mt-4">
               <button
                 onClick={async () => {
-                  const { data } = await supabase.from('workout_exercises').select('*, exercises(*)').eq('workout_id', w.id).order('sort_order');
+                  const { data } = await supabase.from('workout_exercises').select('*, exercises:exercise_id (*)').eq('workout_id', w.id).order('sort_order');
                   setWorkoutName(w.name);
                   setDescription(w.description || '');
                   setDifficulty(w.difficulty || 'Beginner');
@@ -454,6 +478,32 @@ const AdminWorkouts: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNav
                 </div>
                 
                 <div className="space-y-4">
+                  {/* Currently Selected Exercises Section */}
+                  {selectedExercises.length > 0 && (
+                    <div className="space-y-2 mb-6">
+                      <h4 className="text-[9px] font-black uppercase text-slate-500 tracking-widest ml-1 mb-2">Current Workout Plan</h4>
+                      <div className="space-y-2">
+                        {selectedExercises.map((ex, idx) => (
+                          <div key={ex.id || ex.exercise_id || idx} className="p-3 bg-primary/5 border border-primary/20 rounded-2xl flex items-center gap-3">
+                            <div className="w-8 h-8 bg-primary/10 rounded-lg flex items-center justify-center">
+                              <span className="material-symbols-rounded text-primary text-sm">check_circle</span>
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-xs font-bold text-white truncate">{ex.exercise_name || ex.name}</p>
+                              <p className="text-[9px] text-primary/60 font-black uppercase">{ex.sets_reps}</p>
+                            </div>
+                            <button 
+                              onClick={() => toggleExercise(ex)}
+                              className="w-8 h-8 rounded-lg flex items-center justify-center bg-red-500/10 text-red-500 hover:bg-red-500/20 transition-colors"
+                            >
+                              <span className="material-symbols-rounded text-sm">close</span>
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
                   <div className="flex gap-2 items-center p-1 bg-slate-900 rounded-xl">
                     <button
                       onClick={() => setUserGender('men')}

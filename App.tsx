@@ -41,6 +41,8 @@ import AdminOrders from './screens/AdminOrders';
 import AdminExplore from './screens/AdminExplore';
 import AdminIndianFoods from './screens/AdminIndianFoods';
 import AdminFoodApprovals from './screens/AdminFoodApprovals';
+import AdminPT from './screens/AdminPT';
+import AdminAnnouncements from './screens/AdminAnnouncements';
 import ConfigScreen from './screens/ConfigScreen';
 import { supabase } from './lib/supabase';
 import { startSessionMonitoring, stopSessionMonitoring, clearSessionState } from './lib/sessionService';
@@ -196,12 +198,12 @@ const App: React.FC = () => {
             setShowGooglePasswordSetup(false);
             // Mark that user has password in profile
             supabase.from('profiles').update({ has_password: true }).eq('id', session.user.id).then(() => {
-              if (session?.user) checkOnboardingStatus(session.user.id);
+              if (session?.user) checkOnboardingStatus(session.user.id, false);
             });
           }}
           onSkip={() => {
             setShowGooglePasswordSetup(false);
-            if (session?.user) checkOnboardingStatus(session.user.id);
+            if (session?.user) checkOnboardingStatus(session.user.id, false);
           }}
         />
       );
@@ -260,6 +262,8 @@ const App: React.FC = () => {
       case 'ADMIN_EXPLORE': return <AdminExplore onNavigate={navigate} />;
       case 'ADMIN_INDIAN_FOODS': return <AdminIndianFoods onNavigate={navigate} />;
       case 'ADMIN_FOOD_APPROVALS': return <AdminFoodApprovals onNavigate={navigate} />;
+      case 'ADMIN_PT': return <AdminPT onNavigate={navigate} />;
+      case 'ADMIN_ANNOUNCEMENTS': return <AdminAnnouncements onNavigate={navigate} />;
       case 'STORE': return <StoreScreen onNavigate={navigate} />;
       case 'CART': return <CartScreen onNavigate={navigate} />;
       case 'ORDER_HISTORY': return <OrderHistoryScreen onNavigate={navigate} />;

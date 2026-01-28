@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { AppScreen } from '../types';
+import BottomNav from '../components/BottomNav';
 
 const CartScreen: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNavigate }) => {
     const [cartItems, setCartItems] = useState<any[]>([]);
@@ -195,7 +196,7 @@ const CartScreen: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNaviga
     const total = calculateTotal();
 
     return (
-        <div className="min-h-screen bg-slate-900 text-white pb-20">
+        <div className="min-h-screen bg-slate-900 text-white pb-32">
             <header className="sticky top-0 z-30 bg-slate-900/95 backdrop-blur border-b border-slate-800 px-6 py-4">
                 <div className="flex items-center gap-3">
                     <button onClick={() => onNavigate('STORE')} className="material-symbols-rounded">arrow_back</button>
@@ -354,6 +355,7 @@ const CartScreen: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNaviga
                     </>
                 )}
             </main>
+            <BottomNav active="EXPLORE" onNavigate={onNavigate} />
         </div>
     );
 };

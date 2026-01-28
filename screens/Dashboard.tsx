@@ -32,12 +32,15 @@ const Dashboard: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNavigat
     totalCarbs: 0,
     totalFat: 0,
   });
+  const [upcomingSession, setUpcomingSession] = useState<any>(null);
+  const [weeklyHistory, setWeeklyHistory] = useState<{ day: string; calories: number; isToday: boolean }[]>([]);
   const [nutritionGoals, setNutritionGoals] = useState<any>({
     daily_calories_target: 2000,
     daily_protein_target: 150,
     daily_carbs_target: 250,
     daily_fat_target: 65,
   });
+  const [announcements, setAnnouncements] = useState<any[]>([]);
 
   useEffect(() => {
     fetchProfile();
@@ -80,6 +83,7 @@ const Dashboard: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNavigat
             () => {
               // Refetch daily nutrition when food is added/removed
               fetchDailyNutrition(authUser.id);
+              fetchWeeklyHistory(authUser.id);
             }
           )
           .subscribe();
@@ -102,7 +106,23 @@ const Dashboard: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNavigat
           )
           .subscribe();
 
-        return { profileSubscription, dietSubscription, goalsSubscription };
+        // Announcements subscription
+        const announcementsSubscription = supabase
+          .channel(`announcements`)
+          .on(
+            'postgres_changes',
+            {
+              event: '*',
+              schema: 'public',
+              table: 'announcements'
+            },
+            () => {
+              fetchAnnouncements();
+            }
+          )
+          .subscribe();
+
+        return { profileSubscription, dietSubscription, goalsSubscription, announcementsSubscription };
       }
     };
 
@@ -116,6 +136,7 @@ const Dashboard: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNavigat
         subscriptions.profileSubscription?.unsubscribe();
         subscriptions.dietSubscription?.unsubscribe();
         subscriptions.goalsSubscription?.unsubscribe();
+        subscriptions.announcementsSubscription?.unsubscribe();
       }
     };
   }, []);
@@ -136,13 +157,20 @@ const Dashboard: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNavigat
 
         // Fetch daily nutrition data
         await fetchDailyNutrition(user.id);
+        await fetchWeeklyHistory(user.id);
 
         // Fetch nutrition goals
         await fetchNutritionGoals(user.id);
 
+        // Fetch upcoming session
+        await fetchUpcomingSession(user.id);
+
         // Fetch notifications
         const userNotifications = await notificationService.getUserNotifications(user.id);
         setNotifications(userNotifications);
+
+        // Fetch announcements
+        await fetchAnnouncements();
 
         setEditData({
           height: profileData.height || 170,
@@ -184,6 +212,27 @@ const Dashboard: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNavigat
     }
   };
 
+  const fetchUpcomingSession = async (userId: string) => {
+    try {
+      const today = new Date().toISOString().split('T')[0];
+      const { data, error } = await supabase
+        .from('pt_sessions')
+        .select('*, pt_trainers(*)')
+        .eq('user_id', userId)
+        .eq('status', 'confirmed')
+        .gte('session_date', today)
+        .order('session_date', { ascending: true })
+        .order('session_time', { ascending: true })
+        .limit(1)
+        .single();
+
+      if (error && error.code !== 'PGRST116') throw error;
+      setUpcomingSession(data);
+    } catch (error) {
+      console.error('Error fetching upcoming session:', error);
+    }
+  };
+
   const fetchDailyNutrition = async (userId: string) => {
     try {
       const today = new Date().toISOString().split('T')[0];
@@ -219,6 +268,50 @@ const Dashboard: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNavigat
     }
   };
 
+  const fetchWeeklyHistory = async (userId: string) => {
+    try {
+      const today = new Date();
+      const currentDay = today.getDay(); // 0 is Sunday, 1 is Monday...
+      const diff = today.getDate() - currentDay + (currentDay === 0 ? -6 : 1); // Adjust to Monday
+      const monday = new Date(today.setDate(diff));
+      monday.setHours(0, 0, 0, 0);
+
+      const { data, error } = await supabase
+        .from('user_daily_diet_tracking')
+        .select('date, calories')
+        .eq('user_id', userId)
+        .gte('date', monday.toISOString().split('T')[0]);
+
+      if (error) throw error;
+
+      // Group by date
+      const dailyTotals = (data || []).reduce((acc: any, item: any) => {
+        const date = item.date;
+        acc[date] = (acc[date] || 0) + (item.calories || 0);
+        return acc;
+      }, {});
+
+      // Create array for all 7 days of the week (Mon-Sun)
+      const weekData = [];
+      const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+      const todayStr = new Date().toISOString().split('T')[0];
+
+      for (let i = 0; i < 7; i++) {
+        const d = new Date(monday);
+        d.setDate(monday.getDate() + i);
+        const dateStr = d.toISOString().split('T')[0];
+        weekData.push({
+          day: days[i],
+          calories: dailyTotals[dateStr] || 0,
+          isToday: dateStr === todayStr
+        });
+      }
+      setWeeklyHistory(weekData);
+    } catch (error) {
+      console.error('Error fetching weekly history:', error);
+    }
+  };
+
   const fetchNutritionGoals = async (userId: string) => {
     try {
       const { data, error } = await supabase
@@ -244,6 +337,23 @@ const Dashboard: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNavigat
       }
     } catch (error) {
       console.error('Error fetching nutrition goals:', error);
+    }
+  };
+
+  const fetchAnnouncements = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('announcements')
+        .select('*')
+        .eq('is_active', true)
+        .order('priority', { ascending: false })
+        .order('created_at', { ascending: false })
+        .limit(3);
+
+      if (error) throw error;
+      setAnnouncements(data || []);
+    } catch (error) {
+      console.error('Error fetching announcements:', error);
     }
   };
 
@@ -282,6 +392,13 @@ const Dashboard: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNavigat
     }
   };
 
+  const getGreeting = () => {
+    const hour = new Date().getHours();
+    if (hour >= 5 && hour < 12) return 'Good morning';
+    if (hour >= 12 && hour < 17) return 'Good afternoon';
+    return 'Good evening';
+  };
+
   const bmi = calculateBMI(profile?.weight, profile?.height);
   const weightToGoal = profile?.target_weight ? (profile.weight - profile.target_weight).toFixed(1) : '0';
   const goalProgress = profile?.target_weight ? Math.min(100, Math.max(0, (1 - (Math.abs(profile.weight - profile.target_weight) / 10)) * 100)) : 0;
@@ -306,9 +423,47 @@ const Dashboard: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNavigat
 
       <main className="px-5">
         <div className="py-3 mb-2">
-          <p className="text-slate-400 text-[13px] font-medium">Welcome back,</p>
+          <p className="text-slate-400 text-[13px] font-medium">{getGreeting()},</p>
           <h1 className="text-2xl font-bold tracking-tight">{firstName} 👋</h1>
         </div>
+
+        {/* Announcements Section */}
+        {announcements.length > 0 && (
+          <div className="mb-6">
+            <h2 className="text-sm font-bold uppercase tracking-wider text-slate-500 mb-3 ml-2">Gym Announcements</h2>
+            <div className="space-y-3">
+              {announcements.map((announcement) => (
+                <div key={announcement.id} className="bg-gradient-to-r from-primary/10 to-primary/5 border border-primary/20 p-4 rounded-3xl">
+                  <div className="flex items-start gap-3">
+                    <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center flex-shrink-0 mt-0.5">
+                      <span className="material-symbols-rounded text-primary text-sm">campaign</span>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-1">
+                        <h4 className="font-bold text-white text-sm">{announcement.title}</h4>
+                        <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded-full ${
+                          announcement.priority === 'high' ? 'bg-red-500/20 text-red-400' :
+                          announcement.priority === 'medium' ? 'bg-amber-500/20 text-amber-400' :
+                          'bg-blue-500/20 text-blue-400'
+                        }`}>
+                          {announcement.priority}
+                        </span>
+                      </div>
+                      <p className="text-[12px] text-slate-300 leading-relaxed line-clamp-2">{announcement.content}</p>
+                      <p className="text-[10px] text-slate-500 mt-2">
+                        {new Date(announcement.created_at).toLocaleDateString('en-US', { 
+                          month: 'short', 
+                          day: 'numeric',
+                          year: 'numeric'
+                        })}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Notifications / Alerts */}
         {(showExpiryAlert || showPaymentAlert) && (
@@ -442,12 +597,31 @@ const Dashboard: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNavigat
               <h3 className="text-sm font-bold text-slate-300 mb-1 uppercase tracking-wider">Today's Calories</h3>
               <p className="text-4xl font-extrabold text-white">{Math.round(dailyNutrition.totalCalories)} <span className="text-xs font-medium text-slate-500">/ {nutritionGoals.daily_calories_target} kcal</span></p>
             </div>
-            <div className="flex gap-1 items-end h-12 pt-2">
-              <div className="w-2.5 bg-slate-800 rounded-full h-[40%]"></div>
-              <div className="w-2.5 bg-slate-800 rounded-full h-[60%]"></div>
-              <div className="w-2.5 bg-slate-800 rounded-full h-[55%]"></div>
-              <div className="w-2.5 bg-slate-800 rounded-full h-[85%]"></div>
-              <div className="w-2.5 bg-primary rounded-full h-full shadow-[0_0_12px_rgba(34,197,94,0.4)]"></div>
+            <div className="flex gap-1.5 items-end h-12 pt-2">
+              {weeklyHistory.length > 0 ? (
+                weeklyHistory.map((day, idx) => {
+                  const height = Math.min(100, Math.max(15, (day.calories / (nutritionGoals.daily_calories_target || 2000)) * 100));
+                  return (
+                    <div
+                      key={idx}
+                      className={`w-2 rounded-full transition-all duration-500 ${
+                        day.isToday 
+                          ? 'bg-primary shadow-[0_0_12px_rgba(34,197,94,0.4)]' 
+                          : 'bg-slate-800'
+                      }`}
+                      style={{ height: `${height}%` }}
+                    />
+                  );
+                })
+              ) : (
+                [40, 60, 55, 85, 100, 30, 45].map((h, i) => (
+                  <div 
+                    key={i} 
+                    className={`w-2 rounded-full ${i === 4 ? 'bg-primary' : 'bg-slate-800'}`} 
+                    style={{ height: `${h}%` }}
+                  />
+                ))
+              )}
             </div>
           </div>
 
@@ -534,13 +708,13 @@ const Dashboard: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNavigat
               <span className="text-[9px] font-bold text-slate-300">Catalog</span>
             </button>
             <button
-              onClick={() => onNavigate('CREATE_WORKOUT')}
+              onClick={() => onNavigate('TRAINERS')}
               className="bg-[#151C2C] border border-[#1E293B] p-3 rounded-3xl flex flex-col items-center gap-2 active:scale-95 transition-transform"
             >
-              <div className="w-10 h-10 rounded-2xl bg-primary/10 flex items-center justify-center text-primary">
-                <span className="material-symbols-rounded">add_circle</span>
+              <div className="w-10 h-10 rounded-2xl bg-green-500/10 flex items-center justify-center text-green-500">
+                <span className="material-symbols-rounded">person_add</span>
               </div>
-              <span className="text-[9px] font-bold text-slate-300">Create</span>
+              <span className="text-[9px] font-bold text-slate-300">PT Booking</span>
             </button>
             <button
               onClick={() => onNavigate('WORKOUT_HISTORY')}
@@ -567,23 +741,41 @@ const Dashboard: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNavigat
         <div className="bg-[#151C2C] border border-[#1E293B] p-4 rounded-3xl shadow-lg mb-6">
           <div className="flex justify-between items-center mb-4">
             <h3 className="text-sm font-bold uppercase tracking-wider">Upcoming PT Session</h3>
-            <button className="text-[11px] font-bold text-primary uppercase tracking-tighter hover:underline">View Schedule</button>
+            <button 
+              onClick={() => onNavigate('TRAINERS')}
+              className="text-[11px] font-bold text-primary uppercase tracking-tighter hover:underline"
+            >
+              View Schedule
+            </button>
           </div>
-          <div className="flex items-center gap-3 bg-slate-800/40 p-3 rounded-2xl border border-slate-700/30">
-            <img
-              alt="Trainer"
-              className="w-11 h-11 rounded-xl object-cover"
-              src="https://lh3.googleusercontent.com/aida-public/AB6AXuBxKi-8oL81giM-Bx-bk8rF5_93Jn3vYePYQpcFGPRCKgFT3wQutvrmvzQbq3VJufEpdILPZz-iannbJVMUQR-r-korKOaIoWf2gE2Q_il-skxN6ESzgI-987MyqQZdg7sMkRJ6MCBU1g_18k30OtyhLRhv4IgkfjhjD5nyDvwIZyPw-2e1ITVF0AtqjgOT2HzNsvgJKIZvJyKij7jYm5bpz-aHn_ruREy2nxIbq_ek6K3k5FqyItcIWbhx2vGrDhcfKHZ8CmHSyLwJ"
-            />
-            <div className="flex-1">
-              <h4 className="font-bold text-sm">Sarah Williams</h4>
-              <p className="text-[11px] text-slate-400 font-medium">Strength & Conditioning</p>
+          {upcomingSession ? (
+            <div className="flex items-center gap-3 bg-slate-800/40 p-3 rounded-2xl border border-slate-700/30">
+              <img
+                alt="Trainer"
+                className="w-11 h-11 rounded-xl object-cover"
+                src={upcomingSession.pt_trainers?.photo_url && upcomingSession.pt_trainers.photo_url.startsWith('http') ? upcomingSession.pt_trainers.photo_url : `https://picsum.photos/seed/${upcomingSession.trainer_id}/200`}
+              />
+              <div className="flex-1">
+                <h4 className="font-bold text-sm">{upcomingSession.pt_trainers?.name || 'Trainer'}</h4>
+                <p className="text-[11px] text-slate-400 font-medium">{upcomingSession.pt_trainers?.specialty || upcomingSession.exercise_name}</p>
+              </div>
+              <div className="text-right">
+                <p className="text-sm font-bold text-primary">{upcomingSession.session_time}</p>
+                <p className="text-[9px] text-slate-400 font-bold uppercase">{upcomingSession.session_date === new Date().toISOString().split('T')[0] ? 'Today' : upcomingSession.session_date}</p>
+              </div>
             </div>
-            <div className="text-right">
-              <p className="text-sm font-bold text-primary">14:30</p>
-              <p className="text-[9px] text-slate-400 font-bold uppercase">Today</p>
+          ) : (
+            <div className="bg-slate-800/40 p-6 rounded-2xl border border-dashed border-slate-700/50 flex flex-col items-center justify-center text-center">
+              <span className="material-symbols-rounded text-slate-600 mb-2">calendar_today</span>
+              <p className="text-[11px] text-slate-500 font-medium">No upcoming sessions scheduled</p>
+              <button 
+                onClick={() => onNavigate('TRAINERS')}
+                className="mt-3 text-[10px] font-bold text-primary uppercase"
+              >
+                Book a session
+              </button>
             </div>
-          </div>
+          )}
         </div>
 
         {/* Shop Section */}

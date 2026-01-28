@@ -87,6 +87,14 @@ const DailyTracker: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNavi
   const [pieChartUnit, setPieChartUnit] = useState<'grams' | 'calories'>('grams');
   const [lineChartUnit, setLineChartUnit] = useState<'grams' | 'calories'>('grams');
 
+  const [activeTab, setActiveTab] = useState<'daily' | 'report'>('daily');
+  const [reportRange, setReportRange] = useState<'weekly' | 'monthly'>('weekly');
+  const [historyMeals, setHistoryMeals] = useState<any[]>([]);
+  const [loadingHistory, setLoadingHistory] = useState(false);
+  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
+  const [waterIntake, setWaterIntake] = useState(0);
+  const [waterGoal] = useState(2000); // 2L default goal
+
   const mealTypes = [
     { type: 'breakfast' as const, label: 'Breakfast', icon: 'light_mode' },
     { type: 'lunch' as const, label: 'Lunch', icon: 'lunch_dining' },
@@ -108,6 +116,7 @@ const DailyTracker: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNavi
         await fetchAllFoods();
         await fetchTodaysMeals(user.id);
         await fetchNutritionGoals(user.id);
+        await fetchWaterIntake(user.id, selectedDate);
       }
     } catch (error) {
       console.error('Error fetching user:', error);
@@ -129,14 +138,50 @@ const DailyTracker: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNavi
     }
   };
 
+  useEffect(() => {
+    if (userId) {
+      if (activeTab === 'daily') {
+        fetchTodaysMeals(userId);
+        fetchWaterIntake(userId, selectedDate);
+      } else {
+        fetchHistoryData(userId);
+      }
+    }
+  }, [activeTab, reportRange, selectedDate, userId]);
+
+  const fetchHistoryData = async (uid: string) => {
+    try {
+      setLoadingHistory(true);
+      let startDate = new Date();
+      if (reportRange === 'weekly') {
+        startDate.setDate(startDate.getDate() - 7);
+      } else {
+        startDate.setMonth(startDate.getMonth() - 1);
+      }
+
+      const { data, error } = await supabase
+        .from('user_daily_diet_tracking')
+        .select('*')
+        .eq('user_id', uid)
+        .gte('date', startDate.toISOString().split('T')[0])
+        .order('date', { ascending: false });
+
+      if (error) throw error;
+      setHistoryMeals(data || []);
+    } catch (error) {
+      console.error('Error fetching history:', error);
+    } finally {
+      setLoadingHistory(false);
+    }
+  };
+
   const fetchTodaysMeals = async (userId: string) => {
     try {
-      const today = new Date().toISOString().split('T')[0];
       const { data, error } = await supabase
         .from('user_daily_diet_tracking')
         .select('*')
         .eq('user_id', userId)
-        .eq('date', today);
+        .eq('date', selectedDate);
 
       if (error) throw error;
 
@@ -187,6 +232,65 @@ const DailyTracker: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNavi
     } catch (error) {
       console.error('Error fetching nutrition goals:', error);
     }
+  };
+
+  const fetchWaterIntake = async (uid: string, date: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('water_intake')
+        .select('amount_ml')
+        .eq('user_id', uid)
+        .eq('date', date)
+        .single();
+
+      if (error && error.code !== 'PGRST116') throw error;
+      setWaterIntake(data?.amount_ml || 0);
+    } catch (error) {
+      console.error('Error fetching water intake:', error);
+    }
+  };
+
+  const handleUpdateWater = async (amount: number) => {
+    if (!userId) return;
+    
+    const newAmount = Math.max(0, waterIntake + amount);
+    try {
+      const { error } = await supabase
+        .from('water_intake')
+        .upsert({
+          user_id: userId,
+          date: selectedDate,
+          amount_ml: newAmount,
+          updated_at: new Date().toISOString(),
+        }, {
+          onConflict: 'user_id,date'
+        });
+
+      if (error) {
+        console.error('Supabase error:', error);
+        throw error;
+      }
+      setWaterIntake(newAmount);
+    } catch (error) {
+      console.error('Error updating water intake:', error);
+      alert('Failed to update water intake. Please try again.');
+    }
+  };
+
+  const aggregateHistoryData = (data: any[]) => {
+    const grouped = data.reduce((acc: any, item: any) => {
+      const date = item.date;
+      if (!acc[date]) {
+        acc[date] = { date, calories: 0, protein: 0, carbs: 0, fat: 0 };
+      }
+      acc[date].calories += item.calories;
+      acc[date].protein += item.protein;
+      acc[date].carbs += item.carbs;
+      acc[date].fat += item.fats;
+      return acc;
+    }, {});
+
+    return Object.values(grouped).sort((a: any, b: any) => b.date.localeCompare(a.date));
   };
 
   const handleSearch = (query: string) => {
@@ -402,22 +506,44 @@ const DailyTracker: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNavi
           <button onClick={() => onNavigate('DASHBOARD')} className="p-2 -ml-2 rounded-full hover:bg-slate-800">
             <span className="material-symbols-rounded">arrow_back</span>
           </button>
-          <div className="text-center flex-1 pr-8">
+          <div className="text-center flex-1">
             <h1 className="text-xl font-extrabold tracking-tight">Daily Nutrition</h1>
-            <p className="text-slate-400 text-xs font-medium">
-              {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}
-            </p>
+            <div className="flex items-center justify-center gap-2 mt-1">
+              <input
+                type="date"
+                value={selectedDate}
+                onChange={(e) => setSelectedDate(e.target.value)}
+                className="bg-slate-800/50 text-slate-300 text-[10px] font-bold px-2 py-1 rounded-lg border border-slate-700/50 outline-none"
+              />
+            </div>
           </div>
           <button
             onClick={() => setShowSubmitFood(true)}
-            className="p-2 rounded-full hover:bg-slate-800 text-primary hover:text-green-400 transition-colors"
-            title="Suggest a new food item"
+            className="p-2 rounded-full hover:bg-slate-800 text-primary transition-colors"
           >
             <span className="material-symbols-rounded text-2xl font-bold">add_circle</span>
           </button>
         </header>
 
-        {/* Daily Summary Card */}
+        {/* Tab Navigation */}
+        <div className="flex bg-[#151C2C] p-1 rounded-2xl mb-6 border border-[#1E293B]">
+          <button
+            onClick={() => setActiveTab('daily')}
+            className={`flex-1 py-3 rounded-xl text-xs font-black uppercase tracking-wider transition-all ${activeTab === 'daily' ? 'bg-primary text-slate-900 shadow-lg shadow-primary/20' : 'text-slate-500 hover:text-slate-300'}`}
+          >
+            Daily Log
+          </button>
+          <button
+            onClick={() => setActiveTab('report')}
+            className={`flex-1 py-3 rounded-xl text-xs font-black uppercase tracking-wider transition-all ${activeTab === 'report' ? 'bg-primary text-slate-900 shadow-lg shadow-primary/20' : 'text-slate-500 hover:text-slate-300'}`}
+          >
+            History & Reports
+          </button>
+        </div>
+
+        {activeTab === 'daily' ? (
+          <>
+            {/* Daily Summary Card */}
         <div className="bg-[#151C2C] rounded-3xl p-5 mb-6 border border-[#1E293B]">
           <div className="grid grid-cols-3 gap-3 mb-6">
             <div className="bg-slate-800/60 p-4 rounded-2xl flex flex-col items-center border border-slate-700/30">
@@ -466,6 +592,55 @@ const DailyTracker: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNavi
               </div>
             </div>
           )}
+
+          {/* Water Tracker Section */}
+          <div className="bg-slate-800/20 p-5 rounded-2xl border border-slate-700/30 mb-6">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-blue-500/20 flex items-center justify-center">
+                  <span className="material-symbols-rounded text-blue-400">water_drop</span>
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-white uppercase tracking-wider">Water Intake</h3>
+                  <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-0.5">Stay Hydrated</p>
+                </div>
+              </div>
+              <div className="text-right">
+                <span className="text-lg font-black text-white">{waterIntake}</span>
+                <span className="text-[10px] font-bold text-slate-500 ml-1">/ {waterGoal} ml</span>
+              </div>
+            </div>
+
+            {/* Progress Bar */}
+            <div className="h-2 bg-slate-800 rounded-full mb-6 overflow-hidden border border-slate-700/30">
+              <div 
+                className="h-full bg-gradient-to-r from-blue-600 to-blue-400 transition-all duration-500 ease-out shadow-[0_0_10px_rgba(59,130,246,0.5)]"
+                style={{ width: `${Math.min(100, (waterIntake / waterGoal) * 100)}%` }}
+              />
+            </div>
+
+            {/* Controls */}
+            <div className="flex gap-2">
+              {[100, 250, 500].map((amount) => (
+                <button
+                  key={amount}
+                  onClick={() => handleUpdateWater(amount)}
+                  className="flex-1 bg-slate-800/60 hover:bg-blue-500/20 py-2.5 rounded-xl border border-slate-700/50 transition-all active:scale-95 group"
+                >
+                  <div className="flex flex-col items-center">
+                    <span className="text-[10px] font-black text-slate-400 group-hover:text-blue-400">+{amount}</span>
+                    <span className="text-[8px] font-bold text-slate-600 group-hover:text-blue-500/60">ml</span>
+                  </div>
+                </button>
+              ))}
+              <button
+                onClick={() => handleUpdateWater(-250)}
+                className="w-12 bg-slate-800/60 hover:bg-red-500/20 rounded-xl border border-slate-700/50 transition-all active:scale-95 group flex items-center justify-center"
+              >
+                <span className="material-symbols-rounded text-lg text-slate-500 group-hover:text-red-400">remove</span>
+              </button>
+            </div>
+          </div>
 
           {/* Charts Section */}
           <div className="space-y-4 mb-4">
@@ -874,6 +1049,140 @@ const DailyTracker: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNavi
             </section>
           ))}
         </div>
+      </>
+      ) : (
+          <div className="space-y-6">
+            <div className="flex bg-slate-800/50 rounded-xl p-1 mb-6 border border-slate-700/30">
+              <button
+                onClick={() => setReportRange('weekly')}
+                className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all ${reportRange === 'weekly' ? 'bg-primary text-slate-900 shadow-sm' : 'text-slate-400 hover:text-slate-300'}`}
+              >
+                Last 7 Days
+              </button>
+              <button
+                onClick={() => setReportRange('monthly')}
+                className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all ${reportRange === 'monthly' ? 'bg-primary text-slate-900 shadow-sm' : 'text-slate-400 hover:text-slate-300'}`}
+              >
+                Last 30 Days
+              </button>
+            </div>
+
+            {loadingHistory ? (
+              <div className="flex flex-col items-center justify-center py-12">
+                <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin mb-4"></div>
+                <p className="text-slate-400 text-sm font-medium">Analyzing your data...</p>
+              </div>
+            ) : historyMeals.length > 0 ? (
+              <>
+                {/* Historical Chart */}
+                <div className="bg-[#151C2C] rounded-3xl p-5 border border-[#1E293B] shadow-xl">
+                  <div className="flex items-center justify-between mb-6">
+                    <h3 className="text-sm font-bold text-white uppercase tracking-wider">Calorie Trends</h3>
+                    <div className="flex items-center gap-2">
+                      <div className="w-2 h-2 rounded-full bg-primary"></div>
+                      <span className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Intake</span>
+                    </div>
+                  </div>
+                  <div className="h-64 -ml-4">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <LineChart data={aggregateHistoryData(historyMeals)}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#1E293B" vertical={false} />
+                        <XAxis 
+                          dataKey="date" 
+                          tick={{fill: '#64748b', fontSize: 10, fontWeight: 600}}
+                          axisLine={false}
+                          tickLine={false}
+                          tickFormatter={(str) => {
+                            const date = new Date(str);
+                            return date.toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
+                          }}
+                        />
+                        <YAxis 
+                          tick={{fill: '#64748b', fontSize: 10, fontWeight: 600}}
+                          axisLine={false}
+                          tickLine={false}
+                        />
+                        <Tooltip
+                          contentStyle={{ backgroundColor: '#1e293b', border: '1px solid #334155', borderRadius: '12px', boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)' }}
+                          labelStyle={{ color: '#94a3b8', fontWeight: 700, marginBottom: '4px' }}
+                          labelFormatter={(label) => new Date(label).toLocaleDateString(undefined, { dateStyle: 'long' })}
+                          cursor={{ stroke: '#334155', strokeWidth: 2 }}
+                        />
+                        <Line 
+                          type="monotone" 
+                          dataKey="calories" 
+                          stroke="#10b981" 
+                          strokeWidth={4} 
+                          dot={{r: 4, fill: '#10b981', strokeWidth: 2, stroke: '#151C2C'}} 
+                          activeDot={{r: 6, fill: '#10b981', strokeWidth: 2, stroke: '#fff'}}
+                        />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+
+                {/* Daily History List */}
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between px-1 mb-2">
+                    <h3 className="text-sm font-bold text-white uppercase tracking-wider">Daily Breakdown</h3>
+                    <span className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">{aggregateHistoryData(historyMeals).length} Days Logged</span>
+                  </div>
+                  {aggregateHistoryData(historyMeals).map((day) => (
+                    <button 
+                      key={day.date}
+                      className="w-full bg-[#151C2C] p-4 rounded-2xl border border-[#1E293B] flex items-center justify-between hover:bg-slate-800/40 transition-all active:scale-[0.98] group"
+                      onClick={() => {
+                        setSelectedDate(day.date);
+                        setActiveTab('daily');
+                      }}
+                    >
+                      <div className="text-left">
+                        <p className="font-bold text-slate-200 group-hover:text-primary transition-colors">
+                          {new Date(day.date).toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' })}
+                        </p>
+                        <div className="flex gap-2 mt-1.5">
+                          <div className="flex items-center gap-1 bg-red-500/10 px-1.5 py-0.5 rounded">
+                            <span className="text-[9px] text-red-400 font-black uppercase">P</span>
+                            <span className="text-[10px] text-red-200 font-bold">{day.protein.toFixed(0)}g</span>
+                          </div>
+                          <div className="flex items-center gap-1 bg-blue-500/10 px-1.5 py-0.5 rounded">
+                            <span className="text-[9px] text-blue-400 font-black uppercase">C</span>
+                            <span className="text-[10px] text-blue-200 font-bold">{day.carbs.toFixed(0)}g</span>
+                          </div>
+                          <div className="flex items-center gap-1 bg-amber-500/10 px-1.5 py-0.5 rounded">
+                            <span className="text-[9px] text-amber-400 font-black uppercase">F</span>
+                            <span className="text-[10px] text-amber-200 font-bold">{day.fat.toFixed(0)}g</span>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <div className="text-right">
+                          <p className="text-lg font-black text-white">{Math.round(day.calories)}</p>
+                          <p className="text-[9px] text-slate-500 uppercase font-black tracking-widest -mt-1">kcal</p>
+                        </div>
+                        <span className="material-symbols-rounded text-slate-700 group-hover:text-slate-500 transition-colors">chevron_right</span>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </>
+            ) : (
+              <div className="bg-[#151C2C] rounded-3xl p-12 text-center border border-[#1E293B]">
+                <div className="w-16 h-16 bg-slate-800/50 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <span className="material-symbols-rounded text-3xl text-slate-600">history_toggle_off</span>
+                </div>
+                <h4 className="text-white font-bold mb-1">No history yet</h4>
+                <p className="text-slate-500 text-sm">Start logging your meals to see reports and trends here.</p>
+                <button 
+                  onClick={() => setActiveTab('daily')}
+                  className="mt-6 px-6 py-2 bg-slate-800 text-white text-xs font-bold rounded-xl hover:bg-slate-700 transition-colors"
+                >
+                  Log Today's Meals
+                </button>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Food Search Modal */}
         {

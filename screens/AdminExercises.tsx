@@ -14,10 +14,11 @@ const AdminExercises: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNa
   const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
   const [selectedEquipment, setSelectedEquipment] = useState<string[]>([]);
   const [selectedLevels, setSelectedLevels] = useState<string[]>([]);
+  const [exportModal, setExportModal] = useState(false);
 
   const [page, setPage] = useState(0);
   const [hasMore, setHasMore] = useState(true);
-  const [filterData, setFilterData] = useState<{categories: string[], equipments: string[], levels: string[]}>({
+  const [filterData, setFilterData] = useState<{ categories: string[], equipments: string[], levels: string[] }>({
     categories: [],
     equipments: [],
     levels: []
@@ -39,14 +40,14 @@ const AdminExercises: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNa
       const { data, error } = await supabase
         .from('exercises')
         .select('category, equipment, level');
-      
+
       if (error) throw error;
-      
+
       if (data) {
         const cats = new Set<string>();
         const equips = new Set<string>();
         const levels = new Set<string>();
-        
+
         data.forEach(ex => {
           if (ex.category) cats.add(ex.category);
           if (ex.equipment) {
@@ -226,6 +227,67 @@ const AdminExercises: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNa
     return url.includes('youtube.com') || url.includes('youtu.be');
   };
 
+  const exportToCSV = () => {
+    try {
+      const headers = ['Exercise Name', 'Category', 'Equipment', 'Level', 'YouTube URL', 'Men YouTube', 'Women YouTube', 'Instructions'];
+      const data = exercises.map(ex => [
+        ex.exercise_name || '',
+        ex.category || '',
+        ex.equipment || '',
+        ex.level || '',
+        ex.youtube_url || '',
+        ex.men_youtube_url || '',
+        ex.women_youtube_url || '',
+        ex.instructions || ''
+      ]);
+
+      const csvContent = [
+        headers.join(','),
+        ...data.map(row => row.map(cell => `"${cell}"`).join(','))
+      ].join('\n');
+
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const link = document.createElement('a');
+      const url = URL.createObjectURL(blob);
+      link.setAttribute('href', url);
+      link.setAttribute('download', `exercises_${new Date().toISOString().split('T')[0]}.csv`);
+      link.style.visibility = 'hidden';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      alert('Data exported to CSV successfully!');
+      setExportModal(false);
+    } catch (error) {
+      console.error('Error exporting to CSV:', error);
+      alert('Failed to export data');
+    }
+  };
+
+  const exportToXLSX = async () => {
+    try {
+      const data = exercises.map(ex => ({
+        'Exercise Name': ex.exercise_name || '',
+        'Category': ex.category || '',
+        'Equipment': ex.equipment || '',
+        'Level': ex.level || '',
+        'YouTube URL': ex.youtube_url || '',
+        'Men YouTube': ex.men_youtube_url || '',
+        'Women YouTube': ex.women_youtube_url || '',
+        'Instructions': ex.instructions || ''
+      }));
+
+      const ws = XLSX.utils.json_to_sheet(data);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'Exercises');
+      XLSX.writeFile(wb, `exercises_${new Date().toISOString().split('T')[0]}.xlsx`);
+      alert('Data exported to XLSX successfully!');
+      setExportModal(false);
+    } catch (error) {
+      console.error('Error exporting to XLSX:', error);
+      alert('Failed to export data');
+    }
+  };
+
   const openVideoInNewTab = (videoUrl: string, title: string) => {
     let finalUrl = videoUrl;
 
@@ -290,6 +352,9 @@ const AdminExercises: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNa
           <h1 className="text-xl font-bold">Exercise Database</h1>
         </div>
         <div className="flex gap-2">
+          <button onClick={() => setExportModal(true)} className="bg-slate-800 p-2 rounded-full hover:bg-slate-700 transition-colors" title="Export data">
+            <span className="material-symbols-rounded text-sm">download</span>
+          </button>
           <label className="bg-slate-800 p-2 rounded-full cursor-pointer hover:bg-slate-700">
             <span className="material-symbols-rounded text-sm">upload_file</span>
             <input type="file" className="hidden" accept=".xlsx,.csv" onChange={handleFileUpload} />
@@ -452,11 +517,53 @@ const AdminExercises: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNa
         </div>
       </div>
 
+      {/* Export Modal */}
+      {exportModal && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[110] flex items-center justify-center p-6">
+          <div className="bg-slate-800 w-full max-w-sm rounded-3xl overflow-hidden border border-slate-700 shadow-2xl">
+            <div className="p-6">
+              <h2 className="text-xl font-bold text-white mb-2">Export Data</h2>
+              <p className="text-slate-400 text-sm mb-6">Select format to export {exercises.length} exercises</p>
+
+              <div className="space-y-3 mb-6">
+                <button
+                  onClick={exportToCSV}
+                  className="w-full bg-slate-700 hover:bg-slate-600 text-white font-bold py-4 rounded-xl transition-colors flex items-center justify-center gap-3 border border-slate-600"
+                >
+                  <span className="material-symbols-rounded">description</span>
+                  <div className="text-left">
+                    <p className="text-sm font-bold">Export as CSV</p>
+                    <p className="text-xs text-slate-400">Compatible with Excel & spreadsheets</p>
+                  </div>
+                </button>
+                <button
+                  onClick={exportToXLSX}
+                  className="w-full bg-slate-700 hover:bg-slate-600 text-white font-bold py-4 rounded-xl transition-colors flex items-center justify-center gap-3 border border-slate-600"
+                >
+                  <span className="material-symbols-rounded">table_chart</span>
+                  <div className="text-left">
+                    <p className="text-sm font-bold">Export as XLSX</p>
+                    <p className="text-xs text-slate-400">Formatted Excel spreadsheet</p>
+                  </div>
+                </button>
+              </div>
+
+              <button
+                onClick={() => setExportModal(false)}
+                className="w-full bg-primary text-slate-900 font-bold py-3 rounded-xl hover:bg-green-600 transition-colors"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {editingExercise && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex items-center justify-center p-6">
           <div className="bg-slate-800 w-full max-w-lg rounded-3xl p-6 border border-slate-700 shadow-2xl overflow-y-auto max-h-[90vh]">
             <h2 className="text-xl font-bold mb-6">{editingExercise.id ? 'Edit Exercise' : 'Add Exercise'}</h2>
-            
+
             <div className="space-y-6">
               {/* Basic Details */}
               <div className="space-y-4">
@@ -464,7 +571,7 @@ const AdminExercises: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNa
                   <span className="material-symbols-rounded text-sm">info</span>
                   <h4 className="text-xs font-black uppercase tracking-widest">Basic Details</h4>
                 </div>
-                
+
                 <div>
                   <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest ml-1 mb-1 block">Exercise Name</label>
                   <input
@@ -578,7 +685,7 @@ const AdminExercises: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNa
                   <span className="material-symbols-rounded text-sm">token</span>
                   <h4 className="text-xs font-black uppercase tracking-widest">Assets</h4>
                 </div>
-                
+
                 <div>
                   <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest ml-1 mb-1 block">Icon SVG Code</label>
                   <textarea
