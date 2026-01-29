@@ -168,6 +168,9 @@ export const CACHE_KEYS = {
 
     // Auth
     USER_ROLE: 'user_role',
+
+    // AI
+    AI_ADVICE: 'ai_advice',
 } as const;
 
 /**

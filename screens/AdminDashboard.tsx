@@ -16,6 +16,7 @@ const AdminDashboard: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNa
     shopOrders: 0,
     dueRevenue: 0,
     upcomingRenewals: 0,
+    todayAttendance: 0,
   });
   const [trendPeriod, setTrendPeriod] = useState<'7' | '30'>('30');
   const [trendData, setTrendData] = useState<number[]>([]);
@@ -105,6 +106,13 @@ const AdminDashboard: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNa
       // Get upcoming renewals
       const upcoming = await planService.getUsersWithUpcomingRenewals();
 
+      // Fetch today's attendance
+      const today = new Date().toISOString().split('T')[0];
+      const { count: attendanceCount } = await supabase
+        .from('attendance')
+        .select('*', { count: 'exact', head: true })
+        .gte('created_at', today);
+
       setStats({
         totalRevenue: totalRev,
         monthlyRevenue: monthlyRev,
@@ -116,6 +124,7 @@ const AdminDashboard: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNa
         shopOrders: deliveredOrders,
         dueRevenue: totalDue,
         upcomingRenewals: upcoming.length,
+        todayAttendance: attendanceCount || 0,
       });
     } catch (error) {
       console.error('Error fetching admin stats:', error);
@@ -303,6 +312,15 @@ const AdminDashboard: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNa
             <div className="mt-3 flex items-center text-blue-500 text-xs font-semibold">
               <span className="material-symbols-rounded text-xs mr-0.5">event_repeat</span>
               <span>Next 7 Days</span>
+            </div>
+          </div>
+
+          <div className="p-5 bg-white dark:bg-[#1E293B] rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800">
+            <p className="text-slate-500 dark:text-slate-400 text-xs font-medium uppercase tracking-wider">Gym Attendance</p>
+            <h2 className="text-2xl font-bold mt-1 text-purple-500">{stats.todayAttendance}</h2>
+            <div className="mt-3 flex items-center text-purple-500 text-xs font-semibold">
+              <span className="material-symbols-rounded text-xs mr-0.5">fingerprint</span>
+              <span>Today's Logins</span>
             </div>
           </div>
         </div>

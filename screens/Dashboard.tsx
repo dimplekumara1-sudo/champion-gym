@@ -3,10 +3,12 @@ import React, { useEffect, useState } from 'react';
 import StatusBar from '../components/StatusBar';
 import Header from '../components/Header';
 import BottomNav from '../components/BottomNav';
+import AIChatAssistant from '../components/AIChatAssistant';
 import { AppScreen, Profile } from '../types';
 import { supabase } from '../lib/supabase';
 import { cache, CACHE_KEYS, CACHE_TTL } from '../lib/cache';
 import { notificationService, PlanNotification } from '../lib/notifications';
+import { geminiModel } from '../lib/gemini';
 
 interface DailyNutrition {
   totalCalories: number;
@@ -41,6 +43,10 @@ const Dashboard: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNavigat
     daily_fat_target: 65,
   });
   const [announcements, setAnnouncements] = useState<any[]>([]);
+  const [aiAdvice, setAiAdvice] = useState<string>('');
+  const [isAiLoading, setIsAiLoading] = useState(false);
+  const [waterIntake, setWaterIntake] = useState<number>(0);
+  const [isChatOpen, setIsChatOpen] = useState(false);
 
   useEffect(() => {
     fetchProfile();
@@ -80,10 +86,15 @@ const Dashboard: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNavigat
               table: 'user_daily_diet_tracking',
               filter: `user_id=eq.${authUser.id}`
             },
-            () => {
+            async () => {
               // Refetch daily nutrition when food is added/removed
-              fetchDailyNutrition(authUser.id);
+              const nutrition = await fetchDailyNutrition(authUser.id);
               fetchWeeklyHistory(authUser.id);
+              
+              // Also refresh AI advice when nutrition updates
+              if (nutrition && nutritionGoals) {
+                fetchAIAdvice(nutrition, nutritionGoals, authUser.id);
+              }
             }
           )
           .subscribe();
@@ -122,7 +133,27 @@ const Dashboard: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNavigat
           )
           .subscribe();
 
-        return { profileSubscription, dietSubscription, goalsSubscription, announcementsSubscription };
+        // Water intake changes subscription
+        const waterSubscription = supabase
+          .channel(`water_${authUser.id}`)
+          .on(
+            'postgres_changes',
+            {
+              event: '*',
+              schema: 'public',
+              table: 'water_intake',
+              filter: `user_id=eq.${authUser.id}`
+            },
+            async () => {
+              const nutrition = await fetchDailyNutrition(authUser.id);
+              if (nutrition && nutritionGoals) {
+                fetchAIAdvice(nutrition, nutritionGoals, authUser.id);
+              }
+            }
+          )
+          .subscribe();
+
+        return { profileSubscription, dietSubscription, goalsSubscription, announcementsSubscription, waterSubscription };
       }
     };
 
@@ -137,9 +168,75 @@ const Dashboard: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNavigat
         subscriptions.dietSubscription?.unsubscribe();
         subscriptions.goalsSubscription?.unsubscribe();
         subscriptions.announcementsSubscription?.unsubscribe();
+        subscriptions.waterSubscription?.unsubscribe();
       }
     };
   }, []);
+
+  const fetchAIAdvice = async (nutrition: DailyNutrition, goals: any, userId?: string) => {
+    try {
+      const currentUserId = userId || user?.id;
+      if (!currentUserId) return;
+
+      const today = new Date().toISOString().split('T')[0];
+      const currentWater = await fetchWaterIntake(currentUserId);
+      const bmi = profile ? calculateBMI(profile.weight || 0, profile.height || 0) : 0;
+      const bmiCategory = getBMICategory(bmi);
+
+      const cacheKey = `${CACHE_KEYS.AI_ADVICE}_${currentUserId}`;
+      const cachedAdvice = cache.get<{ 
+        advice: string; 
+        calories: number; 
+        date: string; 
+        water: number;
+        weight: number;
+        goal: string;
+      }>(cacheKey);
+
+      // Only fetch if no cache, or if relevant data changed
+      if (cachedAdvice && 
+          cachedAdvice.calories === nutrition.totalCalories && 
+          cachedAdvice.water === currentWater &&
+          cachedAdvice.weight === profile?.weight &&
+          cachedAdvice.goal === profile?.goal &&
+          cachedAdvice.date === today) {
+        setAiAdvice(cachedAdvice.advice);
+        return;
+      }
+
+      setIsAiLoading(true);
+      const prompt = `
+        User Goal: ${profile?.goal || 'Fitness'}
+        Current Weight: ${profile?.weight}kg
+        Target Weight: ${profile?.target_weight}kg
+        Current BMI: ${bmi} (${bmiCategory})
+        Today's Intake: ${nutrition.totalCalories}kcal, ${nutrition.totalProtein}g Protein, ${nutrition.totalCarbs}g Carbs, ${nutrition.totalFat}g Fat.
+        Water Intake: ${currentWater}ml
+        Daily Targets: ${goals.daily_calories_target}kcal, ${goals.daily_protein_target}g Protein.
+        
+        Provide a 25-word max insight on what the user should eat for their next meal to reach their weight and fitness goals, including hydration advice.
+      `;
+
+      const result = await geminiModel.generateContent(prompt);
+      const newAdvice = result.response.text();
+      
+      setAiAdvice(newAdvice);
+      
+      // Store in cache
+      cache.set(cacheKey, {
+        advice: newAdvice,
+        calories: nutrition.totalCalories,
+        water: currentWater,
+        weight: profile?.weight || 0,
+        goal: profile?.goal || '',
+        date: today
+      }, CACHE_TTL.VERY_LONG);
+    } catch (error) {
+      console.error('Gemini error:', error);
+    } finally {
+      setIsAiLoading(false);
+    }
+  };
 
   const fetchProfile = async () => {
     const { data: { user } } = await supabase.auth.getUser();
@@ -156,11 +253,17 @@ const Dashboard: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNavigat
         setProfile(profileData);
 
         // Fetch daily nutrition data
-        await fetchDailyNutrition(user.id);
+        const nutrition = await fetchDailyNutrition(user.id);
         await fetchWeeklyHistory(user.id);
+        await fetchWaterIntake(user.id);
 
         // Fetch nutrition goals
-        await fetchNutritionGoals(user.id);
+        const goals = await fetchNutritionGoals(user.id);
+
+        // Fetch AI Advice based on nutrition and goals
+        if (nutrition && goals) {
+          fetchAIAdvice(nutrition, goals, user.id);
+        }
 
         // Fetch upcoming session
         await fetchUpcomingSession(user.id);
@@ -233,7 +336,26 @@ const Dashboard: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNavigat
     }
   };
 
-  const fetchDailyNutrition = async (userId: string) => {
+  const fetchWaterIntake = async (userId: string): Promise<number> => {
+    try {
+      const today = new Date().toISOString().split('T')[0];
+      const { data, error } = await supabase
+        .from('water_intake')
+        .select('amount_ml')
+        .eq('user_id', userId)
+        .eq('date', today);
+
+      if (error) throw error;
+      const total = (data || []).reduce((sum, item) => sum + (item.amount_ml || 0), 0);
+      setWaterIntake(total);
+      return total;
+    } catch (error) {
+      console.error('Error fetching water intake:', error);
+      return 0;
+    }
+  };
+
+  const fetchDailyNutrition = async (userId: string): Promise<DailyNutrition> => {
     try {
       const today = new Date().toISOString().split('T')[0];
       const { data, error } = await supabase
@@ -244,8 +366,9 @@ const Dashboard: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNavigat
 
       if (error) throw error;
 
+      let totals = { totalCalories: 0, totalProtein: 0, totalCarbs: 0, totalFat: 0 };
       if (data && data.length > 0) {
-        const totals = data.reduce(
+        totals = data.reduce(
           (acc, meal) => ({
             totalCalories: acc.totalCalories + (meal.calories || 0),
             totalProtein: acc.totalProtein + (meal.protein || 0),
@@ -254,17 +377,12 @@ const Dashboard: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNavigat
           }),
           { totalCalories: 0, totalProtein: 0, totalCarbs: 0, totalFat: 0 }
         );
-        setDailyNutrition(totals);
-      } else {
-        setDailyNutrition({
-          totalCalories: 0,
-          totalProtein: 0,
-          totalCarbs: 0,
-          totalFat: 0,
-        });
       }
+      setDailyNutrition(totals);
+      return totals;
     } catch (error) {
       console.error('Error fetching daily nutrition:', error);
+      return { totalCalories: 0, totalProtein: 0, totalCarbs: 0, totalFat: 0 };
     }
   };
 
@@ -324,19 +442,17 @@ const Dashboard: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNavigat
         throw error;
       }
 
-      if (data) {
-        setNutritionGoals(data);
-      } else {
-        // Default goals if none exist
-        setNutritionGoals({
-          daily_calories_target: 2000,
-          daily_protein_target: 150,
-          daily_carbs_target: 250,
-          daily_fat_target: 65,
-        });
-      }
+      const goals = data || {
+        daily_calories_target: 2000,
+        daily_protein_target: 150,
+        daily_carbs_target: 250,
+        daily_fat_target: 65,
+      };
+      setNutritionGoals(goals);
+      return goals;
     } catch (error) {
       console.error('Error fetching nutrition goals:', error);
+      return null;
     }
   };
 
@@ -644,6 +760,34 @@ const Dashboard: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNavigat
               <p className="text-[8px] text-slate-500 mt-1">{dailyNutrition.totalFat > 0 ? ((dailyNutrition.totalFat * 9 / dailyNutrition.totalCalories) * 100).toFixed(0) : 0}%</p>
             </div>
           </div>
+          {(aiAdvice || isAiLoading) && (
+            <div className="mt-4 p-3 bg-primary/5 border border-primary/20 rounded-2xl flex items-start gap-3">
+              <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
+                <span className="material-symbols-rounded text-primary text-sm">auto_awesome</span>
+              </div>
+              <div className="flex-1">
+                <p className="text-[10px] font-black text-primary uppercase tracking-widest mb-0.5">AI Nutrition Coach</p>
+                {isAiLoading ? (
+                  <div className="flex gap-1 items-center py-1">
+                    <div className="w-1 h-1 bg-primary rounded-full animate-bounce"></div>
+                    <div className="w-1 h-1 bg-primary rounded-full animate-bounce [animation-delay:-0.15s]"></div>
+                    <div className="w-1 h-1 bg-primary rounded-full animate-bounce [animation-delay:-0.3s]"></div>
+                  </div>
+                ) : (
+                  <p className="text-[11px] text-slate-300 font-medium italic leading-relaxed">"{aiAdvice}"</p>
+                )}
+              </div>
+              <button 
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setIsChatOpen(true);
+                }}
+                className="p-2 bg-primary/10 rounded-xl text-primary hover:bg-primary/20 transition-colors shrink-0"
+              >
+                <span className="material-symbols-rounded text-sm">chat_bubble</span>
+              </button>
+            </div>
+          )}
         </button>
 
         {/* Nutrition Goals Card */}
@@ -698,6 +842,15 @@ const Dashboard: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNavigat
         <section className="mb-6">
           <h2 className="text-sm font-bold uppercase tracking-wider text-slate-500 mb-4 ml-2">Quick Actions</h2>
           <div className="grid grid-cols-4 gap-2">
+            <button
+              onClick={() => setIsChatOpen(true)}
+              className="bg-[#151C2C] border border-[#1E293B] p-3 rounded-3xl flex flex-col items-center gap-2 active:scale-95 transition-transform"
+            >
+              <div className="w-10 h-10 rounded-2xl bg-primary/10 flex items-center justify-center text-primary">
+                <span className="material-symbols-rounded">smart_toy</span>
+              </div>
+              <span className="text-[9px] font-bold text-slate-300">AI Coach</span>
+            </button>
             <button
               onClick={() => onNavigate('GYM_CATALOG')}
               className="bg-[#151C2C] border border-[#1E293B] p-3 rounded-3xl flex flex-col items-center gap-2 active:scale-95 transition-transform"
@@ -1090,9 +1243,17 @@ const Dashboard: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNavigat
         </div>
       )}
 
-      {/* Visual background glows */}
       <div className="fixed top-0 right-0 -z-10 w-64 h-64 bg-primary/5 blur-[100px] rounded-full translate-x-1/2 -translate-y-1/2"></div>
       <div className="fixed bottom-0 left-0 -z-10 w-96 h-96 bg-primary/5 blur-[120px] rounded-full -translate-x-1/2 translate-y-1/2"></div>
+      
+      <AIChatAssistant 
+        isOpen={isChatOpen}
+        onClose={() => setIsChatOpen(false)}
+        profile={profile}
+        dailyNutrition={dailyNutrition}
+        nutritionGoals={nutritionGoals}
+        waterIntake={waterIntake}
+      />
     </div>
   );
 };

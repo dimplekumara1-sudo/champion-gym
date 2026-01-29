@@ -5,6 +5,7 @@ import StatusBar from '../components/StatusBar';
 import BottomNav from '../components/BottomNav';
 import { AppScreen } from '../types';
 import { supabase } from '../lib/supabase';
+import { analyzeFoodImage } from '../lib/gemini';
 
 interface IndianFood {
   id: number;
@@ -80,6 +81,7 @@ const DailyTracker: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNavi
   });
   const [submitLoading, setSubmitLoading] = useState(false);
   const [submitMessage, setSubmitMessage] = useState('');
+  const [isScanning, setIsScanning] = useState(false);
   const [showMacrosAsKcal, setShowMacrosAsKcal] = useState(true);
   const [nutritionGoals, setNutritionGoals] = useState<NutritionGoal | null>(null);
   const [showPieChart, setShowPieChart] = useState(false);
@@ -390,6 +392,48 @@ const DailyTracker: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNavi
     } catch (error) {
       console.error('Error adding food:', error);
       alert('Failed to add food');
+    }
+  };
+
+  const handleAIScan = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    try {
+      setIsScanning(true);
+      setSubmitMessage('');
+      
+      const reader = new FileReader();
+      reader.readAsDataURL(file);
+      reader.onload = async () => {
+        const base64 = reader.result as string;
+        const result = await analyzeFoodImage(base64);
+        
+        if (result) {
+          setSubmitFoodData({
+            dish_name: result.dish_name,
+            calories_kcal: result.calories_kcal,
+            protein_g: result.protein_g,
+            carbohydrates_g: result.carbohydrates_g,
+            fats_g: result.fats_g,
+            fibre_g: result.fiber_g || 0,
+            free_sugar_g: result.sugar_g || 0,
+            sodium_mg: result.sodium_mg || 0,
+            calcium_mg: 0,
+            iron_mg: 0,
+            vitamin_c_mg: 0,
+            folate_mcg: 0,
+            submission_notes: 'Generated via AI Scan',
+          });
+          setSubmitMessage('success:✓ AI Scan successful! Review values below.');
+        } else {
+          setSubmitMessage('error:AI could not analyze image. Try again or enter manually.');
+        }
+        setIsScanning(false);
+      };
+    } catch (err) {
+      setSubmitMessage('error:Error scanning image');
+      setIsScanning(false);
     }
   };
 
@@ -1471,6 +1515,36 @@ const DailyTracker: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNavi
                 </div>
 
                 <div className="flex-1 overflow-y-auto p-6 space-y-4">
+                  <div className="p-4 bg-primary/10 border border-primary/20 rounded-2xl">
+                    <div className="flex flex-col gap-3">
+                      <p className="text-primary text-[10px] font-black uppercase tracking-widest flex items-center gap-2">
+                        <span className="material-symbols-rounded text-sm">auto_awesome</span>
+                        Quick AI Scan
+                      </p>
+                      <p className="text-xs text-slate-300">Scan a nutrition label or dish photo to fill the form automatically.</p>
+                      <div className="relative">
+                        <input
+                          type="file"
+                          accept="image/*"
+                          capture="environment"
+                          onChange={handleAIScan}
+                          className="hidden"
+                          id="ai-scan-user"
+                          disabled={isScanning}
+                        />
+                        <label
+                          htmlFor="ai-scan-user"
+                          className={`w-full flex items-center justify-center gap-2 py-3 bg-primary text-slate-900 rounded-xl font-bold text-xs cursor-pointer transition-all active:scale-95 ${isScanning ? 'opacity-50 cursor-not-allowed' : ''}`}
+                        >
+                          <span className="material-symbols-rounded text-lg">
+                            {isScanning ? 'sync' : 'photo_camera'}
+                          </span>
+                          {isScanning ? 'AI SCANNING...' : 'SCAN LABEL / FOOD'}
+                        </label>
+                      </div>
+                    </div>
+                  </div>
+
                   {submitMessage && (
                     <div className={`p-3 rounded-lg text-sm ${submitMessage.startsWith('success')
                       ? 'bg-green-500/10 border border-green-500/50 text-green-400'

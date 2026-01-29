@@ -259,7 +259,7 @@ const WorkoutDetail: React.FC<{ workoutId: string | null, programId: string | nu
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
-                        setCurrentVideo(ex.exercises.men_link);
+                        setIframeUrl(ex.exercises.men_link);
                       }}
                       className="p-2 hover:bg-slate-800 rounded-lg text-slate-500"
                     >
@@ -269,7 +269,7 @@ const WorkoutDetail: React.FC<{ workoutId: string | null, programId: string | nu
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
-                        setCurrentVideo(ex.exercises.women_link);
+                        setIframeUrl(ex.exercises.women_link);
                       }}
                       className="p-2 hover:bg-slate-800 rounded-lg text-slate-500"
                     >
@@ -280,7 +280,7 @@ const WorkoutDetail: React.FC<{ workoutId: string | null, programId: string | nu
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
-                        setCurrentVideo(ex.exercises.women_link);
+                        setIframeUrl(ex.exercises.women_link);
                       }}
                       className="p-2 hover:bg-slate-800 rounded-lg text-slate-500"
                     >
@@ -359,7 +359,7 @@ const WorkoutDetail: React.FC<{ workoutId: string | null, programId: string | nu
                   <div className="w-20 h-20 bg-primary/10 rounded-full flex items-center justify-center mb-6">
                     <span className="material-symbols-rounded text-primary text-4xl">travel_explore</span>
                   </div>
-                  <h3 className="text-xl font-bold mb-2">Browser View Requested</h3>
+                  <h3 className="text-xl font-bold mb-2 text-white">Browser View Requested</h3>
                   <p className="text-slate-400 text-sm mb-8 max-w-[280px]">
                     To view this content securely and bypass frame restrictions, please open it in the built-in browser view.
                   </p>

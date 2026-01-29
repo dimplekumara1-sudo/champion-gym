@@ -6,6 +6,7 @@ import BottomNav from '../components/BottomNav';
 import { AppScreen, Profile } from '../types';
 import { supabase } from '../lib/supabase';
 import { cache, CACHE_KEYS, CACHE_TTL } from '../lib/cache';
+import { wearableService, WearableProvider } from '../lib/wearables';
 
 const ProfileScreen: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNavigate }) => {
   const [user, setUser] = useState<any>(null);
@@ -16,6 +17,9 @@ const ProfileScreen: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNav
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [showPhoneModal, setShowPhoneModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
+  const [showWearablesModal, setShowWearablesModal] = useState(false);
+  const [wearableProviders, setWearableProviders] = useState<WearableProvider[]>([]);
+  const [isWearableLoading, setIsWearableLoading] = useState(false);
   const [editData, setEditData] = useState<any>({});
 
   // Function to download and cache Google photo to Supabase Storage
@@ -247,6 +251,45 @@ const ProfileScreen: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNav
     }
   };
 
+  const handleConnectWearable = async () => {
+    try {
+      setIsWearableLoading(true);
+      setShowWearablesModal(true);
+      const providers = await wearableService.getProviders();
+      setWearableProviders(providers);
+    } catch (error) {
+      console.error('Error fetching providers:', error);
+    } finally {
+      setIsWearableLoading(false);
+    }
+  };
+
+  const handleProviderSelect = async (providerSlug: string) => {
+    try {
+      if (!user) return;
+      
+      let openWearablesUserId = profile?.openwearables_user_id;
+      
+      if (!openWearablesUserId) {
+        const owUser = await wearableService.getOrCreateUser(user.id, user.email);
+        if (owUser) {
+          openWearablesUserId = owUser.id;
+          // Update local profile state
+          setProfile(prev => prev ? { ...prev, openwearables_user_id: owUser.id } : null);
+        } else {
+          alert('Failed to initialize wearables service');
+          return;
+        }
+      }
+
+      const authUrl = wearableService.getAuthorizeUrl(providerSlug, openWearablesUserId);
+      window.open(authUrl, '_blank');
+    } catch (error) {
+      console.error('Error selecting provider:', error);
+      alert('Failed to start connection flow');
+    }
+  };
+
   const calculateBMI = (w: number, h: number) => {
     if (!w || !h) return 0;
     const heightInMeters = h / 100;
@@ -341,12 +384,16 @@ const ProfileScreen: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNav
 
           {[
             { label: 'Subscription Details', icon: 'card_membership', color: 'text-blue-400', bg: 'bg-blue-500/10', screen: 'SUBSCRIPTION_DETAILS' as AppScreen },
+            { label: 'Connect Wearable', icon: 'watch', color: 'text-purple-400', bg: 'bg-purple-500/10', onClick: handleConnectWearable },
             { label: 'Workout History', icon: 'history', color: 'text-orange-400', bg: 'bg-orange-500/10', screen: 'WORKOUT_HISTORY' as AppScreen },
             { label: 'Settings', icon: 'settings', color: 'text-slate-400', bg: 'bg-slate-800' },
           ].map((item, i) => (
             <button
               key={i}
-              onClick={() => item.screen && onNavigate(item.screen)}
+              onClick={() => {
+                if (item.onClick) item.onClick();
+                else if (item.screen) onNavigate(item.screen);
+              }}
               className="w-full flex items-center justify-between p-5 bg-[#151C2C] rounded-[2rem] border border-[#1E293B] active:bg-[#1E293B] transition-colors shadow-lg"
             >
               <div className="flex items-center gap-4">
@@ -521,6 +568,58 @@ const ProfileScreen: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNav
               >
                 Save
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Wearables Modal */}
+      {showWearablesModal && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[100] flex items-center justify-center p-6">
+          <div className="bg-[#090E1A] w-full max-w-sm rounded-3xl overflow-hidden border border-[#1E293B] shadow-2xl">
+            <div className="p-6 border-b border-[#1E293B] flex items-center justify-between">
+              <div>
+                <h2 className="text-xl font-black text-white">Connect Device</h2>
+                <p className="text-xs text-slate-400">Sync your health data automatically</p>
+              </div>
+              <button onClick={() => setShowWearablesModal(false)} className="text-slate-500">
+                <span className="material-symbols-rounded">close</span>
+              </button>
+            </div>
+
+            <div className="p-6 max-h-[60vh] overflow-y-auto space-y-3">
+              {isWearableLoading ? (
+                <div className="py-12 text-center">
+                  <div className="animate-spin w-8 h-8 border-4 border-primary border-t-transparent rounded-full mx-auto mb-4"></div>
+                  <p className="text-slate-400 text-sm">Fetching providers...</p>
+                </div>
+              ) : wearableProviders.length > 0 ? (
+                wearableProviders.map((provider) => (
+                  <button
+                    key={provider.id}
+                    onClick={() => handleProviderSelect(provider.slug)}
+                    className="w-full flex items-center gap-4 p-4 bg-[#151C2C] border border-[#1E293B] rounded-2xl hover:bg-[#1E293B] transition-colors group"
+                  >
+                    <div className="w-10 h-10 rounded-xl bg-slate-800 flex items-center justify-center overflow-hidden">
+                      {provider.logo_url ? (
+                        <img src={provider.logo_url} alt={provider.name} className="w-full h-full object-cover" />
+                      ) : (
+                        <span className="material-symbols-rounded text-slate-500">watch</span>
+                      )}
+                    </div>
+                    <span className="font-bold text-white group-hover:text-primary transition-colors">{provider.name}</span>
+                    <span className="material-symbols-rounded text-slate-600 ml-auto group-hover:text-primary">open_in_new</span>
+                  </button>
+                ))
+              ) : (
+                <div className="py-8 text-center">
+                  <span className="material-symbols-rounded text-4xl text-slate-700 mb-2">cloud_off</span>
+                  <p className="text-slate-500 text-sm">No providers available</p>
+                </div>
+              )}
+            </div>
+            <div className="p-4 bg-slate-900/50 text-[10px] text-slate-500 text-center uppercase tracking-widest font-bold">
+              Powered by OpenWearables.io
             </div>
           </div>
         </div>

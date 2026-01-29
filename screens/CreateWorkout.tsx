@@ -3,6 +3,7 @@ import React, { useEffect, useState, useMemo } from 'react';
 import { supabase } from '../lib/supabase';
 import { AppScreen } from '../types';
 import StatusBar from '../components/StatusBar';
+import { geminiModel } from '../lib/gemini';
 
 const CreateWorkout: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNavigate }) => {
   const [exercises, setExercises] = useState<any[]>([]);
@@ -15,6 +16,7 @@ const CreateWorkout: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNav
   const [weekNumber, setWeekNumber] = useState(1);
   const [dayOfWeek, setDayOfWeek] = useState(1);
   const [saving, setSaving] = useState(false);
+  const [isAiGenerating, setIsAiGenerating] = useState(false);
 
   // Filters
   const [searchTerm, setSearchTerm] = useState('');
@@ -287,6 +289,66 @@ const CreateWorkout: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNav
     }
   };
 
+  const handleAiGenerate = async () => {
+    if (!workoutName) return alert('Please enter a workout name first so AI knows what to generate!');
+    
+    try {
+      setIsAiGenerating(true);
+      
+      // 1. Fetch all available exercises for the AI to choose from
+      const { data: allExercises, error } = await supabase
+        .from('exercises')
+        .select('id, exercise_name, category, level, equipment');
+      
+      if (error) throw error;
+      if (!allExercises || allExercises.length === 0) throw new Error('No exercises found in database');
+
+      // 2. Prepare the prompt
+      const prompt = `
+        You are a professional fitness coach. Create a workout plan based on these details:
+        Workout Name: ${workoutName}
+        Description: ${description}
+        Difficulty: ${difficulty}
+
+        Available Exercises (ID and Name):
+        ${allExercises.map(ex => `${ex.id}: ${ex.exercise_name} (${ex.category}, ${ex.level}, ${ex.equipment})`).join('\n')}
+
+        Select 5-8 most suitable exercises from the list above.
+        Return ONLY a JSON array of objects with "id" and "sets_reps" keys.
+        Example: [{"id": "uuid-1", "sets_reps": "3x12"}, {"id": "uuid-2", "sets_reps": "4x8"}]
+        Do not include any explanation or markdown.
+      `;
+
+      // 3. Call Gemini
+      const result = await geminiModel.generateContent(prompt);
+      const responseText = result.response.text();
+      const cleanJson = responseText.replace(/```json|```/g, "").trim();
+      const suggestedIndices = JSON.parse(cleanJson);
+
+      // 4. Map back to full exercise objects
+      const newSelected = suggestedIndices.map((suggestion: any) => {
+        const fullEx = allExercises.find(ex => ex.id === suggestion.id);
+        if (fullEx) {
+          return { ...fullEx, sets_reps: suggestion.sets_reps };
+        }
+        return null;
+      }).filter(Boolean);
+
+      if (newSelected.length > 0) {
+        setSelectedExercises(newSelected);
+        alert(`AI has suggested ${newSelected.length} exercises for your "${workoutName}" workout!`);
+      } else {
+        alert('AI could not match any exercises. Please try a different workout name.');
+      }
+
+    } catch (error) {
+      console.error('AI Generation error:', error);
+      alert('Failed to generate workout with AI. Please try again or select manually.');
+    } finally {
+      setIsAiGenerating(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-[#020617] text-white pb-32">
       <StatusBar />
@@ -327,6 +389,20 @@ const CreateWorkout: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNav
                 {levels.map(l => <option key={l} value={l}>{l}</option>)}
               </select>
             </div>
+            
+            {/* AI Generator Button */}
+            <button
+              onClick={handleAiGenerate}
+              disabled={isAiGenerating || !workoutName}
+              className="w-full mt-2 py-4 px-5 rounded-2xl border border-primary/30 bg-primary/5 text-primary font-bold text-sm flex items-center justify-center gap-3 hover:bg-primary/10 transition-all disabled:opacity-50"
+            >
+              {isAiGenerating ? (
+                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary"></div>
+              ) : (
+                <span className="material-symbols-rounded text-lg">auto_awesome</span>
+              )}
+              {isAiGenerating ? 'AI is creating your plan...' : 'AI Magic: Suggest Exercises'}
+            </button>
           </div>
         </section>
 

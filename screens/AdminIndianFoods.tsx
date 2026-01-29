@@ -8,6 +8,7 @@ import {
     type ParsedFoodRecord,
 } from '../lib/fileParser';
 import { IndianFood } from '../lib/indianFoodService';
+import { analyzeFoodImage } from '../lib/gemini';
 
 const AdminIndianFoods: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNavigate }) => {
     const [foods, setFoods] = useState<IndianFood[]>([]);
@@ -25,6 +26,7 @@ const AdminIndianFoods: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ on
     const [showEditModal, setShowEditModal] = useState(false);
     const [editingFood, setEditingFood] = useState<IndianFood | null>(null);
     const [exportModal, setExportModal] = useState(false);
+    const [isScanning, setIsScanning] = useState(false);
     const [singleFoodData, setSingleFoodData] = useState({
         dish_name: '',
         calories_kcal: 0,
@@ -46,29 +48,47 @@ const AdminIndianFoods: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ on
     }, [currentPage, searchTerm]);
 
     const fetchFoods = async () => {
+        // ... (existing code)
+    };
+
+    const handleAIScan = async (event: React.ChangeEvent<HTMLInputElement>) => {
+        const file = event.target.files?.[0];
+        if (!file) return;
+
         try {
-            setLoading(true);
+            setIsScanning(true);
             setError('');
-
-            let query = supabase.from('indian_foods').select('*', { count: 'exact' });
-
-            if (searchTerm) {
-                query = query.ilike('dish_name', `%${searchTerm}%`);
-            }
-
-            const from = (currentPage - 1) * itemsPerPage;
-            const to = from + itemsPerPage - 1;
-
-            const { data, error: err, count } = await query.range(from, to).order('dish_name');
-
-            if (err) throw err;
-
-            setFoods(data || []);
-            setTotalItems(count || 0);
+            
+            const reader = new FileReader();
+            reader.readAsDataURL(file);
+            reader.onload = async () => {
+                const base64 = reader.result as string;
+                const result = await analyzeFoodImage(base64);
+                
+                if (result) {
+                    setSingleFoodData({
+                        dish_name: result.dish_name,
+                        calories_kcal: result.calories_kcal,
+                        protein_g: result.protein_g,
+                        carbohydrates_g: result.carbohydrates_g,
+                        fats_g: result.fats_g,
+                        fibre_g: result.fiber_g || 0,
+                        free_sugar_g: result.sugar_g || 0,
+                        sodium_mg: result.sodium_mg || 0,
+                        calcium_mg: 0,
+                        iron_mg: 0,
+                        vitamin_c_mg: 0,
+                        folate_mcg: 0,
+                    });
+                    setSuccess('✓ AI Scan successful! Please review the values below.');
+                } else {
+                    setError('AI could not analyze the image. Please try again or enter manually.');
+                }
+                setIsScanning(false);
+            };
         } catch (err) {
-            setError(`Error fetching foods: ${err instanceof Error ? err.message : 'Unknown error'}`);
-        } finally {
-            setLoading(false);
+            setError('Error scanning image');
+            setIsScanning(false);
         }
     };
 
@@ -434,11 +454,31 @@ const AdminIndianFoods: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ on
 
                     {showAddSingle && (
                         <div className="space-y-6">
-                            <div className="p-4 bg-primary/10 border border-primary/20 rounded-xl">
+                            <div className="p-4 bg-primary/10 border border-primary/20 rounded-xl flex flex-col md:flex-row md:items-center justify-between gap-4">
                                 <p className="text-primary text-sm font-bold flex items-center gap-2">
                                     <span className="material-symbols-rounded text-base">info</span>
-                                    Enter nutrition values per 100g of the food item
+                                    Enter nutrition values per 100g or use AI Scan
                                 </p>
+                                <div className="relative">
+                                    <input
+                                        type="file"
+                                        accept="image/*"
+                                        capture="environment"
+                                        onChange={handleAIScan}
+                                        className="hidden"
+                                        id="ai-scan-input"
+                                        disabled={isScanning}
+                                    />
+                                    <label
+                                        htmlFor="ai-scan-input"
+                                        className={`flex items-center gap-2 px-4 py-2 bg-primary text-slate-900 rounded-lg font-bold cursor-pointer transition-all hover:scale-105 active:scale-95 ${isScanning ? 'opacity-50 cursor-not-allowed' : ''}`}
+                                    >
+                                        <span className="material-symbols-rounded">
+                                            {isScanning ? 'sync' : 'auto_awesome'}
+                                        </span>
+                                        {isScanning ? 'AI Scanning...' : 'AI Scan Label/Food'}
+                                    </label>
+                                </div>
                             </div>
 
                             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
