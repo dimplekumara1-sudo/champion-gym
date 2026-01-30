@@ -3,7 +3,7 @@ import React, { useEffect, useState, useMemo } from 'react';
 import { supabase } from '../lib/supabase';
 import { AppScreen } from '../types';
 import StatusBar from '../components/StatusBar';
-import { geminiModel } from '../lib/gemini';
+import { generateAIChatResponse } from '../lib/gemini';
 
 const CreateWorkout: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNavigate }) => {
   const [exercises, setExercises] = useState<any[]>([]);
@@ -320,8 +320,7 @@ const CreateWorkout: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNav
       `;
 
       // 3. Call Gemini
-      const result = await geminiModel.generateContent(prompt);
-      const responseText = result.response.text();
+      const responseText = await generateAIChatResponse(prompt);
       const cleanJson = responseText.replace(/```json|```/g, "").trim();
       const suggestedIndices = JSON.parse(cleanJson);
 

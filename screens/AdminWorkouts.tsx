@@ -2,6 +2,7 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { supabase } from '../lib/supabase';
 import { AppScreen } from '../types';
+import { generateAIChatResponse } from '../lib/gemini';
 
 const AdminWorkouts: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNavigate }) => {
   const [workouts, setWorkouts] = useState<any[]>([]);
@@ -29,6 +30,7 @@ const AdminWorkouts: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNav
   const [userSearchTerm, setUserSearchTerm] = useState('');
   const [weekNumber, setWeekNumber] = useState(1);
   const [dayOfWeek, setDayOfWeek] = useState(1);
+  const [isAiGenerating, setIsAiGenerating] = useState(false);
 
   // Filters for exercise selection
   const [searchTerm, setSearchTerm] = useState('');
@@ -171,6 +173,53 @@ const AdminWorkouts: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNav
 
   const updateSetsReps = (id: string, val: string) => {
     setSelectedExercises(selectedExercises.map(ex => (ex.id === id || ex.exercise_id === id) ? { ...ex, sets_reps: val } : ex));
+  };
+
+  const handleAiGenerate = async () => {
+    if (!workoutName) return alert('Please enter a workout name first!');
+    
+    try {
+      setIsAiGenerating(true);
+      const { data: allExercises, error } = await supabase
+        .from('exercises')
+        .select('id, exercise_name, category, level, equipment');
+      
+      if (error) throw error;
+      if (!allExercises || allExercises.length === 0) throw new Error('No exercises found');
+
+      const prompt = `
+        You are a professional fitness coach. Create a workout plan based on:
+        Name: ${workoutName}
+        Description: ${description}
+        Difficulty: ${difficulty}
+
+        Available Exercises:
+        ${allExercises.slice(0, 150).map(ex => `${ex.id}: ${ex.exercise_name} (${ex.category}, ${ex.level})`).join('\n')}
+
+        Select 5-8 most suitable exercises.
+        Return ONLY a JSON array of objects with "id" and "sets_reps" keys.
+        Example: [{"id": "uuid-1", "sets_reps": "3x12"}]
+      `;
+
+      const responseText = await generateAIChatResponse(prompt);
+      const cleanJson = responseText.replace(/```json|```/g, "").trim();
+      const suggestions = JSON.parse(cleanJson);
+
+      const newSelected = suggestions.map((s: any) => {
+        const fullEx = allExercises.find(ex => ex.id === s.id);
+        return fullEx ? { ...fullEx, sets_reps: s.sets_reps } : null;
+      }).filter(Boolean);
+
+      if (newSelected.length > 0) {
+        setSelectedExercises(newSelected);
+        alert(`AI suggested ${newSelected.length} exercises!`);
+      }
+    } catch (error) {
+      console.error(error);
+      alert('AI Generation failed');
+    } finally {
+      setIsAiGenerating(false);
+    }
   };
 
   const handleSaveWorkout = async () => {
@@ -394,6 +443,21 @@ const AdminWorkouts: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNav
                       onChange={e => setDescription(e.target.value)}
                     />
                   </div>
+                  
+                  {/* AI Generator Button */}
+                  <button
+                    onClick={handleAiGenerate}
+                    disabled={isAiGenerating || !workoutName}
+                    className="w-full py-4 px-5 rounded-2xl border border-primary/30 bg-primary/5 text-primary font-bold text-[10px] uppercase tracking-widest flex items-center justify-center gap-3 hover:bg-primary/10 transition-all disabled:opacity-50 shadow-lg shadow-primary/5"
+                  >
+                    {isAiGenerating ? (
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary"></div>
+                    ) : (
+                      <span className="material-symbols-rounded text-lg">smart_toy</span>
+                    )}
+                    {isAiGenerating ? 'Generating...' : 'AI Generate Exercises'}
+                  </button>
+
                   <div className="grid grid-cols-2 gap-4">
                     <div>
                       <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest ml-4 mb-1 block">Difficulty</label>

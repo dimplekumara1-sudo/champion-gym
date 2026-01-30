@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { geminiModel } from '../lib/gemini';
+import { generateAIChatResponse } from '../lib/gemini';
 import { Profile } from '../types';
 
 interface DailyNutrition {
@@ -85,8 +85,7 @@ const AIChatAssistant: React.FC<AIChatAssistantProps> = ({
       const chatHistory = messages.map(m => `${m.role === 'user' ? 'User' : 'Assistant'}: ${m.content}`).join('\n');
       const fullPrompt = `${systemPrompt}\n\nChat History:\n${chatHistory}\n\nUser: ${userMessage}\nAssistant:`;
 
-      const result = await geminiModel.generateContent(fullPrompt);
-      const assistantResponse = result.response.text();
+      const assistantResponse = await generateAIChatResponse(fullPrompt);
 
       setMessages(prev => [...prev, { role: 'assistant', content: assistantResponse }]);
     } catch (error) {

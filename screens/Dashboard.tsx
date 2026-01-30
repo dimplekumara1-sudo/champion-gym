@@ -1,5 +1,5 @@
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import StatusBar from '../components/StatusBar';
 import Header from '../components/Header';
 import BottomNav from '../components/BottomNav';
@@ -8,7 +8,7 @@ import { AppScreen, Profile } from '../types';
 import { supabase } from '../lib/supabase';
 import { cache, CACHE_KEYS, CACHE_TTL } from '../lib/cache';
 import { notificationService, PlanNotification } from '../lib/notifications';
-import { geminiModel } from '../lib/gemini';
+import { generateAIChatResponse } from '../lib/gemini';
 
 interface DailyNutrition {
   totalCalories: number;
@@ -43,10 +43,16 @@ const Dashboard: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNavigat
     daily_fat_target: 65,
   });
   const [announcements, setAnnouncements] = useState<any[]>([]);
-  const [aiAdvice, setAiAdvice] = useState<string>('');
+  const [aiAdvice, setAiAdvice] = useState<string>(() => {
+    return localStorage.getItem('last_ai_advice') || '';
+  });
   const [isAiLoading, setIsAiLoading] = useState(false);
   const [waterIntake, setWaterIntake] = useState<number>(0);
   const [isChatOpen, setIsChatOpen] = useState(false);
+  const isFetchingAIAdvice = useRef(false);
+  const lastFetchParams = useRef<string>('');
+  const lastFetchTime = useRef<number>(0);
+  const FETCH_COOLDOWN = 10000; // 10 seconds between AI advice updates
 
   useEffect(() => {
     fetchProfile();
@@ -176,12 +182,28 @@ const Dashboard: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNavigat
   const fetchAIAdvice = async (nutrition: DailyNutrition, goals: any, userId?: string) => {
     try {
       const currentUserId = userId || user?.id;
-      if (!currentUserId) return;
+      if (!currentUserId || isFetchingAIAdvice.current) return;
+
+      const now = Date.now();
+      if (now - lastFetchTime.current < FETCH_COOLDOWN) {
+        return; // Don't fetch too frequently
+      }
 
       const today = new Date().toISOString().split('T')[0];
       const currentWater = await fetchWaterIntake(currentUserId);
       const bmi = profile ? calculateBMI(profile.weight || 0, profile.height || 0) : 0;
       const bmiCategory = getBMICategory(bmi);
+
+      // Create a string representation of params to prevent duplicate fetches for same data
+      const currentParams = JSON.stringify({
+        calories: nutrition.totalCalories,
+        water: currentWater,
+        weight: profile?.weight,
+        goal: profile?.goal,
+        date: today
+      });
+
+      if (lastFetchParams.current === currentParams) return;
 
       const cacheKey = `${CACHE_KEYS.AI_ADVICE}_${currentUserId}`;
       const cachedAdvice = cache.get<{ 
@@ -201,10 +223,14 @@ const Dashboard: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNavigat
           cachedAdvice.goal === profile?.goal &&
           cachedAdvice.date === today) {
         setAiAdvice(cachedAdvice.advice);
+        localStorage.setItem('last_ai_advice', cachedAdvice.advice);
+        lastFetchParams.current = currentParams;
         return;
       }
 
       setIsAiLoading(true);
+      isFetchingAIAdvice.current = true;
+      
       const prompt = `
         User Goal: ${profile?.goal || 'Fitness'}
         Current Weight: ${profile?.weight}kg
@@ -217,10 +243,12 @@ const Dashboard: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNavigat
         Provide a 25-word max insight on what the user should eat for their next meal to reach their weight and fitness goals, including hydration advice.
       `;
 
-      const result = await geminiModel.generateContent(prompt);
-      const newAdvice = result.response.text();
+      const newAdvice = await generateAIChatResponse(prompt);
       
       setAiAdvice(newAdvice);
+      localStorage.setItem('last_ai_advice', newAdvice);
+      lastFetchParams.current = currentParams;
+      lastFetchTime.current = Date.now();
       
       // Store in cache
       cache.set(cacheKey, {
@@ -231,10 +259,14 @@ const Dashboard: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNavigat
         goal: profile?.goal || '',
         date: today
       }, CACHE_TTL.VERY_LONG);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Gemini error:', error);
+      if (error.message?.includes('429') || error.status === 429) {
+        setAiAdvice("AI is taking a quick break. I'll provide fresh insights in a moment!");
+      }
     } finally {
       setIsAiLoading(false);
+      isFetchingAIAdvice.current = false;
     }
   };
 
@@ -327,9 +359,9 @@ const Dashboard: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNavigat
         .order('session_date', { ascending: true })
         .order('session_time', { ascending: true })
         .limit(1)
-        .single();
+        .maybeSingle();
 
-      if (error && error.code !== 'PGRST116') throw error;
+      if (error) throw error;
       setUpcomingSession(data);
     } catch (error) {
       console.error('Error fetching upcoming session:', error);
@@ -436,9 +468,9 @@ const Dashboard: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNavigat
         .from('nutrition_goals')
         .select('*')
         .eq('user_id', userId)
-        .single();
+        .maybeSingle();
 
-      if (error && error.code !== 'PGRST116') {
+      if (error) {
         throw error;
       }
 
@@ -704,9 +736,9 @@ const Dashboard: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNavigat
         </div>
 
         {/* Calorie Tracker Card */}
-        <button
+        <div
           onClick={() => onNavigate('DAILY_TRACKER')}
-          className="w-full text-left bg-[#151C2C] border border-[#1E293B] p-5 rounded-3xl mb-4 shadow-xl active:scale-[0.98] transition-transform"
+          className="w-full text-left bg-[#151C2C] border border-[#1E293B] p-5 rounded-3xl mb-4 shadow-xl active:scale-[0.98] transition-transform cursor-pointer"
         >
           <div className="flex justify-between items-start mb-5">
             <div>
@@ -774,21 +806,25 @@ const Dashboard: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNavigat
                     <div className="w-1 h-1 bg-primary rounded-full animate-bounce [animation-delay:-0.3s]"></div>
                   </div>
                 ) : (
-                  <p className="text-[11px] text-slate-300 font-medium italic leading-relaxed">"{aiAdvice}"</p>
+                  <p className="text-[11px] text-slate-300 font-medium italic leading-relaxed">
+                    {aiAdvice ? `"${aiAdvice}"` : "Ready to provide smart insights..."}
+                  </p>
                 )}
               </div>
-              <button 
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setIsChatOpen(true);
-                }}
-                className="p-2 bg-primary/10 rounded-xl text-primary hover:bg-primary/20 transition-colors shrink-0"
-              >
-                <span className="material-symbols-rounded text-sm">chat_bubble</span>
-              </button>
+              {aiAdvice && !aiAdvice.includes("unavailable") && (
+                <button 
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setIsChatOpen(true);
+                  }}
+                  className="p-2 bg-primary/10 rounded-xl text-primary hover:bg-primary/20 transition-colors shrink-0"
+                >
+                  <span className="material-symbols-rounded text-sm">chat_bubble</span>
+                </button>
+              )}
             </div>
           )}
-        </button>
+        </div>
 
         {/* Nutrition Goals Card */}
         <button

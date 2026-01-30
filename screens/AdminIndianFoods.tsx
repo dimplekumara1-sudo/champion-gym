@@ -48,7 +48,33 @@ const AdminIndianFoods: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ on
     }, [currentPage, searchTerm]);
 
     const fetchFoods = async () => {
-        // ... (existing code)
+        try {
+            setLoading(true);
+            const from = (currentPage - 1) * itemsPerPage;
+            const to = from + itemsPerPage - 1;
+
+            let query = supabase
+                .from('indian_foods')
+                .select('*', { count: 'exact' });
+
+            if (searchTerm) {
+                query = query.ilike('dish_name', `%${searchTerm}%`);
+            }
+
+            const { data, error: err, count } = await query
+                .order('dish_name', { ascending: true })
+                .range(from, to);
+
+            if (err) throw err;
+
+            setFoods(data || []);
+            setTotalItems(count || 0);
+        } catch (err) {
+            setError('Error fetching food items');
+            console.error(err);
+        } finally {
+            setLoading(false);
+        }
     };
 
     const handleAIScan = async (event: React.ChangeEvent<HTMLInputElement>) => {
