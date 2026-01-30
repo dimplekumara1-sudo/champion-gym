@@ -43,6 +43,8 @@ import AdminIndianFoods from './screens/AdminIndianFoods';
 import AdminFoodApprovals from './screens/AdminFoodApprovals';
 import AdminPT from './screens/AdminPT';
 import AdminAnnouncements from './screens/AdminAnnouncements';
+import AttendanceScreen from './screens/AttendanceScreen';
+import AdminAttendance from './screens/AdminAttendance';
 import ConfigScreen from './screens/ConfigScreen';
 import { supabase } from './lib/supabase';
 import { startSessionMonitoring, stopSessionMonitoring, clearSessionState } from './lib/sessionService';
@@ -264,6 +266,8 @@ const App: React.FC = () => {
       case 'ADMIN_FOOD_APPROVALS': return <AdminFoodApprovals onNavigate={navigate} />;
       case 'ADMIN_PT': return <AdminPT onNavigate={navigate} />;
       case 'ADMIN_ANNOUNCEMENTS': return <AdminAnnouncements onNavigate={navigate} />;
+      case 'ATTENDANCE': return <AttendanceScreen onNavigate={navigate} />;
+      case 'ADMIN_ATTENDANCE': return <AdminAttendance onNavigate={navigate} />;
       case 'STORE': return <StoreScreen onNavigate={navigate} />;
       case 'CART': return <CartScreen onNavigate={navigate} />;
       case 'ORDER_HISTORY': return <OrderHistoryScreen onNavigate={navigate} />;

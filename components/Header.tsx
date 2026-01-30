@@ -1,15 +1,29 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { supabase } from '../lib/supabase';
+import type { User } from '@supabase/supabase-js';
 import { cache, CACHE_KEYS, CACHE_TTL } from '../lib/cache';
 import { PlanNotification } from '../lib/notifications';
+import { PushNotification } from '../lib/push-notifications';
 
 interface HeaderProps {
     onProfileClick?: () => void;
     notifications?: PlanNotification[];
+    pushNotifications?: PushNotification[];
+    unreadCount?: number;
     onNotificationsClick?: () => void;
+    onPushNotificationsClick?: () => void;
+    onBMIInfoClick?: () => void;
 }
 
-const Header: React.FC<HeaderProps> = ({ onProfileClick, notifications = [], onNotificationsClick }) => {
+const Header: React.FC<HeaderProps> = ({ 
+    onProfileClick, 
+    notifications = [], 
+    pushNotifications = [], 
+    unreadCount = 0, 
+    onNotificationsClick,
+    onPushNotificationsClick,
+    onBMIInfoClick
+}) => {
     const [profilePhoto, setProfilePhoto] = useState<string | null>(null);
     const [photoError, setPhotoError] = useState(false);
     const [uploading, setUploading] = useState(false);
@@ -33,7 +47,21 @@ const Header: React.FC<HeaderProps> = ({ onProfileClick, notifications = [], onN
     // Function to handle photo errors with retry logic
     const handlePhotoError = () => {
         setPhotoError(true);
-        console.log('Profile photo failed to load, falling back to default avatar');
+        // Retry after 3 seconds
+        setTimeout(() => {
+            setPhotoError(false);
+            // Try to reload the photo
+            if (profilePhoto) {
+                const img = new Image();
+                img.src = profilePhoto;
+                img.onload = () => {
+                    setPhotoError(false);
+                };
+                img.onerror = () => {
+                    setPhotoError(true);
+                };
+            }
+        }, 3000);
     };
 
     useEffect(() => {
@@ -43,59 +71,60 @@ const Header: React.FC<HeaderProps> = ({ onProfileClick, notifications = [], onN
 
             if (user) {
                 const googlePhoto = user.user_metadata?.avatar_url;
-
                 const cachedProfile = cache.get(CACHE_KEYS.PROFILE_DATA) as any;
-                if (cachedProfile?.avatar_url && cachedProfile.avatar_url.includes('supabase')) {
-                    setProfilePhoto(cachedProfile.avatar_url);
-                    setPhotoError(false);
-                    return;
-                }
 
-                const { data: profileData } = await supabase
-                    .from('profiles')
-                    .select('avatar_url')
-                    .eq('id', user.id)
-                    .single();
-
-                if (profileData?.avatar_url && profileData.avatar_url.includes('supabase')) {
-                    setProfilePhoto(profileData.avatar_url);
-                    setPhotoError(false);
-                    const fullProfile = (cache.get(CACHE_KEYS.PROFILE_DATA) || {}) as any;
-                    cache.set(CACHE_KEYS.PROFILE_DATA, { ...fullProfile, avatar_url: profileData.avatar_url }, CACHE_TTL.LONG);
-                } else if (googlePhoto && validateGooglePhotoUrl(googlePhoto)) {
-                    // Use Google photo URL directly with error handling
+                // Use Google photo directly if valid
+                if (googlePhoto && validateGooglePhotoUrl(googlePhoto)) {
                     setProfilePhoto(googlePhoto);
                     setPhotoError(false);
-                } else {
-                    setPhotoError(true);
+                    console.log('Using Google photo URL directly:', googlePhoto);
+                } 
+                // Use cached photo if available and not Google photo
+                else if (cachedProfile?.avatar_url && cachedProfile.avatar_url.includes('supabase')) {
+                    setProfilePhoto(cachedProfile.avatar_url);
+                    setPhotoError(false);
+                    console.log('Using cached profile photo:', cachedProfile.avatar_url);
+                }
+                // Fetch from profiles table if no cached photo and not Google photo
+                else {
+                    const { data: profileData } = await supabase
+                        .from('profiles')
+                        .select('avatar_url')
+                        .eq('id', user.id)
+                        .single();
+
+                    if (profileData?.avatar_url && profileData.avatar_url.includes('supabase')) {
+                        setProfilePhoto(profileData.avatar_url);
+                        setPhotoError(false);
+                        console.log('Fetched profile photo from database:', profileData.avatar_url);
+
+                        // Update cache with new photo
+                        const updatedProfile = { ...cachedProfile, avatar_url: profileData.avatar_url };
+                        cache.set(CACHE_KEYS.PROFILE_DATA, updatedProfile, CACHE_TTL.LONG);
+                    } else {
+                        setProfilePhoto(null);
+                        setPhotoError(false);
+                        console.log('No profile photo found');
+                    }
                 }
             }
         };
 
         initializeProfile();
 
-        const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
+        const { data: subscription } = supabase.auth.onAuthStateChange((_event, session) => {
             if (session?.user) {
-                const googlePhoto = session.user.user_metadata?.avatar_url;
-                if (googlePhoto) {
-                    const { data: profileData } = await supabase
-                        .from('profiles')
-                        .select('avatar_url')
-                        .eq('id', session.user.id)
-                        .single();
-
-                    if (!profileData?.avatar_url || !profileData.avatar_url.includes('supabase')) {
-                        if (validateGooglePhotoUrl(googlePhoto)) {
-                            setProfilePhoto(googlePhoto);
-                            setPhotoError(false);
-                        }
-                    }
-                }
+                setUser(session.user);
+                initializeProfile();
             }
         });
 
-        return () => subscription.unsubscribe();
-    }, []);
+        return () => {
+            if (subscription?.subscription) {
+                subscription.subscription.unsubscribe();
+            }
+        };
+    });
 
     const handlePhotoUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
         try {
@@ -106,12 +135,14 @@ const Header: React.FC<HeaderProps> = ({ onProfileClick, notifications = [], onN
             // Validate file type
             if (!file.type.startsWith('image/')) {
                 alert('Please select an image file');
+                setUploading(false);
                 return;
             }
 
             // Validate file size (max 5MB)
             if (file.size > 5 * 1024 * 1024) {
                 alert('File size must be less than 5MB');
+                setUploading(false);
                 return;
             }
 
@@ -140,10 +171,12 @@ const Header: React.FC<HeaderProps> = ({ onProfileClick, notifications = [], onN
             if (updateError) throw updateError;
 
             // Update cache
-            const cachedProfile = (cache.get(CACHE_KEYS.PROFILE_DATA) || {}) as any;
-            cache.set(CACHE_KEYS.PROFILE_DATA, { ...cachedProfile, avatar_url: publicUrl }, CACHE_TTL.LONG);
+            const cachedProfile = cache.get(CACHE_KEYS.PROFILE_DATA) as any;
+            const updatedProfile = { ...cachedProfile, avatar_url: publicUrl };
+            cache.set(CACHE_KEYS.PROFILE_DATA, updatedProfile, CACHE_TTL.LONG);
 
             setProfilePhoto(publicUrl);
+            console.log('Photo uploaded successfully:', publicUrl);
         } catch (error) {
             console.error('Error uploading photo:', error);
             alert('Failed to upload photo. Please try again.');
@@ -177,52 +210,69 @@ const Header: React.FC<HeaderProps> = ({ onProfileClick, notifications = [], onN
             </div>
 
             <div className="flex items-center gap-3">
-                {/* Notification Bell */}
-                <button
-                    onClick={onNotificationsClick}
-                    className="relative transition-transform active:scale-95"
-                    title="View notifications"
-                >
-                    <span className="material-symbols-rounded text-slate-400 hover:text-primary transition-colors">notifications</span>
-                    {notifications && notifications.length > 0 && (
+                {/* Plan Notifications Bell */}
+                {notifications && notifications.length > 0 && (
+                    <button
+                        onClick={onNotificationsClick}
+                        className="relative transition-transform active:scale-95"
+                        title="View plan notifications"
+                    >
+                        <span className="material-symbols-rounded text-slate-400 hover:text-primary transition-colors">campaign</span>
                         <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[9px] font-black h-5 w-5 rounded-full flex items-center justify-center">
                             {notifications.length > 9 ? '9+' : notifications.length}
                         </span>
-                    )}
-                </button>
+                    </button>
+                )}
 
+                {/* Push Notifications Bell */}
                 <button
-                    onClick={handlePhotoClick}
-                    disabled={uploading}
-                    className="relative group cursor-pointer transition-transform active:scale-95 disabled:opacity-50"
-                    title={user?.user_metadata?.avatar_url ? 'View Profile' : 'Upload Photo'}
+                    onClick={onPushNotificationsClick}
+                    className="relative transition-transform active:scale-95"
+                    title="View notifications"
                 >
-                    <div className="w-12 h-12 rounded-full border-2 border-primary/30 group-hover:border-primary/60 transition-colors overflow-hidden bg-slate-800 flex items-center justify-center">
-{profilePhoto && !photoError ? (
-                            <img
-                                src={profilePhoto}
-                                alt="Profile"
-                                className="w-full h-full object-cover"
-                                onError={handlePhotoError}
-                                referrerPolicy="no-referrer"
-                                crossOrigin="anonymous"
-                                loading="lazy"
-                            />
-                        ) : (
-                            <span className="material-symbols-rounded text-slate-600 text-xl">account_circle</span>
-                        )}
-                    </div>
-
-                    {/* Upload indicator for non-Google photos */}
-                    {!user?.user_metadata?.avatar_url && !profilePhoto && (
-                        <div className="absolute -bottom-1 -right-1 bg-primary text-slate-900 p-1.5 rounded-full shadow-lg border-2 border-[#090E1A]">
-                            <span className="material-symbols-rounded text-sm font-bold block" style={{ fontSize: '14px' }}>
-                                {uploading ? 'cloud_upload' : 'add'}
-                            </span>
-                        </div>
+                    <span className="material-symbols-rounded text-slate-400 hover:text-purple-400 transition-colors">notifications</span>
+                    {unreadCount > 0 && (
+                        <span className="absolute -top-1 -right-1 bg-purple-500 text-white text-[9px] font-black h-5 w-5 rounded-full flex items-center justify-center">
+                            {unreadCount > 9 ? '9+' : unreadCount}
+                        </span>
                     )}
                 </button>
             </div>
+
+            <div className="w-1"></div>
+
+            {/* Profile Photo Button */}
+            <button
+                onClick={handlePhotoClick}
+                disabled={uploading}
+                className="relative group cursor-pointer transition-transform active:scale-95 disabled:opacity-50"
+                title={user?.user_metadata?.avatar_url ? 'View Profile' : 'Upload Photo'}
+            >
+                <div className="w-12 h-12 rounded-full border-2 border-primary/30 group-hover:border-primary/60 transition-colors overflow-hidden bg-slate-800 flex items-center justify-center">
+                    {profilePhoto && !photoError ? (
+                        <img
+                            src={profilePhoto}
+                            alt="Profile"
+                            className="w-full h-full object-cover"
+                            onError={handlePhotoError}
+                            referrerPolicy="no-referrer"
+                            crossOrigin="anonymous"
+                            loading="lazy"
+                        />
+                    ) : (
+                        <span className="material-symbols-rounded text-slate-600 text-xl">account_circle</span>
+                    )}
+                </div>
+
+                {/* Upload indicator for non-Google photos */}
+                {!user?.user_metadata?.avatar_url && !profilePhoto && (
+                    <div className="absolute -bottom-1 -right-1 bg-primary text-slate-900 p-1.5 rounded-full shadow-lg border-2 border-[#090E1A]">
+                        <span className="material-symbols-rounded text-sm font-bold block" style={{ fontSize: '14px' }}>
+                            {uploading ? 'cloud_upload' : 'add'}
+                        </span>
+                    </div>
+                )}
+            </button>
 
             <input
                 ref={fileInputRef}

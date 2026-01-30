@@ -1,7 +1,14 @@
 import React, { useEffect, useState } from 'react';
-import { AppScreen, Announcement } from '../types';
+import { AppScreen, Announcement, PushNotification } from '../types';
 import { supabase } from '../lib/supabase';
 import { clearAIConfigCache } from '../lib/gemini';
+import { 
+    getAllNotifications, 
+    createNotification, 
+    deleteNotification, 
+    getAllUsers,
+    CreateNotificationData 
+} from '../lib/push-notifications';
 
 interface ConfigScreenProps {
     onNavigate: (screen: AppScreen) => void;
@@ -21,6 +28,23 @@ const ConfigScreen: React.FC<ConfigScreenProps> = ({ onNavigate }) => {
     const [priority, setPriority] = useState<'low' | 'medium' | 'high'>('medium');
     const [isActive, setIsActive] = useState(true);
 
+    // Notifications State
+    const [notifications, setNotifications] = useState<PushNotification[]>([]);
+    const [showNotificationModal, setShowNotificationModal] = useState(false);
+    const [notificationTitle, setNotificationTitle] = useState('');
+    const [notificationMessage, setNotificationMessage] = useState('');
+    const [notificationLink, setNotificationLink] = useState('');
+    const [targetUser, setTargetUser] = useState<string>('all'); // 'all' for broadcast
+    const [users, setUsers] = useState<{ id: string; email?: string; username?: string; full_name?: string; weight?: number; height?: number; target_weight?: number; goal?: string; gender?: string }[]>([]);
+    const [userSearchTerm, setUserSearchTerm] = useState('');
+    const [filteredUsers, setFilteredUsers] = useState<{ id: string; email?: string; username?: string; full_name?: string; weight?: number; height?: number; target_weight?: number; goal?: string; gender?: string }[]>([]);
+    const [selectedUsers, setSelectedUsers] = useState<string[]>([]);
+    const [weightFilter, setWeightFilter] = useState({ min: '', max: '' });
+    const [bmiFilter, setBmiFilter] = useState({ min: '', max: '' });
+    const [goalFilter, setGoalFilter] = useState('all');
+    const [genderFilter, setGenderFilter] = useState('all');
+    const [isSavingNotification, setIsSavingNotification] = useState(false);
+
     // AI Config State
     const [aiConfig, setAiConfig] = useState({
         provider: 'openrouter',
@@ -34,7 +58,65 @@ const ConfigScreen: React.FC<ConfigScreenProps> = ({ onNavigate }) => {
         fetchCounts();
         fetchAnnouncements();
         fetchAIConfig();
+        fetchNotifications();
+        fetchUsers();
     }, []);
+
+    const calculateBMI = (weight: number, height: number) => {
+        if (!weight || !height) return 0;
+        const heightInMeters = height / 100;
+        return Number((weight / (heightInMeters * heightInMeters)).toFixed(1));
+    };
+
+    const filterUsers = () => {
+        let filtered = users;
+
+        // Search filter
+        if (userSearchTerm.trim() !== '') {
+            filtered = filtered.filter(user => 
+                (user.username?.toLowerCase().includes(userSearchTerm.toLowerCase()) ||
+                user.full_name?.toLowerCase().includes(userSearchTerm.toLowerCase()))
+            );
+        }
+
+        // Weight filter
+        if (weightFilter.min || weightFilter.max) {
+            filtered = filtered.filter(user => {
+                if (!user.weight) return false;
+                const weight = Number(user.weight);
+                if (weightFilter.min && weight < Number(weightFilter.min)) return false;
+                if (weightFilter.max && weight > Number(weightFilter.max)) return false;
+                return true;
+            });
+        }
+
+        // BMI filter
+        if (bmiFilter.min || bmiFilter.max) {
+            filtered = filtered.filter(user => {
+                if (!user.weight || !user.height) return false;
+                const bmi = calculateBMI(Number(user.weight), Number(user.height));
+                if (bmiFilter.min && bmi < Number(bmiFilter.min)) return false;
+                if (bmiFilter.max && bmi > Number(bmiFilter.max)) return false;
+                return true;
+            });
+        }
+
+        // Goal filter
+        if (goalFilter !== 'all') {
+            filtered = filtered.filter(user => user.goal === goalFilter);
+        }
+
+        // Gender filter
+        if (genderFilter !== 'all') {
+            filtered = filtered.filter(user => user.gender === genderFilter);
+        }
+
+        setFilteredUsers(filtered);
+    };
+
+    useEffect(() => {
+        filterUsers();
+    }, [userSearchTerm, weightFilter, bmiFilter, goalFilter, genderFilter, users]);
 
     const fetchAIConfig = async () => {
         try {
@@ -81,8 +163,8 @@ const ConfigScreen: React.FC<ConfigScreenProps> = ({ onNavigate }) => {
             setIsSavingAI(true);
             await supabase.from('app_settings').delete().eq('id', 'ai_config');
             setAiConfig({
-                provider: 'openrouter',
-                model: 'google/gemini-2.5-flash',
+                provider: 'google',
+                model: 'gemini-1.5-flash',
                 api_key: ''
             });
             clearAIConfigCache();
@@ -182,6 +264,116 @@ const ConfigScreen: React.FC<ConfigScreenProps> = ({ onNavigate }) => {
         setContent('');
         setPriority('medium');
         setIsActive(true);
+    };
+
+    const fetchNotifications = async () => {
+        try {
+            const data = await getAllNotifications();
+            setNotifications(data);
+        } catch (error) {
+            console.error('Error fetching notifications:', error);
+        }
+    };
+
+    const fetchUsers = async () => {
+        try {
+            // Fetch detailed user profiles with fitness data
+            const { data: profiles, error } = await supabase
+                .from('profiles')
+                .select('id, username, full_name, weight, height, target_weight, goal, gender')
+                .eq('role', 'user')
+                .order('username', { ascending: true });
+
+            if (error) {
+                console.error('Error fetching profiles:', error);
+                return;
+            }
+
+            console.log('Fetched detailed user profiles:', profiles);
+            setUsers(profiles || []);
+            setFilteredUsers(profiles || []);
+        } catch (error) {
+            console.error('Error fetching users:', error);
+        }
+    };
+
+    const handleCreateNotification = async () => {
+        if (!notificationTitle || !notificationMessage) {
+            return alert('Title and Message are required');
+        }
+
+        try {
+            setIsSavingNotification(true);
+            
+            if (targetUser === 'all') {
+                // Send to all users
+                const notificationData: CreateNotificationData = {
+                    title: notificationTitle,
+                    message: notificationMessage,
+                    link: notificationLink || undefined,
+                    target_user: undefined // NULL for broadcast
+                };
+                await createNotification(notificationData);
+            } else if (targetUser === 'selected') {
+                // Send to selected users
+                if (selectedUsers.length === 0) {
+                    alert('Please select at least one user');
+                    setIsSavingNotification(false);
+                    return;
+                }
+                
+                // Create notifications for each selected user
+                for (const userId of selectedUsers) {
+                    const notificationData: CreateNotificationData = {
+                        title: notificationTitle,
+                        message: notificationMessage,
+                        link: notificationLink || undefined,
+                        target_user: userId
+                    };
+                    await createNotification(notificationData);
+                }
+            }
+
+            alert('Notification sent successfully!');
+            setNotificationTitle('');
+            setNotificationMessage('');
+            setNotificationLink('');
+            setTargetUser('all');
+            setSelectedUsers([]);
+            setShowNotificationModal(false);
+            fetchNotifications();
+        } catch (error) {
+            console.error('Error creating notification:', error);
+            alert('Failed to send notification');
+        } finally {
+            setIsSavingNotification(false);
+        }
+    };
+
+    const toggleUserSelection = (userId: string) => {
+        setSelectedUsers(prev => 
+            prev.includes(userId) 
+                ? prev.filter(id => id !== userId)
+                : [...prev, userId]
+        );
+    };
+
+    const selectAllUsers = () => {
+        if (selectedUsers.length === filteredUsers.length) {
+            setSelectedUsers([]);
+        } else {
+            setSelectedUsers(filteredUsers.map(user => user.id));
+        }
+    };
+
+    const handleDeleteNotification = async (id: string) => {
+        if (!window.confirm('Are you sure you want to delete this notification?')) return;
+        try {
+            await deleteNotification(id);
+            fetchNotifications();
+        } catch (error) {
+            console.error('Error deleting notification:', error);
+        }
     };
 
     const openAnnouncementModal = (announcement?: Announcement) => {
@@ -365,6 +557,61 @@ const ConfigScreen: React.FC<ConfigScreenProps> = ({ onNavigate }) => {
                             </div>
                         </div>
                     </button>
+
+                    {/* Push Notifications Button */}
+                    <button
+                        onClick={() => setShowNotificationModal(true)}
+                        className="w-full p-6 rounded-lg border border-white/10 hover:border-purple-500/50 bg-white/5 hover:bg-purple-500/10 transition-all group"
+                    >
+                        <div className="flex items-start gap-4">
+                            <div className="flex-shrink-0 mt-1">
+                                <span className="material-symbols-rounded text-3xl text-purple-500 group-hover:scale-110 transition-transform">
+                                    notifications
+                                </span>
+                            </div>
+                            <div className="text-left flex-1">
+                                <h2 className="text-lg font-bold mb-2">Push Notifications</h2>
+                                <p className="text-sm text-slate-400">
+                                    Send targeted notifications to users with optional links and actions.
+                                </p>
+                                {notifications.length > 0 && (
+                                    <p className="text-xs text-purple-400 mt-1">
+                                        {notifications.length} active notifications
+                                    </p>
+                                )}
+                            </div>
+                            <div className="flex-shrink-0 mt-1">
+                                <span className="material-symbols-rounded text-slate-500 group-hover:text-purple-500 transition-colors">
+                                    send
+                                </span>
+                            </div>
+                        </div>
+                    </button>
+
+                    {/* Attendance Management Button */}
+                    <button
+                        onClick={() => onNavigate('ADMIN_ATTENDANCE')}
+                        className="w-full p-6 rounded-lg border border-white/10 hover:border-pink-500/50 bg-white/5 hover:bg-pink-500/10 transition-all group"
+                    >
+                        <div className="flex items-start gap-4">
+                            <div className="flex-shrink-0 mt-1">
+                                <span className="material-symbols-rounded text-3xl text-pink-500 group-hover:scale-110 transition-transform">
+                                    calendar_month
+                                </span>
+                            </div>
+                            <div className="text-left flex-1">
+                                <h2 className="text-lg font-bold mb-2">Attendance Management</h2>
+                                <p className="text-sm text-slate-400">
+                                    Manage user attendance, check-in/out timings and gym duration.
+                                </p>
+                            </div>
+                            <div className="flex-shrink-0 mt-1">
+                                <span className="material-symbols-rounded text-slate-500 group-hover:text-pink-500 transition-colors">
+                                    arrow_forward
+                                </span>
+                            </div>
+                        </div>
+                    </button>
                 </div>
             </div>
 
@@ -384,10 +631,26 @@ const ConfigScreen: React.FC<ConfigScreenProps> = ({ onNavigate }) => {
                                 <select 
                                     className="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2 focus:outline-none focus:border-primary"
                                     value={aiConfig.provider}
-                                    onChange={(e) => setAiConfig({...aiConfig, provider: e.target.value})}
+                                    onChange={(e) => {
+                                        const provider = e.target.value;
+                                        let model = aiConfig.model;
+                                        let api_key = aiConfig.api_key;
+                                        
+                                        if (provider === 'puter') {
+                                            model = 'gemini-3-flash-preview';
+                                            api_key = 'not-required'; // Placeholder for Puter
+                                        } else if (provider === 'openrouter') {
+                                            model = 'google/gemini-2.0-flash-exp:free';
+                                        } else if (provider === 'google') {
+                                            model = 'gemini-1.5-flash';
+                                        }
+                                        
+                                        setAiConfig({...aiConfig, provider, model, api_key});
+                                    }}
                                 >
                                     <option value="openrouter">OpenRouter (Recommended)</option>
                                     <option value="google">Google Generative AI (Direct)</option>
+                                    <option value="puter">Puter.js (Free Gemini)</option>
                                 </select>
                             </div>
                             <div>
@@ -437,6 +700,248 @@ const ConfigScreen: React.FC<ConfigScreenProps> = ({ onNavigate }) => {
                                 >
                                     Clear Configuration
                                 </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Push Notifications Modal */}
+            {showNotificationModal && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+                    <div className="bg-slate-900 border border-white/10 rounded-2xl w-full max-w-lg max-h-[90vh] overflow-hidden">
+                        <div className="px-6 py-4 border-b border-white/10 flex items-center justify-between">
+                            <h3 className="text-xl font-bold">Push Notifications</h3>
+                            <button onClick={() => setShowNotificationModal(false)} className="text-slate-400 hover:text-white">
+                                <span className="material-symbols-rounded">close</span>
+                            </button>
+                        </div>
+                        <div className="p-6 space-y-4 max-h-[70vh] overflow-y-auto">
+                            {/* Create Notification Form */}
+                            <div className="space-y-4 border-b border-white/10 pb-4">
+                                <h4 className="font-semibold text-purple-400">Create New Notification</h4>
+                                <div>
+                                    <label className="block text-sm font-medium text-slate-400 mb-1">Title</label>
+                                    <input 
+                                        type="text"
+                                        className="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2 focus:outline-none focus:border-purple-500"
+                                        placeholder="Enter notification title"
+                                        value={notificationTitle}
+                                        onChange={(e) => setNotificationTitle(e.target.value)}
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-slate-400 mb-1">Message</label>
+                                    <textarea 
+                                        className="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2 focus:outline-none focus:border-purple-500 h-24 resize-none"
+                                        placeholder="Enter notification message"
+                                        value={notificationMessage}
+                                        onChange={(e) => setNotificationMessage(e.target.value)}
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-slate-400 mb-1">Link (Optional)</label>
+                                    <input 
+                                        type="url"
+                                        className="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2 focus:outline-none focus:border-purple-500"
+                                        placeholder="https://example.com"
+                                        value={notificationLink}
+                                        onChange={(e) => setNotificationLink(e.target.value)}
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-slate-400 mb-1">Target</label>
+                                    <select 
+                                        className="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2 focus:outline-none focus:border-purple-500"
+                                        value={targetUser}
+                                        onChange={(e) => setTargetUser(e.target.value)}
+                                    >
+                                        <option value="all">All Users</option>
+                                        <option value="selected">Selected Users</option>
+                                    </select>
+                                </div>
+                                
+                                {targetUser === 'selected' && (
+                                    <div className="space-y-3 mt-4 p-3 bg-slate-800/50 rounded-lg">
+                                        <div className="flex justify-between items-center mb-3">
+                                            <h5 className="text-sm font-medium text-slate-300">Select Users</h5>
+                                            <div className="flex items-center gap-3">
+                                                <button
+                                                    onClick={selectAllUsers}
+                                                    className="text-xs px-2 py-1 bg-purple-500/20 text-purple-400 rounded hover:bg-purple-500/30 transition-colors"
+                                                >
+                                                    {selectedUsers.length === filteredUsers.length ? 'Deselect All' : 'Select All'}
+                                                </button>
+                                                <span className="text-xs text-slate-400">
+                                                    {selectedUsers.length} of {filteredUsers.length} selected
+                                                </span>
+                                            </div>
+                                        </div>
+
+                                        {/* Filters */}
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
+                                            <div>
+                                                <label className="block text-xs font-medium text-slate-400 mb-1">Search</label>
+                                                <input 
+                                                    type="text"
+                                                    className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:border-purple-500"
+                                                    placeholder="Search by name..."
+                                                    value={userSearchTerm}
+                                                    onChange={(e) => setUserSearchTerm(e.target.value)}
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="block text-xs font-medium text-slate-400 mb-1">Goal</label>
+                                                <select 
+                                                    className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:border-purple-500"
+                                                    value={goalFilter}
+                                                    onChange={(e) => setGoalFilter(e.target.value)}
+                                                >
+                                                    <option value="all">All Goals</option>
+                                                    <option value="weight_loss">Weight Loss</option>
+                                                    <option value="muscle_gain">Muscle Gain</option>
+                                                    <option value="maintenance">Maintenance</option>
+                                                </select>
+                                            </div>
+                                            <div>
+                                                <label className="block text-xs font-medium text-slate-400 mb-1">Weight Range (kg)</label>
+                                                <div className="flex gap-2">
+                                                    <input 
+                                                        type="number"
+                                                        className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:border-purple-500"
+                                                        placeholder="Min"
+                                                        value={weightFilter.min}
+                                                        onChange={(e) => setWeightFilter({...weightFilter, min: e.target.value})}
+                                                    />
+                                                    <input 
+                                                        type="number"
+                                                        className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:border-purple-500"
+                                                        placeholder="Max"
+                                                        value={weightFilter.max}
+                                                        onChange={(e) => setWeightFilter({...weightFilter, max: e.target.value})}
+                                                    />
+                                                </div>
+                                            </div>
+                                            <div>
+                                                <label className="block text-xs font-medium text-slate-400 mb-1">BMI Range</label>
+                                                <div className="flex gap-2">
+                                                    <input 
+                                                        type="number"
+                                                        className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:border-purple-500"
+                                                        placeholder="Min"
+                                                        value={bmiFilter.min}
+                                                        onChange={(e) => setBmiFilter({...bmiFilter, min: e.target.value})}
+                                                    />
+                                                    <input 
+                                                        type="number"
+                                                        className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:border-purple-500"
+                                                        placeholder="Max"
+                                                        value={bmiFilter.max}
+                                                        onChange={(e) => setBmiFilter({...bmiFilter, max: e.target.value})}
+                                                    />
+                                                </div>
+                                            </div>
+                                            <div>
+                                                <label className="block text-xs font-medium text-slate-400 mb-1">Gender</label>
+                                                <select 
+                                                    className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:border-purple-500"
+                                                    value={genderFilter}
+                                                    onChange={(e) => setGenderFilter(e.target.value)}
+                                                >
+                                                    <option value="all">All</option>
+                                                    <option value="male">Male</option>
+                                                    <option value="female">Female</option>
+                                                </select>
+                                            </div>
+                                        </div>
+
+                                        {/* User List with Checkboxes */}
+                                        <div className="max-h-48 overflow-y-auto space-y-2 border border-slate-600 rounded-lg p-2">
+                                            {filteredUsers.length === 0 ? (
+                                                <p className="text-center text-slate-500 text-sm py-4">No users found matching filters</p>
+                                            ) : (
+                                                filteredUsers.map(user => {
+                                                    const bmi = calculateBMI(Number(user.weight) || 0, Number(user.height) || 0);
+                                                    return (
+                                                        <div key={user.id} className="flex items-center gap-3 p-2 hover:bg-slate-700/50 rounded transition-colors">
+                                                            <input
+                                                                type="checkbox"
+                                                                checked={selectedUsers.includes(user.id)}
+                                                                onChange={() => toggleUserSelection(user.id)}
+                                                                className="w-4 h-4 text-purple-500 bg-slate-700 border-slate-600 rounded focus:ring-purple-500 focus:ring-2"
+                                                            />
+                                                            <div className="flex-1 min-w-0">
+                                                                <div className="flex items-center gap-2">
+                                                                    <span className="text-sm font-medium text-white truncate">
+                                                                        {user.username || user.full_name || 'Unknown User'}
+                                                                    </span>
+                                                                    <span className="text-xs text-slate-400">
+                                                                        {user.gender}
+                                                                    </span>
+                                                                </div>
+                                                                <div className="flex gap-3 text-xs text-slate-500">
+                                                                    <span>W: {user.weight || 'N/A'}kg</span>
+                                                                    <span>H: {user.height || 'N/A'}cm</span>
+                                                                    <span>BMI: {bmi}</span>
+                                                                    <span>Goal: {user.goal || 'N/A'}</span>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    );
+                                                })
+                                            )}
+                                        </div>
+                                    </div>
+                                )}
+                                <button
+                                    onClick={handleCreateNotification}
+                                    disabled={isSavingNotification || !notificationTitle || !notificationMessage || (targetUser === 'selected' && selectedUsers.length === 0)}
+                                    className="w-full px-4 py-2 rounded-lg bg-purple-600 text-white font-bold hover:bg-purple-700 disabled:opacity-50 transition-colors"
+                                >
+                                    {isSavingNotification ? 'Sending...' : 'Send Notification'}
+                                </button>
+                            </div>
+
+                            {/* Notifications List */}
+                            <div className="space-y-3">
+                                <h4 className="font-semibold text-purple-400">Recent Notifications</h4>
+                                {notifications.length === 0 ? (
+                                    <p className="text-slate-500 text-sm">No notifications sent yet</p>
+                                ) : (
+                                    notifications.slice(0, 5).map(notification => (
+                                        <div key={notification.id} className="bg-slate-800/50 border border-slate-700 rounded-lg p-3">
+                                            <div className="flex justify-between items-start">
+                                                <div className="flex-1">
+                                                    <h5 className="font-medium text-white">{notification.title}</h5>
+                                                    <p className="text-sm text-slate-400 mt-1">{notification.message}</p>
+                                                    {notification.link && (
+                                                        <a href={notification.link} target="_blank" rel="noopener noreferrer" className="text-xs text-purple-400 hover:text-purple-300 mt-1 block truncate">
+                                                            {notification.link}
+                                                        </a>
+                                                    )}
+                                                    <div className="flex items-center gap-2 mt-2">
+                                                        <span className="text-xs text-slate-500">
+                                                            {new Date(notification.created_at).toLocaleDateString()}
+                                                        </span>
+                                                        <span className={`text-xs px-2 py-0.5 rounded-full ${
+                                                            notification.is_read 
+                                                                ? 'bg-green-500/20 text-green-400' 
+                                                                : 'bg-orange-500/20 text-orange-400'
+                                                        }`}>
+                                                            {notification.is_read ? 'Read' : 'Unread'}
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                                <button
+                                                    onClick={() => handleDeleteNotification(notification.id)}
+                                                    className="text-slate-400 hover:text-red-400 transition-colors ml-2"
+                                                >
+                                                    <span className="material-symbols-rounded text-sm">delete</span>
+                                                </button>
+                                            </div>
+                                        </div>
+                                    ))
+                                )}
                             </div>
                         </div>
                     </div>

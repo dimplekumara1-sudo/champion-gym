@@ -45,7 +45,9 @@ export type AppScreen =
   | 'ADMIN_INDIAN_FOODS'
   | 'ADMIN_FOOD_APPROVALS'
   | 'ADMIN_PT'
-  | 'ADMIN_ANNOUNCEMENTS';
+  | 'ADMIN_ANNOUNCEMENTS'
+  | 'ATTENDANCE'
+  | 'ADMIN_ATTENDANCE';
 
 export type NavTab = 'HOME' | 'EXPLORE' | 'ADD' | 'STATS' | 'MY_WORKOUTS';
 
@@ -105,4 +107,22 @@ export interface Announcement {
   is_active: boolean;
   created_at: string;
   created_by: string | null;
+}
+
+export interface PushNotification {
+  id: string;
+  title: string;
+  message: string;
+  link?: string;
+  target_user?: string;
+  is_read: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CreateNotificationData {
+  title: string;
+  message: string;
+  link?: string;
+  target_user?: string; // null for broadcast to all users
 }

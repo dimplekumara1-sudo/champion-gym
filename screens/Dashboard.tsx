@@ -8,6 +8,7 @@ import { AppScreen, Profile } from '../types';
 import { supabase } from '../lib/supabase';
 import { cache, CACHE_KEYS, CACHE_TTL } from '../lib/cache';
 import { notificationService, PlanNotification } from '../lib/notifications';
+import { getUserNotifications, getUnreadNotificationCount, markNotificationAsRead, markAllNotificationsAsRead, deleteNotificationForUser, PushNotification } from '../lib/push-notifications';
 import { generateAIChatResponse } from '../lib/gemini';
 
 interface DailyNutrition {
@@ -26,7 +27,10 @@ const Dashboard: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNavigat
   const [isPlanModalOpen, setIsPlanModalOpen] = useState(false);
   const [editData, setEditData] = useState({ height: 0, weight: 0, target_weight: 0 });
   const [notifications, setNotifications] = useState<PlanNotification[]>([]);
+  const [pushNotifications, setPushNotifications] = useState<PushNotification[]>([]);
+  const [unreadCount, setUnreadCount] = useState(0);
   const [showNotificationsModal, setShowNotificationsModal] = useState(false);
+  const [showPushNotificationsModal, setShowPushNotificationsModal] = useState(false);
   const [showBMIInfoModal, setShowBMIInfoModal] = useState(false);
   const [dailyNutrition, setDailyNutrition] = useState<DailyNutrition>({
     totalCalories: 0,
@@ -54,8 +58,32 @@ const Dashboard: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNavigat
   const lastFetchTime = useRef<number>(0);
   const FETCH_COOLDOWN = 10000; // 10 seconds between AI advice updates
 
+  const fetchPushNotifications = async () => {
+    try {
+      console.log('=== Starting fetchPushNotifications ===');
+
+      const [notifications, unreadCount] = await Promise.all([
+        getUserNotifications(),
+        getUnreadNotificationCount()
+      ]);
+
+      console.log('Fetched notifications:', notifications);
+      console.log('Unread count:', unreadCount);
+      console.log('Setting pushNotifications state to:', notifications);
+      console.log('Setting unreadCount state to:', unreadCount);
+
+      setPushNotifications(notifications);
+      setUnreadCount(unreadCount);
+
+      console.log('State updated - pushNotifications:', notifications.length, 'unreadCount:', unreadCount);
+    } catch (error) {
+      console.error('Error fetching push notifications:', error);
+    }
+  };
+
   useEffect(() => {
     fetchProfile();
+    fetchPushNotifications();
 
     // Set up real-time subscriptions for profile and diet tracking updates
     const setupSubscriptions = async () => {
@@ -96,7 +124,7 @@ const Dashboard: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNavigat
               // Refetch daily nutrition when food is added/removed
               const nutrition = await fetchDailyNutrition(authUser.id);
               fetchWeeklyHistory(authUser.id);
-              
+
               // Also refresh AI advice when nutrition updates
               if (nutrition && nutritionGoals) {
                 fetchAIAdvice(nutrition, nutritionGoals, authUser.id);
@@ -197,6 +225,9 @@ const Dashboard: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNavigat
       // Create a string representation of params to prevent duplicate fetches for same data
       const currentParams = JSON.stringify({
         calories: nutrition.totalCalories,
+        protein: nutrition.totalProtein,
+        carbs: nutrition.totalCarbs,
+        fat: nutrition.totalFat,
         water: currentWater,
         weight: profile?.weight,
         goal: profile?.goal,
@@ -206,22 +237,28 @@ const Dashboard: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNavigat
       if (lastFetchParams.current === currentParams) return;
 
       const cacheKey = `${CACHE_KEYS.AI_ADVICE}_${currentUserId}`;
-      const cachedAdvice = cache.get<{ 
-        advice: string; 
-        calories: number; 
-        date: string; 
+      const cachedAdvice = cache.get<{
+        advice: string;
+        calories: number;
+        protein: number;
+        carbs: number;
+        fat: number;
+        date: string;
         water: number;
         weight: number;
         goal: string;
       }>(cacheKey);
 
       // Only fetch if no cache, or if relevant data changed
-      if (cachedAdvice && 
-          cachedAdvice.calories === nutrition.totalCalories && 
-          cachedAdvice.water === currentWater &&
-          cachedAdvice.weight === profile?.weight &&
-          cachedAdvice.goal === profile?.goal &&
-          cachedAdvice.date === today) {
+      if (cachedAdvice &&
+        cachedAdvice.calories === nutrition.totalCalories &&
+        cachedAdvice.protein === nutrition.totalProtein &&
+        cachedAdvice.carbs === nutrition.totalCarbs &&
+        cachedAdvice.fat === nutrition.totalFat &&
+        cachedAdvice.water === currentWater &&
+        cachedAdvice.weight === profile?.weight &&
+        cachedAdvice.goal === profile?.goal &&
+        cachedAdvice.date === today) {
         setAiAdvice(cachedAdvice.advice);
         localStorage.setItem('last_ai_advice', cachedAdvice.advice);
         lastFetchParams.current = currentParams;
@@ -230,7 +267,7 @@ const Dashboard: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNavigat
 
       setIsAiLoading(true);
       isFetchingAIAdvice.current = true;
-      
+
       const prompt = `
         User Goal: ${profile?.goal || 'Fitness'}
         Current Weight: ${profile?.weight}kg
@@ -244,16 +281,19 @@ const Dashboard: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNavigat
       `;
 
       const newAdvice = await generateAIChatResponse(prompt);
-      
+
       setAiAdvice(newAdvice);
       localStorage.setItem('last_ai_advice', newAdvice);
       lastFetchParams.current = currentParams;
       lastFetchTime.current = Date.now();
-      
+
       // Store in cache
       cache.set(cacheKey, {
         advice: newAdvice,
         calories: nutrition.totalCalories,
+        protein: nutrition.totalProtein,
+        carbs: nutrition.totalCarbs,
+        fat: nutrition.totalFat,
         water: currentWater,
         weight: profile?.weight || 0,
         goal: profile?.goal || '',
@@ -566,7 +606,14 @@ const Dashboard: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNavigat
       <Header
         onProfileClick={() => onNavigate('PROFILE')}
         notifications={notifications}
+        pushNotifications={pushNotifications}
+        unreadCount={unreadCount}
         onNotificationsClick={() => setShowNotificationsModal(true)}
+        onPushNotificationsClick={async () => {
+          await fetchPushNotifications(); // Refresh notifications before opening modal
+          setShowPushNotificationsModal(true);
+        }}
+        onBMIInfoClick={() => setShowBMIInfoModal(true)}
       />
 
       <main className="px-5">
@@ -589,18 +636,17 @@ const Dashboard: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNavigat
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 mb-1">
                         <h4 className="font-bold text-white text-sm">{announcement.title}</h4>
-                        <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded-full ${
-                          announcement.priority === 'high' ? 'bg-red-500/20 text-red-400' :
-                          announcement.priority === 'medium' ? 'bg-amber-500/20 text-amber-400' :
-                          'bg-blue-500/20 text-blue-400'
-                        }`}>
+                        <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded-full ${announcement.priority === 'high' ? 'bg-red-500/20 text-red-400' :
+                            announcement.priority === 'medium' ? 'bg-amber-500/20 text-amber-400' :
+                              'bg-blue-500/20 text-blue-400'
+                          }`}>
                           {announcement.priority}
                         </span>
                       </div>
                       <p className="text-[12px] text-slate-300 leading-relaxed line-clamp-2">{announcement.content}</p>
                       <p className="text-[10px] text-slate-500 mt-2">
-                        {new Date(announcement.created_at).toLocaleDateString('en-US', { 
-                          month: 'short', 
+                        {new Date(announcement.created_at).toLocaleDateString('en-US', {
+                          month: 'short',
                           day: 'numeric',
                           year: 'numeric'
                         })}
@@ -682,9 +728,9 @@ const Dashboard: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNavigat
             <div className="w-full flex justify-between items-start mb-5">
               <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">BMI Status</span>
               <div className="flex gap-2">
-                <button 
-                  onClick={() => setShowBMIInfoModal(true)} 
-                  className="material-symbols-rounded text-[16px] text-slate-500 hover:text-primary transition-colors"
+                <button
+                  onClick={() => setShowBMIInfoModal(true)}
+                  className="material-symbols-rounded text-[16px] text-slate-400 hover:text-primary transition-colors active:scale-110"
                   title="BMI Information"
                 >
                   info
@@ -752,20 +798,19 @@ const Dashboard: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNavigat
                   return (
                     <div
                       key={idx}
-                      className={`w-2 rounded-full transition-all duration-500 ${
-                        day.isToday 
-                          ? 'bg-primary shadow-[0_0_12px_rgba(34,197,94,0.4)]' 
+                      className={`w-2 rounded-full transition-all duration-500 ${day.isToday
+                          ? 'bg-primary shadow-[0_0_12px_rgba(34,197,94,0.4)]'
                           : 'bg-slate-800'
-                      }`}
+                        }`}
                       style={{ height: `${height}%` }}
                     />
                   );
                 })
               ) : (
                 [40, 60, 55, 85, 100, 30, 45].map((h, i) => (
-                  <div 
-                    key={i} 
-                    className={`w-2 rounded-full ${i === 4 ? 'bg-primary' : 'bg-slate-800'}`} 
+                  <div
+                    key={i}
+                    className={`w-2 rounded-full ${i === 4 ? 'bg-primary' : 'bg-slate-800'}`}
                     style={{ height: `${h}%` }}
                   />
                 ))
@@ -811,17 +856,6 @@ const Dashboard: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNavigat
                   </p>
                 )}
               </div>
-              {aiAdvice && !aiAdvice.includes("unavailable") && (
-                <button 
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setIsChatOpen(true);
-                  }}
-                  className="p-2 bg-primary/10 rounded-xl text-primary hover:bg-primary/20 transition-colors shrink-0"
-                >
-                  <span className="material-symbols-rounded text-sm">chat_bubble</span>
-                </button>
-              )}
             </div>
           )}
         </div>
@@ -923,6 +957,15 @@ const Dashboard: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNavigat
               </div>
               <span className="text-[9px] font-bold text-slate-300">Orders</span>
             </button>
+            <button
+              onClick={() => onNavigate('ATTENDANCE')}
+              className="bg-[#151C2C] border border-[#1E293B] p-3 rounded-3xl flex flex-col items-center gap-2 active:scale-95 transition-transform"
+            >
+              <div className="w-10 h-10 rounded-2xl bg-pink-500/10 flex items-center justify-center text-pink-500">
+                <span className="material-symbols-rounded">calendar_month</span>
+              </div>
+              <span className="text-[9px] font-bold text-slate-300">Attendance</span>
+            </button>
           </div>
         </section>
 
@@ -930,7 +973,7 @@ const Dashboard: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNavigat
         <div className="bg-[#151C2C] border border-[#1E293B] p-4 rounded-3xl shadow-lg mb-6">
           <div className="flex justify-between items-center mb-4">
             <h3 className="text-sm font-bold uppercase tracking-wider">Upcoming PT Session</h3>
-            <button 
+            <button
               onClick={() => onNavigate('TRAINERS')}
               className="text-[11px] font-bold text-primary uppercase tracking-tighter hover:underline"
             >
@@ -957,7 +1000,7 @@ const Dashboard: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNavigat
             <div className="bg-slate-800/40 p-6 rounded-2xl border border-dashed border-slate-700/50 flex flex-col items-center justify-center text-center">
               <span className="material-symbols-rounded text-slate-600 mb-2">calendar_today</span>
               <p className="text-[11px] text-slate-500 font-medium">No upcoming sessions scheduled</p>
-              <button 
+              <button
                 onClick={() => onNavigate('TRAINERS')}
                 className="mt-3 text-[10px] font-bold text-primary uppercase"
               >
@@ -1197,6 +1240,170 @@ const Dashboard: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNavigat
         </div>
       )}
 
+      {/* Push Notifications Modal */}
+      {showPushNotificationsModal && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[100] flex items-center justify-center p-6">
+          <div className="bg-[#1f2937] w-full max-w-sm rounded-3xl overflow-hidden border border-slate-800 shadow-2xl flex flex-col max-h-[90vh]">
+            <div className="sticky top-0 p-6 border-b border-slate-800 flex items-center justify-between bg-[#1f2937]">
+              <h2 className="text-xl font-bold text-white">Notifications</h2>
+              <button
+                onClick={() => setShowPushNotificationsModal(false)}
+                className="text-slate-400 hover:text-white transition-colors"
+              >
+                <span className="material-symbols-rounded">close</span>
+              </button>
+            </div>
+
+            <div className="overflow-y-auto no-scrollbar p-4 space-y-3 flex-1">
+              {pushNotifications.length === 0 ? (
+                <div className="text-center py-8">
+                  <span className="material-symbols-rounded text-4xl text-slate-600 mb-3 block">notifications_off</span>
+                  <p className="text-slate-400">No notifications yet</p>
+                </div>
+              ) : (
+                pushNotifications.map((notification) => (
+                  <div
+                    key={notification.id}
+                    className={`p-4 rounded-2xl border cursor-pointer transition-all ${notification.is_read
+                        ? 'bg-slate-800/50 border-slate-700'
+                        : 'bg-purple-500/10 border-purple-500/20'
+                      }`}
+                    onClick={async (e) => {
+                      e.preventDefault(); // Prevent any form submission
+                      e.stopPropagation(); // Prevent event bubbling
+
+                      try {
+                        console.log('=== Notification click started ===');
+                        console.log('Notification ID:', notification.id);
+                        console.log('Current unread count before action:', unreadCount);
+
+                        const success = await markNotificationAsRead(notification.id);
+
+                        if (success) {
+                          console.log('✅ Successfully marked as read');
+                          console.log('🔄 Refreshing notifications to update bell count...');
+                          await fetchPushNotifications(); // This will update both the list and the unread count
+                          console.log('✅ Notifications refreshed, bell should update');
+
+                          // Auto-close modal after successful action
+                          console.log('🔄 Auto-closing notification modal...');
+                          setShowPushNotificationsModal(false);
+                        } else {
+                          console.error('❌ Failed to mark notification as read');
+                        }
+
+                        if (notification.link) {
+                          console.log('🔗 Opening link:', notification.link);
+                          window.open(notification.link, '_blank');
+                        }
+                      } catch (error) {
+                        console.error('❌ Error handling notification click:', error);
+                      }
+                    }}
+                  >
+                    <div className="flex gap-3">
+                      <div className={`h-10 w-10 rounded-full flex items-center justify-center flex-shrink-0 ${notification.is_read
+                          ? 'bg-slate-700 text-slate-400'
+                          : 'bg-purple-500/20 text-purple-500'
+                        }`}>
+                        <span className="material-symbols-rounded text-sm">
+                          {notification.link ? 'link' : 'notifications'}
+                        </span>
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center justify-between mb-1">
+                          <div className="flex items-center gap-2">
+                            <h3 className="font-bold text-white text-sm">{notification.title}</h3>
+                            {!notification.is_read && (
+                              <span className="bg-purple-500/20 text-purple-400 text-[9px] font-black uppercase px-2 py-0.5 rounded-full">
+                                New
+                              </span>
+                            )}
+                          </div>
+                          <button
+                            onClick={async (e) => {
+                              e.stopPropagation(); // Prevent triggering main click
+                              console.log('=== Delete notification started ===');
+                              console.log('Notification ID:', notification.id);
+                              console.log('Current unread count before delete:', unreadCount);
+
+                              const confirmed = window.confirm('Delete this notification?');
+                              if (confirmed) {
+                                const success = await deleteNotificationForUser(notification.id);
+                                if (success) {
+                                  console.log('✅ Successfully deleted notification');
+                                  console.log('🔄 Refreshing notifications to update bell count...');
+                                  await fetchPushNotifications(); // This will update both the list and unread count
+                                  console.log('✅ Notifications refreshed, bell should update to 0');
+                                } else {
+                                  console.error('❌ Failed to delete notification');
+                                }
+                              } else {
+                                console.log('🚫 User cancelled delete');
+                              }
+                            }}
+                            className="text-slate-400 hover:text-red-400 transition-colors p-1 rounded-full hover:bg-red-400/10"
+                            title="Delete notification"
+                          >
+                            <span className="material-symbols-rounded text-sm">close</span>
+                          </button>
+                        </div>
+                        <p className="text-[12px] text-slate-300 mt-1">{notification.message}</p>
+                        {notification.link && (
+                          <p className="text-[11px] text-purple-400 mt-2 truncate">
+                            {notification.link}
+                          </p>
+                        )}
+                        <p className="text-[10px] text-slate-500 mt-2">
+                          {new Date(notification.created_at).toLocaleDateString('en-US', {
+                            month: 'short',
+                            day: 'numeric',
+                            hour: '2-digit',
+                            minute: '2-digit'
+                          })}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+
+            {unreadCount > 0 && (
+              <div className="border-t border-slate-800 p-4 bg-[#1f2937] sticky bottom-0">
+                <button
+                  onClick={async (e) => {
+                    e.preventDefault(); // Prevent any form submission
+                    e.stopPropagation(); // Prevent event bubbling
+
+                    try {
+                      console.log('=== Mark all as read started ===');
+                      console.log('Current unread count before marking all:', unreadCount);
+
+                      const success = await markAllNotificationsAsRead();
+
+                      if (success) {
+                        console.log('✅ Successfully marked all as read');
+                        console.log('🔄 Refreshing notifications to update bell count...');
+                        await fetchPushNotifications(); // This will update both the list and the unread count
+                        console.log('✅ All notifications refreshed - bell count should be 0');
+                      } else {
+                        console.error('❌ Failed to mark all notifications as read');
+                      }
+                    } catch (error) {
+                      console.error('❌ Error marking all as read:', error);
+                    }
+                  }}
+                  className="w-full bg-purple-600 text-white font-bold py-3 rounded-xl hover:bg-purple-700 transition-colors"
+                >
+                  Mark All as Read
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* BMI Info Modal */}
       {showBMIInfoModal && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[100] flex items-center justify-center p-6">
@@ -1281,8 +1488,8 @@ const Dashboard: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNavigat
 
       <div className="fixed top-0 right-0 -z-10 w-64 h-64 bg-primary/5 blur-[100px] rounded-full translate-x-1/2 -translate-y-1/2"></div>
       <div className="fixed bottom-0 left-0 -z-10 w-96 h-96 bg-primary/5 blur-[120px] rounded-full -translate-x-1/2 translate-y-1/2"></div>
-      
-      <AIChatAssistant 
+
+      <AIChatAssistant
         isOpen={isChatOpen}
         onClose={() => setIsChatOpen(false)}
         profile={profile}

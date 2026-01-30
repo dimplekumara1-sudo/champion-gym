@@ -1,11 +1,19 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip, LineChart, Line, XAxis, YAxis, CartesianGrid } from 'recharts';
 import StatusBar from '../components/StatusBar';
 import BottomNav from '../components/BottomNav';
-import { AppScreen } from '../types';
+import { AppScreen, Profile } from '../types';
 import { supabase } from '../lib/supabase';
-import { analyzeFoodImage } from '../lib/gemini';
+import { analyzeFoodImage, generateAIChatResponse } from '../lib/gemini';
+import { cache, CACHE_KEYS, CACHE_TTL } from '../lib/cache';
+
+interface DailyNutrition {
+  totalCalories: number;
+  totalProtein: number;
+  totalCarbs: number;
+  totalFat: number;
+}
 
 interface IndianFood {
   id: number;
@@ -84,6 +92,14 @@ const DailyTracker: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNavi
   const [isScanning, setIsScanning] = useState(false);
   const [showMacrosAsKcal, setShowMacrosAsKcal] = useState(true);
   const [nutritionGoals, setNutritionGoals] = useState<NutritionGoal | null>(null);
+  const [profile, setProfile] = useState<Profile | null>(null);
+  const [aiAdvice, setAiAdvice] = useState<string>(() => localStorage.getItem('last_ai_advice') || '');
+  const [isAiLoading, setIsAiLoading] = useState(false);
+  const isFetchingAIAdvice = useRef(false);
+  const lastFetchParams = useRef<string>('');
+  const lastFetchTime = useRef<number>(0);
+  const FETCH_COOLDOWN = 10000;
+  
   const [showPieChart, setShowPieChart] = useState(false);
   const [showLineChart, setShowLineChart] = useState(false);
   const [pieChartUnit, setPieChartUnit] = useState<'grams' | 'calories'>('grams');
@@ -110,15 +126,139 @@ const DailyTracker: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNavi
   }, []);
 
   // Fetch all foods for preloading
+  const calculateBMI = (weight: number, height: number) => {
+    if (!weight || !height) return 0;
+    const heightInMeters = height / 100;
+    return parseFloat((weight / (heightInMeters * heightInMeters)).toFixed(1));
+  };
+
+  const getBMICategory = (bmi: number) => {
+    if (bmi < 18.5) return 'Underweight';
+    if (bmi < 25) return 'Normal';
+    if (bmi < 30) return 'Overweight';
+    return 'Obese';
+  };
+
+  const fetchAIAdvice = async (nutrition: DailyNutrition, goals: any, userId?: string) => {
+    try {
+      const currentUserId = userId || userId;
+      if (!currentUserId || isFetchingAIAdvice.current) return;
+
+      const now = Date.now();
+      if (now - lastFetchTime.current < FETCH_COOLDOWN) return;
+
+      const today = new Date().toISOString().split('T')[0];
+      const currentWater = waterIntake;
+      const bmi = profile ? calculateBMI(profile.weight || 0, profile.height || 0) : 0;
+      const bmiCategory = getBMICategory(bmi);
+
+      const currentParams = JSON.stringify({
+        calories: nutrition.totalCalories,
+        protein: nutrition.totalProtein,
+        carbs: nutrition.totalCarbs,
+        fat: nutrition.totalFat,
+        water: currentWater,
+        weight: profile?.weight,
+        goal: profile?.goal,
+        date: today
+      });
+
+      if (lastFetchParams.current === currentParams) return;
+
+      const cacheKey = `${CACHE_KEYS.AI_ADVICE}_${currentUserId}`;
+      const cachedAdvice = cache.get<{ 
+        advice: string; 
+        calories: number; 
+        protein: number;
+        carbs: number;
+        fat: number;
+        date: string; 
+        water: number;
+        weight: number;
+        goal: string;
+      }>(cacheKey);
+
+      if (cachedAdvice && 
+          cachedAdvice.calories === nutrition.totalCalories && 
+          cachedAdvice.protein === nutrition.totalProtein &&
+          cachedAdvice.carbs === nutrition.totalCarbs &&
+          cachedAdvice.fat === nutrition.totalFat &&
+          cachedAdvice.water === currentWater &&
+          cachedAdvice.weight === profile?.weight &&
+          cachedAdvice.goal === profile?.goal &&
+          cachedAdvice.date === today) {
+        setAiAdvice(cachedAdvice.advice);
+        localStorage.setItem('last_ai_advice', cachedAdvice.advice);
+        lastFetchParams.current = currentParams;
+        return;
+      }
+
+      setIsAiLoading(true);
+      isFetchingAIAdvice.current = true;
+      
+      const prompt = `
+        User Goal: ${profile?.goal || 'Fitness'}
+        Current Weight: ${profile?.weight}kg
+        Target Weight: ${profile?.target_weight}kg
+        Current BMI: ${bmi} (${bmiCategory})
+        Today's Intake: ${nutrition.totalCalories}kcal, ${nutrition.totalProtein}g Protein, ${nutrition.totalCarbs}g Carbs, ${nutrition.totalFat}g Fat.
+        Water Intake: ${currentWater}ml
+        Daily Targets: ${goals.daily_calories_target}kcal, ${goals.daily_protein_target}g Protein.
+        
+        Provide a 25-word max insight on what the user should eat for their next meal to reach their weight and fitness goals, including hydration advice.
+      `;
+
+      const newAdvice = await generateAIChatResponse(prompt);
+      
+      setAiAdvice(newAdvice);
+      localStorage.setItem('last_ai_advice', newAdvice);
+      lastFetchParams.current = currentParams;
+      lastFetchTime.current = Date.now();
+      
+      cache.set(cacheKey, {
+        advice: newAdvice,
+        calories: nutrition.totalCalories,
+        protein: nutrition.totalProtein,
+        carbs: nutrition.totalCarbs,
+        fat: nutrition.totalFat,
+        water: currentWater,
+        weight: profile?.weight || 0,
+        goal: profile?.goal || '',
+        date: today
+      }, CACHE_TTL.VERY_LONG);
+    } catch (error: any) {
+      console.error('AI Advice error:', error);
+      if (error.message?.includes('429') || error.status === 429) {
+        setAiAdvice("AI is taking a quick break. I'll provide fresh insights in a moment!");
+      }
+    } finally {
+      setIsAiLoading(false);
+      isFetchingAIAdvice.current = false;
+    }
+  };
+
   const fetchUserAndFoods = async () => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (user) {
         setUserId(user.id);
+        
+        // Fetch profile
+        const { data: profileData } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', user.id)
+          .single();
+        if (profileData) setProfile(profileData);
+
         await fetchAllFoods();
-        await fetchTodaysMeals(user.id);
-        await fetchNutritionGoals(user.id);
+        const nutrition = await fetchTodaysMeals(user.id);
+        const goals = await fetchNutritionGoals(user.id);
         await fetchWaterIntake(user.id, selectedDate);
+
+        if (nutrition && goals) {
+          fetchAIAdvice(nutrition, goals, user.id);
+        }
       }
     } catch (error) {
       console.error('Error fetching user:', error);
@@ -187,22 +327,31 @@ const DailyTracker: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNavi
 
       if (error) throw error;
 
-      const formattedMeals = data?.map(item => ({
-        id: `${item.id}`,
-        food_id: item.food_id,
-        food_name: item.food_name || '',
-        amount: item.amount,
-        unit: item.unit,
-        calories: item.calories,
-        protein: item.protein,
-        carbs: item.carbs,
-        fat: item.fats,
-        meal_type: item.meal_type as 'breakfast' | 'lunch' | 'dinner' | 'snack',
-      })) || [];
+      let totals = { totalCalories: 0, totalProtein: 0, totalCarbs: 0, totalFat: 0 };
+      const formattedMeals = data?.map(item => {
+        totals.totalCalories += item.calories || 0;
+        totals.totalProtein += item.protein || 0;
+        totals.totalCarbs += item.carbs || 0;
+        totals.totalFat += item.fats || 0;
+        return {
+          id: `${item.id}`,
+          food_id: item.food_id,
+          food_name: item.food_name || '',
+          amount: item.amount,
+          unit: item.unit,
+          calories: item.calories,
+          protein: item.protein,
+          carbs: item.carbs,
+          fat: item.fats,
+          meal_type: item.meal_type as 'breakfast' | 'lunch' | 'dinner' | 'snack',
+        };
+      }) || [];
 
       setMeals(formattedMeals);
+      return totals;
     } catch (error) {
       console.error('Error fetching meals:', error);
+      return null;
     }
   };
 
@@ -212,27 +361,26 @@ const DailyTracker: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNavi
         .from('nutrition_goals')
         .select('*')
         .eq('user_id', userId)
-        .single();
+        .maybeSingle();
 
-      if (error && error.code !== 'PGRST116') {
+      if (error) {
         throw error;
       }
 
-      if (data) {
-        setNutritionGoals(data);
-      } else {
-        // Set default goals if none exist
-        setNutritionGoals({
-          id: 0,
-          user_id: userId,
-          daily_calories_target: 2000,
-          daily_protein_target: 150,
-          daily_carbs_target: 200,
-          daily_fat_target: 65,
-        });
-      }
+      const goals = data || {
+        id: 0,
+        user_id: userId,
+        daily_calories_target: 2000,
+        daily_protein_target: 150,
+        daily_carbs_target: 200,
+        daily_fat_target: 65,
+      };
+      
+      setNutritionGoals(goals);
+      return goals;
     } catch (error) {
       console.error('Error fetching nutrition goals:', error);
+      return null;
     }
   };
 
@@ -243,7 +391,7 @@ const DailyTracker: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNavi
         .select('amount_ml')
         .eq('user_id', uid)
         .eq('date', date)
-        .single();
+        .maybeSingle();
 
       if (error && error.code !== 'PGRST116') throw error;
       setWaterIntake(data?.amount_ml || 0);
@@ -273,6 +421,17 @@ const DailyTracker: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNavi
         throw error;
       }
       setWaterIntake(newAmount);
+      
+      // Refresh AI advice on water update
+      const nutrition = {
+        totalCalories,
+        totalProtein,
+        totalCarbs,
+        totalFat
+      };
+      if (nutritionGoals) {
+        fetchAIAdvice(nutrition, nutritionGoals, userId);
+      }
     } catch (error) {
       console.error('Error updating water intake:', error);
       alert('Failed to update water intake. Please try again.');
@@ -385,6 +544,18 @@ const DailyTracker: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNavi
       };
 
       setMeals([...meals, newFood]);
+      
+      // Refresh AI advice
+      const updatedNutrition = {
+        totalCalories: totalCalories + calories,
+        totalProtein: totalProtein + protein,
+        totalCarbs: totalCarbs + carbs,
+        totalFat: totalFat + fat
+      };
+      if (nutritionGoals) {
+        fetchAIAdvice(updatedNutrition, nutritionGoals, userId);
+      }
+
       setSelectedFood(null);
       setSelectedAmount('100');
       setSearchQuery('');
@@ -512,7 +683,19 @@ const DailyTracker: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNavi
 
         if (error) throw error;
       }
-      setMeals(meals.filter(m => m.id !== id));
+      const updatedMeals = meals.filter(m => m.id !== id);
+      setMeals(updatedMeals);
+
+      // Refresh AI advice
+      const updatedNutrition = {
+        totalCalories: updatedMeals.reduce((sum, m) => sum + m.calories, 0),
+        totalProtein: updatedMeals.reduce((sum, m) => sum + m.protein, 0),
+        totalCarbs: updatedMeals.reduce((sum, m) => sum + m.carbs, 0),
+        totalFat: updatedMeals.reduce((sum, m) => sum + m.fat, 0)
+      };
+      if (userId && nutritionGoals) {
+        fetchAIAdvice(updatedNutrition, nutritionGoals, userId);
+      }
     } catch (error) {
       console.error('Error removing food:', error);
     }
@@ -606,6 +789,31 @@ const DailyTracker: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNavi
               <span className="text-lg font-extrabold text-white">{dailyGoal}</span>
               <span className="text-[9px] text-slate-500">kcal</span>
             </div>
+          </div>
+
+          {/* AI Nutrition Coach Insight */}
+          <div className="bg-primary/5 rounded-2xl p-4 border border-primary/10 mb-6 relative overflow-hidden group">
+            <div className="absolute top-0 right-0 p-2 opacity-10 group-hover:opacity-20 transition-opacity">
+              <span className="material-symbols-rounded text-4xl text-primary">smart_toy</span>
+            </div>
+            <div className="flex items-center gap-2 mb-2">
+              <div className="w-1.5 h-1.5 bg-primary rounded-full animate-pulse"></div>
+              <h3 className="text-[10px] font-black text-primary uppercase tracking-[0.2em]">AI Nutrition Coach</h3>
+            </div>
+            {isAiLoading ? (
+              <div className="flex items-center gap-3 py-1">
+                <div className="flex gap-1">
+                  <div className="w-1 h-1 bg-primary/50 rounded-full animate-bounce"></div>
+                  <div className="w-1 h-1 bg-primary/50 rounded-full animate-bounce [animation-delay:0.2s]"></div>
+                  <div className="w-1 h-1 bg-primary/50 rounded-full animate-bounce [animation-delay:0.4s]"></div>
+                </div>
+                <p className="text-[11px] text-slate-500 font-medium italic">Analyzing your intake...</p>
+              </div>
+            ) : (
+              <p className="text-xs text-slate-300 leading-relaxed font-medium">
+                {aiAdvice || "Log your meals to get personalized nutrition insights!"}
+              </p>
+            )}
           </div>
 
           {/* Nutrition Goals Summary */}

@@ -23,6 +23,7 @@ const AdminUsers: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNaviga
   const [collectionMethod, setCollectionMethod] = useState('cash');
   const [userPaymentHistory, setUserPaymentHistory] = useState<any[]>([]);
   const [exportModal, setExportModal] = useState(false);
+  const [esslId, setEsslId] = useState('');
 
   useEffect(() => {
     fetchUsers();
@@ -46,8 +47,10 @@ const AdminUsers: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNaviga
 
     if (selectedUser?.id) {
       fetchUserPaymentHistory(selectedUser.id);
+      setEsslId(selectedUser.essl_id || '');
     } else {
       setUserPaymentHistory([]);
+      setEsslId('');
     }
   }, [selectedUser]);
 
@@ -421,6 +424,23 @@ const AdminUsers: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNaviga
     } catch (error) {
       console.error('Error updating role:', error);
       alert('Failed to update role');
+    }
+  };
+
+  const handleUpdateEsslId = async (userId: string) => {
+    try {
+      const { error } = await supabase
+        .from('profiles')
+        .update({ essl_id: esslId || null })
+        .eq('id', userId);
+
+      if (error) throw error;
+      setUsers(users.map(u => u.id === userId ? { ...u, essl_id: esslId || null } : u));
+      setSelectedUser({ ...selectedUser, essl_id: esslId || null });
+      alert('eSSL ID updated successfully');
+    } catch (error) {
+      console.error('Error updating eSSL ID:', error);
+      alert('Failed to update eSSL ID');
     }
   };
 
@@ -867,6 +887,31 @@ const AdminUsers: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNaviga
                     <div className="flex justify-between items-center text-sm">
                       <span className="text-slate-400">Gender</span>
                       <span className="text-white font-medium capitalize">{selectedUser.gender || 'Not specified'}</span>
+                    </div>
+                  </div>
+                </section>
+
+                <section>
+                  <h3 className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">eSSL Biometric</h3>
+                  <div className="bg-slate-900/50 rounded-2xl p-4">
+                    <div className="flex flex-col gap-2">
+                      <label className="text-[10px] text-slate-400 font-bold uppercase">Device User ID</label>
+                      <div className="flex gap-2">
+                        <input
+                          type="text"
+                          className="flex-1 bg-slate-800 border border-slate-700 rounded-xl text-sm p-2.5 text-white outline-none focus:ring-2 focus:ring-primary"
+                          placeholder="Enter eSSL ID"
+                          value={esslId}
+                          onChange={(e) => setEsslId(e.target.value)}
+                        />
+                        <button
+                          onClick={() => handleUpdateEsslId(selectedUser.id)}
+                          className="bg-primary text-slate-900 px-4 py-2 rounded-xl font-bold text-xs active:scale-95 transition-transform"
+                        >
+                          SAVE
+                        </button>
+                      </div>
+                      <p className="text-[9px] text-slate-500 mt-1 italic">Mapping ID from biometric device to this member.</p>
                     </div>
                   </div>
                 </section>
