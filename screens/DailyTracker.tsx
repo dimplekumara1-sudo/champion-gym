@@ -396,6 +396,7 @@ const DailyTracker: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNavi
   };
 
   const handleAIScan = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    event.preventDefault();
     const file = event.target.files?.[0];
     if (!file) return;
 
@@ -1526,21 +1527,48 @@ const DailyTracker: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNavi
                         <input
                           type="file"
                           accept="image/*"
-                          capture="environment"
                           onChange={handleAIScan}
                           className="hidden"
                           id="ai-scan-user"
                           disabled={isScanning}
                         />
-                        <label
-                          htmlFor="ai-scan-user"
-                          className={`w-full flex items-center justify-center gap-2 py-3 bg-primary text-slate-900 rounded-xl font-bold text-xs cursor-pointer transition-all active:scale-95 ${isScanning ? 'opacity-50 cursor-not-allowed' : ''}`}
-                        >
-                          <span className="material-symbols-rounded text-lg">
-                            {isScanning ? 'sync' : 'photo_camera'}
-                          </span>
-                          {isScanning ? 'AI SCANNING...' : 'SCAN LABEL / FOOD'}
-                        </label>
+                        <div className="flex gap-2">
+                          <label
+                            htmlFor="ai-scan-user"
+                            className={`flex-1 flex items-center justify-center gap-2 py-3 bg-primary text-slate-900 rounded-xl font-bold text-xs cursor-pointer transition-all active:scale-95 ${isScanning ? 'opacity-50 cursor-not-allowed' : ''}`}
+                          >
+                            <span className="material-symbols-rounded text-lg">
+                              {isScanning ? 'sync' : 'photo_camera'}
+                            </span>
+                            {isScanning ? 'AI SCANNING...' : 'SCAN LABEL / FOOD'}
+                          </label>
+                          {submitFoodData.dish_name && (
+                            <button
+                              onClick={() => {
+                                setSubmitFoodData({
+                                  dish_name: '',
+                                  calories_kcal: 0,
+                                  protein_g: 0,
+                                  carbohydrates_g: 0,
+                                  fats_g: 0,
+                                  free_sugar_g: 0,
+                                  fibre_g: 0,
+                                  sodium_mg: 0,
+                                  calcium_mg: 0,
+                                  iron_mg: 0,
+                                  vitamin_c_mg: 0,
+                                  folate_mcg: 0,
+                                  submission_notes: '',
+                                });
+                                setSubmitMessage('');
+                              }}
+                              className="px-4 bg-slate-800 text-slate-400 rounded-xl hover:text-white transition-colors"
+                              title="Clear Scan Results"
+                            >
+                              <span className="material-symbols-rounded">restart_alt</span>
+                            </button>
+                          )}
+                        </div>
                       </div>
                     </div>
                   </div>
