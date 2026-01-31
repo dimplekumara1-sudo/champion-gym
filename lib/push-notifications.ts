@@ -1,4 +1,5 @@
 import { supabase } from './supabase';
+import { cache, CACHE_KEYS, CACHE_TTL } from './cache';
 
 export interface PushNotification {
   id: string;
@@ -18,8 +19,8 @@ export interface CreateNotificationData {
   target_user?: string; // null for broadcast to all users
 }
 
-// Get all notifications for current user
-export async function getUserNotifications(): Promise<PushNotification[]> {
+// Get all notifications for current user with caching
+export async function getUserNotifications(forceRefresh = false): Promise<PushNotification[]> {
   try {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) {
@@ -27,14 +28,26 @@ export async function getUserNotifications(): Promise<PushNotification[]> {
       return [];
     }
 
+    const cacheKey = `${CACHE_KEYS.USER_NOTIFICATIONS}_${user.id}`;
+    
+    // Check cache first (unless forcing refresh)
+    if (!forceRefresh) {
+      const cachedNotifications = cache.get<PushNotification[]>(cacheKey);
+      if (cachedNotifications) {
+        console.log('Returning cached notifications for user:', user.id);
+        return cachedNotifications;
+      }
+    }
+
     console.log('Fetching notifications for user:', user.id);
     
-    // Simplified approach: Get notifications directly
+    // Optimized query with limit and better indexing
     const { data, error } = await supabase
       .from('push_notifications')
       .select('*')
       .or(`target_user.eq.${user.id},target_user.is.null`)
-      .order('created_at', { ascending: false });
+      .order('created_at', { ascending: false })
+      .limit(50); // Limit to prevent large result sets
 
     if (error) {
       console.error('Error fetching notifications:', error);
@@ -44,6 +57,11 @@ export async function getUserNotifications(): Promise<PushNotification[]> {
     console.log('Fetched notifications:', data);
     console.log('Number of notifications:', data?.length || 0);
     
+    // Cache the results
+    if (data) {
+      cache.set(cacheKey, data, CACHE_TTL.MEDIUM);
+    }
+    
     return data || [];
   } catch (error) {
     console.error('Unexpected error in getUserNotifications:', error);
@@ -51,8 +69,8 @@ export async function getUserNotifications(): Promise<PushNotification[]> {
   }
 }
 
-// Get unread count for current user
-export async function getUnreadNotificationCount(): Promise<number> {
+// Get unread count for current user (optimized with caching)
+export async function getUnreadNotificationCount(forceRefresh = false): Promise<number> {
   try {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) {
@@ -60,9 +78,20 @@ export async function getUnreadNotificationCount(): Promise<number> {
       return 0;
     }
 
-    const { data, error } = await supabase
+    const cacheKey = `${CACHE_KEYS.UNREAD_NOTIFICATION_COUNT}_${user.id}`;
+    
+    // Check cache first (unless forcing refresh)
+    if (!forceRefresh) {
+      const cachedCount = cache.get<number>(cacheKey);
+      if (cachedCount !== null) {
+        console.log('Returning cached unread count for user:', user.id, cachedCount);
+        return cachedCount;
+      }
+    }
+
+    const { count, error } = await supabase
       .from('push_notifications')
-      .select('id', { count: 'exact' })
+      .select('id', { count: 'exact', head: true })
       .eq('is_read', false)
       .or(`target_user.eq.${user?.id},target_user.is.null`);
 
@@ -71,9 +100,12 @@ export async function getUnreadNotificationCount(): Promise<number> {
       return 0;
     }
 
-    const count = data?.length || 0;
-    console.log('Unread count:', count);
-    return count;
+    console.log('Unread count:', count || 0);
+    
+    // Cache the result
+    cache.set(cacheKey, count || 0, CACHE_TTL.SHORT);
+    
+    return count || 0;
   } catch (error) {
     console.error('Unexpected error in getUnreadNotificationCount:', error);
     return 0;
@@ -119,6 +151,10 @@ export async function markNotificationAsRead(notificationId: string): Promise<bo
       return false;
     }
 
+    // Clear cache to force refresh next time
+    cache.remove(`${CACHE_KEYS.USER_NOTIFICATIONS}_${user.id}`);
+    cache.remove(`${CACHE_KEYS.UNREAD_NOTIFICATION_COUNT}_${user.id}`);
+
     console.log('Successfully marked notification as read');
     return true;
   } catch (error) {
@@ -148,6 +184,10 @@ export async function markAllNotificationsAsRead(): Promise<boolean> {
       console.error('Error marking all notifications as read:', error);
       return false;
     }
+
+    // Clear cache to force refresh next time
+    cache.remove(`${CACHE_KEYS.USER_NOTIFICATIONS}_${user.id}`);
+    cache.remove(`${CACHE_KEYS.UNREAD_NOTIFICATION_COUNT}_${user.id}`);
 
     console.log('Successfully marked all notifications as read');
     return true;

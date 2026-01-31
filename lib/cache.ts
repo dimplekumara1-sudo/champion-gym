@@ -171,6 +171,14 @@ export const CACHE_KEYS = {
 
     // AI
     AI_ADVICE: 'ai_advice',
+
+    // Notifications
+    USER_NOTIFICATIONS: 'user_notifications',
+    UNREAD_NOTIFICATION_COUNT: 'unread_notification_count',
+
+    // AI Nutrition Coach
+    AI_RECOMMENDATIONS: 'ai_recommendations',
+    AI_LEARNING_PATTERNS: 'ai_learning_patterns',
 } as const;
 
 /**

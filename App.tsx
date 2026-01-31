@@ -2,6 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { AppScreen } from './types';
 import SplashScreen from './screens/SplashScreen';
+import PWAInstallPrompt from './components/PWAInstallPrompt';
 import OnboardingGoal from './screens/OnboardingGoal';
 import OnboardingGender from './screens/OnboardingGender';
 import OnboardingHeight from './screens/OnboardingHeight';
@@ -55,6 +56,7 @@ const App: React.FC = () => {
   const [userRole, setUserRole] = useState<string | null>(null);
   const [showGooglePasswordSetup, setShowGooglePasswordSetup] = useState(false);
   const [isInitialized, setIsInitialized] = useState(false);
+  const [showPWAInstall, setShowPWAInstall] = useState(false);
   const [onboardingData, setOnboardingData] = useState({
     goal: '',
     gender: '',
@@ -280,6 +282,11 @@ const App: React.FC = () => {
       <div className="w-full max-w-[430px] bg-[#090E1A] min-h-screen relative shadow-2xl overflow-x-hidden no-scrollbar">
         {renderScreen()}
       </div>
+      
+      {/* PWA Install Prompt */}
+      {showPWAInstall && (
+        <PWAInstallPrompt onClose={() => setShowPWAInstall(false)} />
+      )}
     </div>
   );
 };

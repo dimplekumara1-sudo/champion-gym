@@ -10,6 +10,8 @@ import { cache, CACHE_KEYS, CACHE_TTL } from '../lib/cache';
 import { notificationService, PlanNotification } from '../lib/notifications';
 import { getUserNotifications, getUnreadNotificationCount, markNotificationAsRead, markAllNotificationsAsRead, deleteNotificationForUser, PushNotification } from '../lib/push-notifications';
 import { generateAIChatResponse } from '../lib/gemini';
+import { agenticNutritionCoach } from '../lib/agentic-nutrition-coach';
+import PWAInstallPrompt from '../components/PWAInstallPrompt';
 
 interface DailyNutrition {
   totalCalories: number;
@@ -19,6 +21,7 @@ interface DailyNutrition {
 }
 
 const Dashboard: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNavigate }) => {
+  const [showPWAInstall, setShowPWAInstall] = useState(false);
   const [user, setUser] = useState<any>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [planDetails, setPlanDetails] = useState<any>(null);
@@ -31,6 +34,7 @@ const Dashboard: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNavigat
   const [unreadCount, setUnreadCount] = useState(0);
   const [showNotificationsModal, setShowNotificationsModal] = useState(false);
   const [showPushNotificationsModal, setShowPushNotificationsModal] = useState(false);
+  const [notificationFilter, setNotificationFilter] = useState<'all' | 'unread'>('all');
   const [showBMIInfoModal, setShowBMIInfoModal] = useState(false);
   const [dailyNutrition, setDailyNutrition] = useState<DailyNutrition>({
     totalCalories: 0,
@@ -57,14 +61,15 @@ const Dashboard: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNavigat
   const lastFetchParams = useRef<string>('');
   const lastFetchTime = useRef<number>(0);
   const FETCH_COOLDOWN = 10000; // 10 seconds between AI advice updates
+  const [userInteractionCount, setUserInteractionCount] = useState(0);
 
-  const fetchPushNotifications = async () => {
+  const fetchPushNotifications = async (forceRefresh = false) => {
     try {
-      console.log('=== Starting fetchPushNotifications ===');
+      console.log('=== Starting fetchPushNotifications ===', { forceRefresh });
 
       const [notifications, unreadCount] = await Promise.all([
-        getUserNotifications(),
-        getUnreadNotificationCount()
+        getUserNotifications(forceRefresh),
+        getUnreadNotificationCount(forceRefresh)
       ]);
 
       console.log('Fetched notifications:', notifications);
@@ -80,6 +85,38 @@ const Dashboard: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNavigat
       console.error('Error fetching push notifications:', error);
     }
   };
+
+  // Track user interactions for PWA install prompt
+  useEffect(() => {
+    const trackInteraction = () => {
+      setUserInteractionCount(prev => {
+        const newCount = prev + 1;
+        
+        // Show PWA install prompt after 3 interactions
+        if (newCount === 3 && !localStorage.getItem('pwa-install-dismissed')) {
+          const lastPrompted = localStorage.getItem('pwa-install-prompted');
+          if (!lastPrompted) {
+            setTimeout(() => {
+              setShowPWAInstall(true);
+            }, 2000);
+          }
+        }
+        
+        return newCount;
+      });
+    };
+
+    // Track clicks on interactive elements
+    const handleClick = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if (target.closest('button') || target.closest('a') || target.closest('input')) {
+        trackInteraction();
+      }
+    };
+
+    document.addEventListener('click', handleClick);
+    return () => document.removeEventListener('click', handleClick);
+  }, []);
 
   useEffect(() => {
     fetchProfile();
@@ -334,7 +371,17 @@ const Dashboard: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNavigat
 
         // Fetch AI Advice based on nutrition and goals
         if (nutrition && goals) {
+          // Initialize agentic coach with user ID
+          agenticNutritionCoach.setUserId(user.id);
           fetchAIAdvice(nutrition, goals, user.id);
+          
+          // Track daily behavior for learning
+          agenticNutritionCoach.trackDailyBehavior(
+            nutrition,
+            waterIntake,
+            goals,
+            0 // Dashboard doesn't track meal count, will be tracked in DailyTracker
+          );
         }
 
         // Fetch upcoming session
@@ -609,9 +656,8 @@ const Dashboard: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNavigat
         pushNotifications={pushNotifications}
         unreadCount={unreadCount}
         onNotificationsClick={() => setShowNotificationsModal(true)}
-        onPushNotificationsClick={async () => {
-          await fetchPushNotifications(); // Refresh notifications before opening modal
-          setShowPushNotificationsModal(true);
+        onPushNotificationsClick={() => {
+          setShowPushNotificationsModal(true); // Open modal immediately, data already loaded
         }}
         onBMIInfoClick={() => setShowBMIInfoModal(true)}
       />
@@ -1177,45 +1223,43 @@ const Dashboard: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNavigat
 
       {/* Notifications Modal */}
       {showNotificationsModal && notifications.length > 0 && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[100] flex items-center justify-center p-6">
-          <div className="bg-[#1f2937] w-full max-w-sm rounded-3xl overflow-hidden border border-slate-800 shadow-2xl flex flex-col max-h-[90vh]">
-            <div className="sticky top-0 p-6 border-b border-slate-800 flex items-center justify-between bg-[#1f2937]">
-              <h2 className="text-xl font-bold text-white">Notifications</h2>
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-md z-[100] flex items-center justify-center p-4">
+          <div className="bg-white w-full max-w-[400px] rounded-[32px] overflow-hidden shadow-2xl flex flex-col max-h-[85vh]">
+            <div className="p-6 pb-4 flex items-center justify-between bg-white border-b border-slate-50">
+              <h2 className="text-xl font-bold text-slate-900">System Alerts</h2>
               <button
                 onClick={() => setShowNotificationsModal(false)}
-                className="text-slate-400 hover:text-white transition-colors"
+                className="w-8 h-8 rounded-full bg-slate-50 flex items-center justify-center text-slate-400 hover:text-slate-900 transition-colors"
               >
-                <span className="material-symbols-rounded">close</span>
+                <span className="material-symbols-rounded text-[20px]">close</span>
               </button>
             </div>
 
-            <div className="overflow-y-auto no-scrollbar p-4 space-y-3 flex-1">
+            <div className="overflow-y-auto no-scrollbar flex-1 divide-y divide-slate-50">
               {notifications.map((notification, idx) => (
                 <div
                   key={idx}
-                  className={`p-4 rounded-2xl border ${notification.type === 'expiring_soon'
-                    ? 'bg-orange-500/10 border-orange-500/20'
-                    : notification.type === 'expired'
-                      ? 'bg-red-500/10 border-red-500/20'
-                      : 'bg-blue-500/10 border-blue-500/20'
-                    }`}
+                  className="p-5 hover:bg-slate-50 transition-colors"
                 >
-                  <div className="flex gap-3">
-                    <div className={`h-10 w-10 rounded-full flex items-center justify-center flex-shrink-0 ${notification.type === 'expiring_soon'
-                      ? 'bg-orange-500/20 text-orange-500'
-                      : notification.type === 'expired'
-                        ? 'bg-red-500/20 text-red-500'
-                        : 'bg-blue-500/20 text-blue-500'
+                  <div className="flex gap-4">
+                    <div className={`h-12 w-12 rounded-2xl flex items-center justify-center flex-shrink-0 ${notification.type === 'expiring_soon'
+                        ? 'bg-orange-50 text-orange-500'
+                        : notification.type === 'expired'
+                          ? 'bg-red-50 text-red-500'
+                          : 'bg-blue-50 text-blue-500'
                       }`}>
-                      <span className="material-symbols-rounded text-sm">
+                      <span className="material-symbols-rounded text-[24px]">
                         {notification.type === 'expiring_soon' ? 'schedule' : notification.type === 'expired' ? 'error' : 'info'}
                       </span>
                     </div>
                     <div className="flex-1 min-w-0">
-                      <h3 className="font-bold text-white text-sm">{notification.title}</h3>
-                      <p className="text-[12px] text-slate-300 mt-1">{notification.message}</p>
+                      <h3 className="font-bold text-slate-900 text-[15px]">{notification.title}</h3>
+                      <p className="text-[13px] text-slate-500 mt-1 leading-relaxed">{notification.message}</p>
                       {notification.dueAmount && (
-                        <p className="text-[11px] text-orange-400 font-medium mt-2">Due: ${notification.dueAmount.toFixed(2)}</p>
+                        <div className="mt-3 flex items-center gap-2">
+                          <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Amount Due</span>
+                          <span className="text-[14px] font-black text-orange-600">${notification.dueAmount.toFixed(2)}</span>
+                        </div>
                       )}
                     </div>
                   </div>
@@ -1223,7 +1267,7 @@ const Dashboard: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNavigat
               ))}
             </div>
 
-            <div className="border-t border-slate-800 p-4 bg-[#1f2937] sticky bottom-0">
+            <div className="p-4 bg-white border-t border-slate-100">
               <button
                 onClick={() => {
                   setShowNotificationsModal(false);
@@ -1231,7 +1275,7 @@ const Dashboard: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNavigat
                     onNavigate(notifications[0].actionUrl as AppScreen);
                   }
                 }}
-                className="w-full bg-primary text-slate-900 font-bold py-3 rounded-xl hover:bg-green-600 transition-colors"
+                className="w-full bg-slate-900 text-white font-bold py-4 rounded-2xl hover:bg-slate-800 transition-all active:scale-[0.98]"
               >
                 Take Action
               </button>
@@ -1242,164 +1286,133 @@ const Dashboard: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNavigat
 
       {/* Push Notifications Modal */}
       {showPushNotificationsModal && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[100] flex items-center justify-center p-6">
-          <div className="bg-[#1f2937] w-full max-w-sm rounded-3xl overflow-hidden border border-slate-800 shadow-2xl flex flex-col max-h-[90vh]">
-            <div className="sticky top-0 p-6 border-b border-slate-800 flex items-center justify-between bg-[#1f2937]">
-              <h2 className="text-xl font-bold text-white">Notifications</h2>
-              <button
-                onClick={() => setShowPushNotificationsModal(false)}
-                className="text-slate-400 hover:text-white transition-colors"
-              >
-                <span className="material-symbols-rounded">close</span>
-              </button>
-            </div>
-
-            <div className="overflow-y-auto no-scrollbar p-4 space-y-3 flex-1">
-              {pushNotifications.length === 0 ? (
-                <div className="text-center py-8">
-                  <span className="material-symbols-rounded text-4xl text-slate-600 mb-3 block">notifications_off</span>
-                  <p className="text-slate-400">No notifications yet</p>
-                </div>
-              ) : (
-                pushNotifications.map((notification) => (
-                  <div
-                    key={notification.id}
-                    className={`p-4 rounded-2xl border cursor-pointer transition-all ${notification.is_read
-                        ? 'bg-slate-800/50 border-slate-700'
-                        : 'bg-purple-500/10 border-purple-500/20'
-                      }`}
-                    onClick={async (e) => {
-                      e.preventDefault(); // Prevent any form submission
-                      e.stopPropagation(); // Prevent event bubbling
-
-                      try {
-                        console.log('=== Notification click started ===');
-                        console.log('Notification ID:', notification.id);
-                        console.log('Current unread count before action:', unreadCount);
-
-                        const success = await markNotificationAsRead(notification.id);
-
-                        if (success) {
-                          console.log('✅ Successfully marked as read');
-                          console.log('🔄 Refreshing notifications to update bell count...');
-                          await fetchPushNotifications(); // This will update both the list and the unread count
-                          console.log('✅ Notifications refreshed, bell should update');
-
-                          // Auto-close modal after successful action
-                          console.log('🔄 Auto-closing notification modal...');
-                          setShowPushNotificationsModal(false);
-                        } else {
-                          console.error('❌ Failed to mark notification as read');
-                        }
-
-                        if (notification.link) {
-                          console.log('🔗 Opening link:', notification.link);
-                          window.open(notification.link, '_blank');
-                        }
-                      } catch (error) {
-                        console.error('❌ Error handling notification click:', error);
-                      }
-                    }}
-                  >
-                    <div className="flex gap-3">
-                      <div className={`h-10 w-10 rounded-full flex items-center justify-center flex-shrink-0 ${notification.is_read
-                          ? 'bg-slate-700 text-slate-400'
-                          : 'bg-purple-500/20 text-purple-500'
-                        }`}>
-                        <span className="material-symbols-rounded text-sm">
-                          {notification.link ? 'link' : 'notifications'}
-                        </span>
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center justify-between mb-1">
-                          <div className="flex items-center gap-2">
-                            <h3 className="font-bold text-white text-sm">{notification.title}</h3>
-                            {!notification.is_read && (
-                              <span className="bg-purple-500/20 text-purple-400 text-[9px] font-black uppercase px-2 py-0.5 rounded-full">
-                                New
-                              </span>
-                            )}
-                          </div>
-                          <button
-                            onClick={async (e) => {
-                              e.stopPropagation(); // Prevent triggering main click
-                              console.log('=== Delete notification started ===');
-                              console.log('Notification ID:', notification.id);
-                              console.log('Current unread count before delete:', unreadCount);
-
-                              const confirmed = window.confirm('Delete this notification?');
-                              if (confirmed) {
-                                const success = await deleteNotificationForUser(notification.id);
-                                if (success) {
-                                  console.log('✅ Successfully deleted notification');
-                                  console.log('🔄 Refreshing notifications to update bell count...');
-                                  await fetchPushNotifications(); // This will update both the list and unread count
-                                  console.log('✅ Notifications refreshed, bell should update to 0');
-                                } else {
-                                  console.error('❌ Failed to delete notification');
-                                }
-                              } else {
-                                console.log('🚫 User cancelled delete');
-                              }
-                            }}
-                            className="text-slate-400 hover:text-red-400 transition-colors p-1 rounded-full hover:bg-red-400/10"
-                            title="Delete notification"
-                          >
-                            <span className="material-symbols-rounded text-sm">close</span>
-                          </button>
-                        </div>
-                        <p className="text-[12px] text-slate-300 mt-1">{notification.message}</p>
-                        {notification.link && (
-                          <p className="text-[11px] text-purple-400 mt-2 truncate">
-                            {notification.link}
-                          </p>
-                        )}
-                        <p className="text-[10px] text-slate-500 mt-2">
-                          {new Date(notification.created_at).toLocaleDateString('en-US', {
-                            month: 'short',
-                            day: 'numeric',
-                            hour: '2-digit',
-                            minute: '2-digit'
-                          })}
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
-
-            {unreadCount > 0 && (
-              <div className="border-t border-slate-800 p-4 bg-[#1f2937] sticky bottom-0">
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-md z-[100] flex items-center justify-center p-4">
+          <div className="bg-white w-full max-w-[400px] rounded-[32px] overflow-hidden shadow-2xl flex flex-col max-h-[85vh]">
+            <div className="p-6 pb-4 flex items-center justify-between bg-white">
+              <h2 className="text-xl font-bold text-slate-900">Notifications</h2>
+              <div className="flex bg-slate-100 p-1 rounded-xl">
                 <button
-                  onClick={async (e) => {
-                    e.preventDefault(); // Prevent any form submission
-                    e.stopPropagation(); // Prevent event bubbling
-
-                    try {
-                      console.log('=== Mark all as read started ===');
-                      console.log('Current unread count before marking all:', unreadCount);
-
-                      const success = await markAllNotificationsAsRead();
-
-                      if (success) {
-                        console.log('✅ Successfully marked all as read');
-                        console.log('🔄 Refreshing notifications to update bell count...');
-                        await fetchPushNotifications(); // This will update both the list and the unread count
-                        console.log('✅ All notifications refreshed - bell count should be 0');
-                      } else {
-                        console.error('❌ Failed to mark all notifications as read');
-                      }
-                    } catch (error) {
-                      console.error('❌ Error marking all as read:', error);
-                    }
-                  }}
-                  className="w-full bg-purple-600 text-white font-bold py-3 rounded-xl hover:bg-purple-700 transition-colors"
+                  onClick={() => setNotificationFilter('all')}
+                  className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all ${notificationFilter === 'all'
+                      ? 'bg-white text-slate-900 shadow-sm'
+                      : 'text-slate-500'
+                    }`}
                 >
-                  Mark All as Read
+                  All
+                </button>
+                <button
+                  onClick={() => setNotificationFilter('unread')}
+                  className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all ${notificationFilter === 'unread'
+                      ? 'bg-white text-slate-900 shadow-sm'
+                      : 'text-slate-500'
+                    }`}
+                >
+                  Unread ({unreadCount})
                 </button>
               </div>
-            )}
+            </div>
+
+            <div className="overflow-y-auto no-scrollbar flex-1">
+              {(() => {
+                const filteredNotifications = pushNotifications.filter(n => notificationFilter === 'all' || !n.is_read);
+                return filteredNotifications.length === 0 ? (
+                  <div className="text-center py-12">
+                    <div className="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-4">
+                      <span className="material-symbols-rounded text-3xl text-slate-300">notifications_off</span>
+                    </div>
+                    <p className="text-slate-400 font-medium">No notifications yet</p>
+                  </div>
+                ) : (
+                  <div className="divide-y divide-slate-100">
+                    {filteredNotifications
+                      .map((notification) => (
+                      <div
+                        key={notification.id}
+                        className={`p-5 transition-colors hover:bg-slate-50 cursor-pointer relative ${!notification.is_read ? 'bg-blue-50/30' : ''}`}
+                        onClick={async () => {
+                           if (!notification.is_read) {
+                             await markNotificationAsRead(notification.id);
+                             // Update local state immediately for faster UI response
+                             setPushNotifications(prev => 
+                               prev.map(n => n.id === notification.id ? {...n, is_read: true} : n)
+                             );
+                             setUnreadCount(prev => Math.max(0, prev - 1));
+                           }
+                           if (notification.link) {
+                             window.open(notification.link, '_blank');
+                           }
+                         }}
+                      >
+                        <div className="flex gap-4">
+                          <div className="relative flex-shrink-0">
+                            <div className="w-12 h-12 rounded-full overflow-hidden bg-slate-100 flex items-center justify-center border border-slate-200">
+                              {profile?.avatar_url ? (
+                                <img src={profile.avatar_url} alt="" className="w-full h-full object-cover" />
+                              ) : (
+                                <span className="material-symbols-rounded text-slate-400 text-2xl">person</span>
+                              )}
+                            </div>
+                            <div className={`absolute -bottom-1 -right-1 w-5 h-5 rounded-full flex items-center justify-center border-2 border-white ${notification.type === 'comment' ? 'bg-purple-500' : 'bg-primary'
+                              }`}>
+                              <span className="material-symbols-rounded text-white" style={{ fontSize: '10px' }}>
+                                {notification.type === 'comment' ? 'chat_bubble' : 'notifications'}
+                              </span>
+                            </div>
+                          </div>
+
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center justify-between gap-2">
+                              <div className="flex items-center gap-1.5 truncate">
+                                <span className="font-bold text-slate-900 text-[14px]">
+                                  {notification.title.split(' ')[0]}
+                                </span>
+                                <span className="text-slate-400 text-[12px]">
+                                  {new Date(notification.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                </span>
+                              </div>
+                              {!notification.is_read && (
+                                <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                              )}
+                            </div>
+
+                            <p className="text-[13px] text-slate-600 mt-0.5 leading-snug">
+                              <span className="font-semibold text-slate-800">{notification.title.split(' ').slice(1).join(' ')}</span>
+                            </p>
+                            <p className="text-[12px] text-slate-400 mt-1 line-clamp-2">{notification.message}</p>
+
+                            {notification.title.toLowerCase().includes('invite') && (
+                              <div className="flex gap-2 mt-3">
+                                <button className="px-5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-900 text-xs font-bold rounded-xl transition-colors">
+                                  Decline
+                                </button>
+                                <button className="px-5 py-2 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold rounded-xl transition-colors">
+                                  Accept
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                </div>
+              );
+              })()}
+            </div>
+
+            <div className="p-4 bg-white border-t border-slate-100 flex gap-2">
+              <button
+                onClick={() => fetchPushNotifications(true)}
+                className="flex-1 py-3 bg-slate-100 text-slate-900 font-bold text-sm hover:bg-slate-200 transition-colors rounded-xl"
+              >
+                Refresh
+              </button>
+              <button
+                onClick={() => setShowPushNotificationsModal(false)}
+                className="flex-1 py-3 text-slate-500 font-bold text-sm hover:text-slate-900 transition-colors rounded-xl"
+              >
+                Close
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -1497,6 +1510,11 @@ const Dashboard: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNavigat
         nutritionGoals={nutritionGoals}
         waterIntake={waterIntake}
       />
+
+      {/* PWA Install Prompt */}
+      {showPWAInstall && (
+        <PWAInstallPrompt onClose={() => setShowPWAInstall(false)} />
+      )}
     </div>
   );
 };

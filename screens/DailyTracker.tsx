@@ -7,6 +7,7 @@ import { AppScreen, Profile } from '../types';
 import { supabase } from '../lib/supabase';
 import { analyzeFoodImage, generateAIChatResponse } from '../lib/gemini';
 import { cache, CACHE_KEYS, CACHE_TTL } from '../lib/cache';
+import { agenticNutritionCoach, AIRecommendation, NutritionContext } from '../lib/agentic-nutrition-coach';
 
 interface DailyNutrition {
   totalCalories: number;
@@ -95,6 +96,7 @@ const DailyTracker: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNavi
   const [profile, setProfile] = useState<Profile | null>(null);
   const [aiAdvice, setAiAdvice] = useState<string>(() => localStorage.getItem('last_ai_advice') || '');
   const [isAiLoading, setIsAiLoading] = useState(false);
+  const [currentRecommendation, setCurrentRecommendation] = useState<AIRecommendation | null>(null);
   const isFetchingAIAdvice = useRef(false);
   const lastFetchParams = useRef<string>('');
   const lastFetchTime = useRef<number>(0);
@@ -139,102 +141,104 @@ const DailyTracker: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNavi
     return 'Obese';
   };
 
-  const fetchAIAdvice = async (nutrition: DailyNutrition, goals: any, userId?: string) => {
+  const fetchAgenticAIAdvice = async (nutrition: DailyNutrition, goals: any, currentUserId: string) => {
     try {
-      const currentUserId = userId || userId;
       if (!currentUserId || isFetchingAIAdvice.current) return;
 
       const now = Date.now();
       if (now - lastFetchTime.current < FETCH_COOLDOWN) return;
 
-      const today = new Date().toISOString().split('T')[0];
-      const currentWater = waterIntake;
-      const bmi = profile ? calculateBMI(profile.weight || 0, profile.height || 0) : 0;
-      const bmiCategory = getBMICategory(bmi);
+      setIsAiLoading(true);
+      isFetchingAIAdvice.current = true;
 
-      const currentParams = JSON.stringify({
-        calories: nutrition.totalCalories,
-        protein: nutrition.totalProtein,
-        carbs: nutrition.totalCarbs,
-        fat: nutrition.totalFat,
-        water: currentWater,
-        weight: profile?.weight,
-        goal: profile?.goal,
-        date: today
-      });
-
-      if (lastFetchParams.current === currentParams) return;
-
-      const cacheKey = `${CACHE_KEYS.AI_ADVICE}_${currentUserId}`;
-      const cachedAdvice = cache.get<{ 
-        advice: string; 
-        calories: number; 
-        protein: number;
-        carbs: number;
-        fat: number;
-        date: string; 
-        water: number;
-        weight: number;
-        goal: string;
-      }>(cacheKey);
-
-      if (cachedAdvice && 
-          cachedAdvice.calories === nutrition.totalCalories && 
-          cachedAdvice.protein === nutrition.totalProtein &&
-          cachedAdvice.carbs === nutrition.totalCarbs &&
-          cachedAdvice.fat === nutrition.totalFat &&
-          cachedAdvice.water === currentWater &&
-          cachedAdvice.weight === profile?.weight &&
-          cachedAdvice.goal === profile?.goal &&
-          cachedAdvice.date === today) {
-        setAiAdvice(cachedAdvice.advice);
-        localStorage.setItem('last_ai_advice', cachedAdvice.advice);
-        lastFetchParams.current = currentParams;
+      // Check if we already have a recommendation for today
+      const todayRecommendation = await agenticNutritionCoach.getTodaysRecommendation();
+      if (todayRecommendation) {
+        setAiAdvice(todayRecommendation.recommendation_text);
+        setCurrentRecommendation(todayRecommendation);
+        localStorage.setItem('last_ai_advice', todayRecommendation.recommendation_text);
         return;
       }
 
-      setIsAiLoading(true);
-      isFetchingAIAdvice.current = true;
-      
-      const prompt = `
-        User Goal: ${profile?.goal || 'Fitness'}
-        Current Weight: ${profile?.weight}kg
-        Target Weight: ${profile?.target_weight}kg
-        Current BMI: ${bmi} (${bmiCategory})
-        Today's Intake: ${nutrition.totalCalories}kcal, ${nutrition.totalProtein}g Protein, ${nutrition.totalCarbs}g Carbs, ${nutrition.totalFat}g Fat.
-        Water Intake: ${currentWater}ml
-        Daily Targets: ${goals.daily_calories_target}kcal, ${goals.daily_protein_target}g Protein.
-        
-        Provide a 25-word max insight on what the user should eat for their next meal to reach their weight and fitness goals, including hydration advice.
-      `;
+      // Prepare nutrition context
+      const today = new Date().toISOString().split('T')[0];
+      const currentWater = waterIntake;
+      const bmi = profile ? calculateBMI(profile.weight || 0, profile.height || 0) : 0;
+      const hour = new Date().getHours();
+      const timeOfDay = hour >= 5 && hour < 12 ? 'morning' : 
+                     hour >= 12 && hour < 17 ? 'afternoon' : 
+                     hour >= 17 && hour < 21 ? 'evening' : 'night';
 
-      const newAdvice = await generateAIChatResponse(prompt);
+      const context: NutritionContext = {
+        current_nutrition: {
+          totalCalories: nutrition.totalCalories,
+          totalProtein: nutrition.totalProtein,
+          totalCarbs: nutrition.totalCarbs,
+          totalFat: nutrition.totalFat,
+        },
+        nutrition_goals: {
+          daily_calories_target: goals.daily_calories_target,
+          daily_protein_target: goals.daily_protein_target,
+          daily_carbs_target: goals.daily_carbs_target,
+          daily_fat_target: goals.daily_fat_target,
+        },
+        user_profile: {
+          weight: profile?.weight,
+          target_weight: profile?.target_weight,
+          height: profile?.height,
+          goal: profile?.goal,
+          bmi: bmi,
+        },
+        water_intake: currentWater,
+        date: today,
+        time_of_day: timeOfDay as any,
+        meals_logged_today: meals.length,
+      };
+
+      // Get agentic recommendation
+      const recommendation = await agenticNutritionCoach.getAgenticRecommendation(context);
       
-      setAiAdvice(newAdvice);
-      localStorage.setItem('last_ai_advice', newAdvice);
-      lastFetchParams.current = currentParams;
-      lastFetchTime.current = Date.now();
-      
-      cache.set(cacheKey, {
-        advice: newAdvice,
-        calories: nutrition.totalCalories,
-        protein: nutrition.totalProtein,
-        carbs: nutrition.totalCarbs,
-        fat: nutrition.totalFat,
-        water: currentWater,
-        weight: profile?.weight || 0,
-        goal: profile?.goal || '',
-        date: today
-      }, CACHE_TTL.VERY_LONG);
+      if (recommendation) {
+        setAiAdvice(recommendation.recommendation_text);
+        setCurrentRecommendation(recommendation);
+        localStorage.setItem('last_ai_advice', recommendation.recommendation_text);
+        lastFetchTime.current = Date.now();
+      } else {
+        // Fallback to simple advice if agentic fails
+        setAiAdvice("Track your meals consistently to get personalized nutrition insights!");
+      }
+
+      // Track daily behavior for learning
+      await agenticNutritionCoach.trackDailyBehavior(
+        nutrition,
+        currentWater,
+        goals,
+        meals.length
+      );
+
     } catch (error: any) {
-      console.error('AI Advice error:', error);
+      console.error('Agentic AI Advice error:', error);
       if (error.message?.includes('429') || error.status === 429) {
         setAiAdvice("AI is taking a quick break. I'll provide fresh insights in a moment!");
+      } else {
+        setAiAdvice("I'm learning your patterns. More data will help me give better advice!");
       }
     } finally {
       setIsAiLoading(false);
       isFetchingAIAdvice.current = false;
     }
+  };
+
+  // Legacy AI advice function for backward compatibility
+  const fetchAIAdvice = async (nutrition: DailyNutrition, goals: any, userId?: string) => {
+    const currentUserId = userId || userId;
+    if (!currentUserId) return;
+    
+    // Initialize agentic coach with user ID
+    agenticNutritionCoach.setUserId(currentUserId);
+    
+    // Use the new agentic system
+    return fetchAgenticAIAdvice(nutrition, goals, currentUserId);
   };
 
   const fetchUserAndFoods = async () => {
@@ -257,6 +261,8 @@ const DailyTracker: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNavi
         await fetchWaterIntake(user.id, selectedDate);
 
         if (nutrition && goals) {
+          // Initialize agentic coach with user ID
+          agenticNutritionCoach.setUserId(user.id);
           fetchAIAdvice(nutrition, goals, user.id);
         }
       }
@@ -438,7 +444,7 @@ const DailyTracker: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNavi
     }
   };
 
-  const aggregateHistoryData = (data: any[]) => {
+  const aggregateHistoryData = (data: any[]): Array<{date: string, calories: number, protein: number, carbs: number, fat: number}> => {
     const grouped = data.reduce((acc: any, item: any) => {
       const date = item.date;
       if (!acc[date]) {
@@ -451,7 +457,8 @@ const DailyTracker: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNavi
       return acc;
     }, {});
 
-    return Object.values(grouped).sort((a: any, b: any) => b.date.localeCompare(a.date));
+    const result = Object.values(grouped) as Array<{date: string, calories: number, protein: number, carbs: number, fat: number}>;
+    return result.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
   };
 
   const handleSearch = (query: string) => {
@@ -796,9 +803,44 @@ const DailyTracker: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNavi
             <div className="absolute top-0 right-0 p-2 opacity-10 group-hover:opacity-20 transition-opacity">
               <span className="material-symbols-rounded text-4xl text-primary">smart_toy</span>
             </div>
-            <div className="flex items-center gap-2 mb-2">
-              <div className="w-1.5 h-1.5 bg-primary rounded-full animate-pulse"></div>
-              <h3 className="text-[10px] font-black text-primary uppercase tracking-[0.2em]">AI Nutrition Coach</h3>
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-2">
+                <div className="w-1.5 h-1.5 bg-primary rounded-full animate-pulse"></div>
+                <h3 className="text-[10px] font-black text-primary uppercase tracking-[0.2em]">AI Nutrition Coach</h3>
+                {currentRecommendation && (
+                  <div className="flex items-center gap-1">
+                    <span className="text-[8px] text-primary/60">Confidence:</span>
+                    <span className="text-[8px] font-bold text-primary">
+                      {Math.round(currentRecommendation.confidence_score * 100)}%
+                    </span>
+                  </div>
+                )}
+              </div>
+              {currentRecommendation && (
+                <div className="flex gap-1">
+                  {[1, 2, 3, 4, 5].map((star) => (
+                    <button
+                      key={star}
+                      onClick={async () => {
+                        await agenticNutritionCoach.recordRecommendationFeedback(
+                          currentRecommendation.id,
+                          star,
+                          undefined,
+                          true
+                        );
+                        // Refresh to show feedback recorded
+                        setAiAdvice(aiAdvice + " ✅ Thanks for your feedback!");
+                      }}
+                      className="text-[10px] text-primary/30 hover:text-primary transition-colors"
+                      title={`Rate this recommendation ${star}/5`}
+                    >
+                      <span className="material-symbols-rounded" style={{ fontSize: '14px' }}>
+                        {star <= (currentRecommendation.effectiveness_rating || 0) ? 'star' : 'star_outline'}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
             {isAiLoading ? (
               <div className="flex items-center gap-3 py-1">
@@ -807,12 +849,26 @@ const DailyTracker: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNavi
                   <div className="w-1 h-1 bg-primary/50 rounded-full animate-bounce [animation-delay:0.2s]"></div>
                   <div className="w-1 h-1 bg-primary/50 rounded-full animate-bounce [animation-delay:0.4s]"></div>
                 </div>
-                <p className="text-[11px] text-slate-500 font-medium italic">Analyzing your intake...</p>
+                <p className="text-[11px] text-slate-500 font-medium italic">Analyzing patterns and preferences...</p>
               </div>
             ) : (
-              <p className="text-xs text-slate-300 leading-relaxed font-medium">
-                {aiAdvice || "Log your meals to get personalized nutrition insights!"}
-              </p>
+              <div>
+                <p className="text-xs text-slate-300 leading-relaxed font-medium mb-2">
+                  {aiAdvice || "Log your meals to get personalized nutrition insights!"}
+                </p>
+                {currentRecommendation && (
+                  <div className="flex gap-2 items-center text-[9px] text-slate-400">
+                    <span className="px-2 py-1 bg-primary/10 rounded-full text-primary font-black uppercase">
+                      {currentRecommendation.recommendation_type?.replace('_', ' ')}
+                    </span>
+                    {currentRecommendation.was_followed && (
+                      <span className="px-2 py-1 bg-green-500/10 rounded-full text-green-400 font-black uppercase">
+                        Followed
+                      </span>
+                    )}
+                  </div>
+                )}
+              </div>
             )}
           </div>
 

@@ -209,7 +209,7 @@ const Header: React.FC<HeaderProps> = ({
                 </div>
             </div>
 
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-6">
                 {/* Plan Notifications Bell */}
                 {notifications && notifications.length > 0 && (
                     <button
@@ -239,7 +239,7 @@ const Header: React.FC<HeaderProps> = ({
                 </button>
             </div>
 
-            <div className="w-1"></div>
+            <div className="w-4"></div>
 
             {/* Profile Photo Button */}
             <button
