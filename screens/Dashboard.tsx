@@ -12,6 +12,8 @@ import { getUserNotifications, getUnreadNotificationCount, markNotificationAsRea
 import { generateAIChatResponse } from '../lib/gemini';
 import { agenticNutritionCoach } from '../lib/agentic-nutrition-coach';
 import PWAInstallPrompt from '../components/PWAInstallPrompt';
+import PWAInstallButton from '../components/PWAInstallButton';
+import { useFullscreenManager } from '../hooks/useFullscreen';
 
 interface DailyNutrition {
   totalCalories: number;
@@ -22,6 +24,7 @@ interface DailyNutrition {
 
 const Dashboard: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNavigate }) => {
   const [showPWAInstall, setShowPWAInstall] = useState(false);
+  const { isFullscreen, canEnterFullscreen, enterFullscreen, exitFullscreen, platform } = useFullscreenManager();
   const [user, setUser] = useState<any>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [planDetails, setPlanDetails] = useState<any>(null);
@@ -1510,6 +1513,25 @@ const Dashboard: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNavigat
         nutritionGoals={nutritionGoals}
         waterIntake={waterIntake}
       />
+
+      {/* PWA Install Button */}
+      {!showPWAInstall && (
+        <div className="fixed top-20 right-4 z-40">
+          <PWAInstallButton />
+        </div>
+      )}
+
+      {/* Fullscreen Toggle Button */}
+      {canEnterFullscreen && (
+        <button
+          onClick={isFullscreen ? exitFullscreen : enterFullscreen}
+          className="fixed top-20 left-4 z-40 w-12 h-12 bg-slate-800/80 backdrop-blur-sm border border-slate-700/50 rounded-full flex items-center justify-center hover:bg-slate-700/90 transition-colors"
+        >
+          <span className="material-symbols-rounded text-white text-lg">
+            {isFullscreen ? 'fullscreen_exit' : 'fullscreen'}
+          </span>
+        </button>
+      )}
 
       {/* PWA Install Prompt */}
       {showPWAInstall && (

@@ -3,10 +3,18 @@
   "short_name": "PowerFlex",
   "description": "Your elite fitness companion with AI nutrition coaching, workout tracking, and personalized training programs.",
   "start_url": "/",
-  "display": "standalone",
+  "display": "fullscreen",
+  "display_override": {
+    "standalone": "fullscreen",
+    "minimal-ui": "standalone",
+    "browser": "minimal-ui"
+  },
   "background_color": "#090E1A",
   "theme_color": "#22C55E",
-  "orientation": "portrait-primary",
+  "orientation": "any",
+  "launch_handler": {
+    "client_mode": ["focus-existing", "navigate-existing", "create-new"]
+  },
   "scope": "/",
   "lang": "en",
   "categories": ["fitness", "health", "lifestyle", "sports"],

@@ -8,6 +8,8 @@ import { supabase } from '../lib/supabase';
 import { analyzeFoodImage, generateAIChatResponse } from '../lib/gemini';
 import { cache, CACHE_KEYS, CACHE_TTL } from '../lib/cache';
 import { agenticNutritionCoach, AIRecommendation, NutritionContext } from '../lib/agentic-nutrition-coach';
+import PWAInstallButton from '../components/PWAInstallButton';
+import { useFullscreenManager } from '../hooks/useFullscreen';
 
 interface DailyNutrition {
   totalCalories: number;
@@ -97,6 +99,7 @@ const DailyTracker: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNavi
   const [aiAdvice, setAiAdvice] = useState<string>(() => localStorage.getItem('last_ai_advice') || '');
   const [isAiLoading, setIsAiLoading] = useState(false);
   const [currentRecommendation, setCurrentRecommendation] = useState<AIRecommendation | null>(null);
+  const { isFullscreen, canEnterFullscreen, enterFullscreen, exitFullscreen } = useFullscreenManager();
   const isFetchingAIAdvice = useRef(false);
   const lastFetchParams = useRef<string>('');
   const lastFetchTime = useRef<number>(0);
@@ -734,7 +737,24 @@ const DailyTracker: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNavi
       .reduce((sum, m) => sum + m.calories, 0),
   }));
   return (
-    <div className="pb-32 bg-[#090E1A] min-h-screen">
+    <div className="pb-32 bg-[#090E1A] min-h-screen relative">
+      {/* PWA Install Button */}
+      <div className="fixed top-20 right-4 z-40">
+        <PWAInstallButton compact={true} />
+      </div>
+
+      {/* Fullscreen Toggle Button */}
+      {canEnterFullscreen && (
+        <button
+          onClick={isFullscreen ? exitFullscreen : enterFullscreen}
+          className="fixed top-20 left-4 z-40 w-12 h-12 bg-slate-800/80 backdrop-blur-sm border border-slate-700/50 rounded-full flex items-center justify-center hover:bg-slate-700/90 transition-colors"
+        >
+          <span className="material-symbols-rounded text-white text-lg">
+            {isFullscreen ? 'fullscreen_exit' : 'fullscreen'}
+          </span>
+        </button>
+      )}
+
       <StatusBar />
       <main className="pt-4 px-5">
         <header className="mb-6 flex items-center justify-between">

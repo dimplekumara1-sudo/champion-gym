@@ -44,6 +44,10 @@ self.addEventListener('install', (event) => {
       })
       .then(() => {
         console.log('✅ Service Worker: Installation complete');
+        // Enable fullscreen and take over the page
+        return self.clients.claim();
+      })
+      .then(() => {
         // Skip waiting to ensure immediate activation
         return self.skipWaiting();
       })
@@ -87,6 +91,25 @@ self.addEventListener('fetch', (event) => {
 
   // Skip non-GET requests and external requests
   if (request.method !== 'GET' || url.origin !== self.location.origin) {
+    return;
+  }
+
+  // Handle fullscreen requests for PWA
+  if (url.searchParams.has('fullscreen') && url.searchParams.get('fullscreen') === 'true') {
+    event.respondWith(
+      new Response(`
+        <script>
+          // Enter fullscreen mode immediately
+          if (document.documentElement.requestFullscreen) {
+            document.documentElement.requestFullscreen();
+          } else if (document.documentElement.webkitRequestFullscreen) {
+            document.documentElement.webkitRequestFullscreen();
+          }
+        </script>
+      `, {
+        headers: { 'Content-Type': 'text/html' }
+      })
+    );
     return;
   }
 
