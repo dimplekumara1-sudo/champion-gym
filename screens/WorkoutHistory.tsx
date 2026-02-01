@@ -280,29 +280,6 @@ const WorkoutHistory: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNa
         </div>
       )}
 
-      {/* Bottom Navigation */}
-      <nav className="fixed bottom-0 left-0 right-0 bg-slate-900/80 backdrop-blur-xl border-t border-slate-800 px-6 py-3 pb-6 flex justify-between items-center max-w-[430px] mx-auto w-full">
-        <button onClick={() => onNavigate('HOME')} className="flex flex-col items-center gap-1 text-slate-400 hover:text-primary transition-colors">
-          <span className="material-symbols-rounded">home</span>
-          <span className="text-[10px] font-bold">Home</span>
-        </button>
-        <button onClick={() => onNavigate('EXPLORE')} className="flex flex-col items-center gap-1 text-slate-400 hover:text-primary transition-colors">
-          <span className="material-symbols-rounded">explore</span>
-          <span className="text-[10px] font-bold">Explore</span>
-        </button>
-        <button onClick={() => onNavigate('WORKOUT_PROGRAM')} className="flex flex-col items-center gap-1 text-slate-400 hover:text-primary transition-colors">
-          <span className="material-symbols-rounded">sports_gymnastics</span>
-          <span className="text-[10px] font-bold">Workout</span>
-        </button>
-        <button onClick={() => onNavigate('FOOD_DIARY')} className="flex flex-col items-center gap-1 text-slate-400 hover:text-primary transition-colors">
-          <span className="material-symbols-rounded">nutrition</span>
-          <span className="text-[10px] font-bold">Nutrition</span>
-        </button>
-        <button onClick={() => onNavigate('PROFILE')} className="flex flex-col items-center gap-1 text-slate-400 hover:text-primary transition-colors">
-          <span className="material-symbols-rounded">account_circle</span>
-          <span className="text-[10px] font-bold">Profile</span>
-        </button>
-      </nav>
     </div>
   );
 };

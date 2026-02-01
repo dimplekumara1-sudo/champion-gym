@@ -49,6 +49,8 @@ import AttendanceScreen from './screens/AttendanceScreen';
 import AdminAttendance from './screens/AdminAttendance';
 import ConfigScreen from './screens/ConfigScreen';
 import PullToRefresh from './components/PullToRefresh';
+import BottomNav from './components/BottomNav';
+import AdminBottomNav from './components/AdminBottomNav';
 import { supabase } from './lib/supabase';
 import { startSessionMonitoring, stopSessionMonitoring, clearSessionState } from './lib/sessionService';
 
@@ -305,12 +307,45 @@ const App: React.FC = () => {
     window.location.reload();
   };
 
+  const renderNavigation = () => {
+    const userScreens: AppScreen[] = [
+      'DASHBOARD', 'EXPLORE', 'DAILY_TRACKER', 'NUTRITION_GOALS', 
+      'STATS', 'TRAINERS', 'PROFILE', 'GYM_CATALOG', 
+      'WORKOUT_PROGRAM', 'WORKOUT_HISTORY', 'STORE', 'CART', 
+      'ATTENDANCE', 'ORDER_HISTORY', 'CATEGORY_VIDEOS'
+    ];
+
+    const adminScreens: AppScreen[] = [
+      'ADMIN_DASHBOARD', 'ADMIN_USERS', 'ADMIN_PLANS', 'ADMIN_EXERCISES', 
+      'ADMIN_WORKOUTS', 'ADMIN_CATEGORIES', 'ADMIN_SHOP', 'ADMIN_ORDERS', 
+      'ADMIN_EXPLORE', 'ADMIN_INDIAN_FOODS', 'ADMIN_FOOD_APPROVALS', 
+      'ADMIN_PT', 'ADMIN_ANNOUNCEMENTS', 'ADMIN_SUBSCRIPTION_TRACKER', 
+      'ADMIN_ATTENDANCE', 'CONFIG'
+    ];
+
+    if (userScreens.includes(currentScreen)) {
+      let active: 'HOME' | 'EXPLORE' | 'STATS' | 'WORKOUTS' = 'HOME';
+      if (currentScreen === 'EXPLORE' || currentScreen === 'CATEGORY_VIDEOS') active = 'EXPLORE';
+      if (currentScreen === 'STATS' || currentScreen === 'DAILY_TRACKER') active = 'STATS';
+      if (currentScreen === 'WORKOUT_PROGRAM') active = 'WORKOUTS';
+      
+      return <BottomNav active={active} onNavigate={navigate} />;
+    }
+
+    if (adminScreens.includes(currentScreen)) {
+      return <AdminBottomNav activeScreen={currentScreen} onNavigate={navigate} />;
+    }
+
+    return null;
+  };
+
   return (
     <div className="min-h-screen bg-[#090E1A] text-white font-sans flex justify-center">
       <div className="w-full max-w-[430px] bg-[#090E1A] min-h-screen relative shadow-2xl overflow-x-hidden no-scrollbar">
         <PullToRefresh onRefresh={handleRefresh}>
           {renderScreen()}
         </PullToRefresh>
+        {renderNavigation()}
       </div>
       
       {/* PWA Install Prompt */}

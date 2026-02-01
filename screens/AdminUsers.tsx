@@ -714,27 +714,6 @@ const AdminUsers: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNaviga
         })}
       </main>
 
-      <nav className="fixed bottom-0 w-full bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl border-t border-slate-200 dark:border-slate-800 pb-8 pt-3 px-6 max-w-[430px] mx-auto left-1/2 -translate-x-1/2">
-        <div className="flex justify-between items-center">
-          <button onClick={() => onNavigate('ADMIN_DASHBOARD')} className="flex flex-col items-center gap-1 text-slate-400">
-            <span className="material-symbols-rounded">dashboard</span>
-            <span className="text-[10px] font-medium">Dashboard</span>
-          </button>
-          <button onClick={() => onNavigate('ADMIN_USERS')} className="flex flex-col items-center gap-1 text-primary">
-            <span className="material-symbols-rounded">people_alt</span>
-            <span className="text-[10px] font-medium">Members</span>
-          </button>
-          <button onClick={() => onNavigate('ADMIN_ORDERS')} className="flex flex-col items-center gap-1 text-slate-400">
-            <span className="material-symbols-rounded">shopping_cart_checkout</span>
-            <span className="text-[10px] font-medium">Orders</span>
-          </button>
-          <button onClick={() => onNavigate('ADMIN_SHOP')} className="flex flex-col items-center gap-1 text-slate-400">
-            <span className="material-symbols-rounded">storefront</span>
-            <span className="text-[10px] font-medium">Shop</span>
-          </button>
-        </div>
-      </nav>
-
       {/* Approval Confirmation Modal */}
       {approvalModal && (() => {
         const selectedPlanData = plans.find(p => p.id === selectedPlan);

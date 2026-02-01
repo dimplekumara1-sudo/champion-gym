@@ -8,7 +8,7 @@ interface BottomNavProps {
 
 const BottomNav: React.FC<BottomNavProps> = ({ active, onNavigate }) => {
   return (
-    <nav className="fixed bottom-0 w-full max-w-[430px] bg-[#090E1A]/80 backdrop-blur-xl border-t border-white/5 px-6 pb-8 pt-3 flex justify-between items-center z-40">
+    <nav className="fixed bottom-0 left-0 right-0 w-full max-w-[430px] mx-auto bg-[#090E1A]/80 backdrop-blur-xl border-t border-white/5 px-6 pb-8 pt-3 flex justify-between items-center z-40">
       <button 
         onClick={() => onNavigate('DASHBOARD')}
         className={`flex flex-col items-center gap-1 transition-colors ${active === 'HOME' ? 'text-primary' : 'text-slate-500'}`}

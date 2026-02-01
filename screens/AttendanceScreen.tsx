@@ -3,7 +3,6 @@ import { AppScreen } from '../types';
 import { supabase } from '../lib/supabase';
 import Header from '../components/Header';
 import StatusBar from '../components/StatusBar';
-import BottomNav from '../components/BottomNav';
 
 interface AttendanceRecord {
     id: string;
@@ -224,7 +223,6 @@ const AttendanceScreen: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ on
                 </div>
             </div>
             
-            <BottomNav active="STATS" onNavigate={onNavigate} />
         </div>
     );
 };

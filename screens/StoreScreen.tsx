@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import StatusBar from '../components/StatusBar';
 import Header from '../components/Header';
-import BottomNav from '../components/BottomNav';
 import { supabase } from '../lib/supabase';
 import { AppScreen } from '../types';
 
@@ -247,7 +246,6 @@ const StoreScreen: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNavig
                     </div>
                 )}
             </main>
-            <BottomNav active="HOME" onNavigate={onNavigate} />
         </div>
     );
 };

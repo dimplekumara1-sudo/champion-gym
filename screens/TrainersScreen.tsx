@@ -2,7 +2,6 @@
 import React, { useEffect, useState } from 'react';
 import StatusBar from '../components/StatusBar';
 import Header from '../components/Header';
-import BottomNav from '../components/BottomNav';
 import { AppScreen } from '../types';
 import { supabase } from '../lib/supabase';
 
@@ -231,7 +230,6 @@ const TrainersScreen: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNa
         </div>
       )}
 
-      <BottomNav active="HOME" onNavigate={onNavigate} />
     </div>
   );
 };

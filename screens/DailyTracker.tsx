@@ -2,7 +2,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip, LineChart, Line, XAxis, YAxis, CartesianGrid } from 'recharts';
 import StatusBar from '../components/StatusBar';
-import BottomNav from '../components/BottomNav';
 import { AppScreen, Profile } from '../types';
 import { supabase } from '../lib/supabase';
 import { analyzeFoodImage, generateAIChatResponse } from '../lib/gemini';
@@ -116,6 +115,7 @@ const DailyTracker: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNavi
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
   const [waterIntake, setWaterIntake] = useState(0);
   const [waterGoal] = useState(2000); // 2L default goal
+  const [modalPosition, setModalPosition] = useState<{ top: number } | null>(null);
 
   const mealTypes = [
     { type: 'breakfast' as const, label: 'Breakfast', icon: 'light_mode' },
@@ -569,6 +569,7 @@ const DailyTracker: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNavi
       setSelectedAmount('100');
       setSearchQuery('');
       setShowSearchModal(false);
+      setModalPosition(null);
     } catch (error) {
       console.error('Error adding food:', error);
       alert('Failed to add food');
@@ -676,6 +677,7 @@ const DailyTracker: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNavi
       setTimeout(() => {
         setShowSubmitFood(false);
         setSubmitMessage('');
+        setModalPosition(null);
       }, 2000);
     } catch (error) {
       console.error('Error submitting food:', error);
@@ -758,10 +760,18 @@ const DailyTracker: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNavi
             </div>
           </div>
           <button
-            onClick={() => setShowSubmitFood(true)}
-            className="bg-primary text-slate-900 font-bold py-3 rounded-xl hover:bg-green-600 transition-colors"
+            onClick={(e) => {
+              const rect = e.currentTarget.getBoundingClientRect();
+              setModalPosition({ 
+                top: Math.max(20, rect.bottom + 10) 
+              });
+              setShowSubmitFood(true);
+            }}
+            className="bg-primary text-slate-900 font-bold px-4 py-2.5 rounded-xl hover:bg-green-600 transition-colors flex items-center gap-2 text-sm"
+            title="Add new food item"
           >
-            <span className="material-symbols-rounded text-2xl font-bold">Add Food</span>
+            <span className="material-symbols-rounded text-lg">restaurant</span>
+            <span className="hidden sm:inline">Add Food</span>
           </button>
           <button
             onClick={async () => {
@@ -780,9 +790,11 @@ const DailyTracker: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNavi
                 );
               }
             }}
-            className="ml-2 bg-green-500 text-white text-xs font-bold py-2 rounded-lg hover:bg-green-600 transition-colors"
+            className="ml-2 bg-amber-500 text-white text-xs font-bold px-3 py-2 rounded-lg hover:bg-amber-600 transition-colors flex items-center gap-1"
+            title="Rate AI advice"
           >
-            <span className="material-symbols-rounded text-lg">Rate This Advice</span>
+            <span className="material-symbols-rounded text-sm">star_rate</span>
+            <span className="hidden xs:inline">Rate</span>
           </button>
         </header>
 
@@ -843,28 +855,31 @@ const DailyTracker: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNavi
                 )}
               </div>
               {currentRecommendation && (
-                <div className="flex gap-1">
-                  {[1, 2, 3, 4, 5].map((star) => (
-                    <button
-                      key={star}
-                      onClick={async () => {
-                        await agenticNutritionCoach.recordRecommendationFeedback(
-                          currentRecommendation.id,
-                          star,
-                          undefined,
-                          true
-                        );
-                        // Refresh to show feedback recorded
-                        setAiAdvice(aiAdvice + " ✅ Thanks for your feedback!");
-                      }}
-                      className="text-[10px] text-primary/30 hover:text-primary transition-colors"
-                      title={`Rate this recommendation ${star}/5`}
-                    >
-                      <span className="material-symbols-rounded" style={{ fontSize: '14px' }}>
-                        {star <= (currentRecommendation.effectiveness_rating || 0) ? 'star' : 'star_outline'}
-                      </span>
-                    </button>
-                  ))}
+                <div className="flex items-center gap-2">
+                  <span className="text-[9px] text-slate-500 font-medium">Rate this:</span>
+                  <div className="flex gap-0.5 bg-slate-800/50 rounded-lg p-1">
+                    {[1, 2, 3, 4, 5].map((star) => (
+                      <button
+                        key={star}
+                        onClick={async () => {
+                          await agenticNutritionCoach.recordRecommendationFeedback(
+                            currentRecommendation.id,
+                            star,
+                            undefined,
+                            true
+                          );
+                          // Refresh to show feedback recorded
+                          setAiAdvice(aiAdvice + " ✅ Thanks for your feedback!");
+                        }}
+                        className="text-[12px] text-slate-400 hover:text-yellow-400 transition-all hover:scale-110 px-0.5 py-0.5 rounded"
+                        title={`Rate this recommendation ${star}/5 stars`}
+                      >
+                        <span className="material-symbols-rounded" style={{ fontSize: '16px' }}>
+                          {star <= (currentRecommendation.effectiveness_rating || 0) ? 'star' : 'star_outline'}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
                 </div>
               )}
             </div>
@@ -960,17 +975,19 @@ const DailyTracker: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNavi
                 <button
                   key={amount}
                   onClick={() => handleUpdateWater(amount)}
-                  className="flex-1 bg-slate-800/60 hover:bg-blue-500/20 py-2.5 rounded-xl border border-slate-700/50 transition-all active:scale-95 group"
+                  className="flex-1 bg-gradient-to-br from-blue-500/10 to-blue-600/10 hover:from-blue-500/20 hover:to-blue-600/20 py-2.5 rounded-xl border border-blue-500/20 hover:border-blue-400/40 transition-all active:scale-95 group relative overflow-hidden"
                 >
-                  <div className="flex flex-col items-center">
-                    <span className="text-[10px] font-black text-slate-400 group-hover:text-blue-400">+{amount}</span>
-                    <span className="text-[8px] font-bold text-slate-600 group-hover:text-blue-500/60">ml</span>
+                  <div className="absolute inset-0 bg-blue-400/5 opacity-0 group-hover:opacity-100 transition-opacity"></div>
+                  <div className="relative flex flex-col items-center">
+                    <span className="material-symbols-rounded text-sm text-blue-400 mb-1">water_drop</span>
+                    <span className="text-[10px] font-black text-slate-400 group-hover:text-blue-300">+{amount}</span>
+                    <span className="text-[8px] font-bold text-slate-600 group-hover:text-blue-400/60">ml</span>
                   </div>
                 </button>
               ))}
               <button
                 onClick={() => handleUpdateWater(-250)}
-                className="w-12 bg-slate-800/60 hover:bg-red-500/20 rounded-xl border border-slate-700/50 transition-all active:scale-95 group flex items-center justify-center"
+                className="w-12 bg-gradient-to-br from-red-500/10 to-red-600/10 hover:from-red-500/20 hover:to-red-600/20 rounded-xl border border-red-500/20 hover:border-red-400/40 transition-all active:scale-95 group flex items-center justify-center"
               >
                 <span className="material-symbols-rounded text-lg text-slate-500 group-hover:text-red-400">remove</span>
               </button>
@@ -1337,14 +1354,18 @@ const DailyTracker: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNavi
                   </span>
                 </h2>
                 <button
-                  onClick={() => {
+                  onClick={(e) => {
+                    const rect = e.currentTarget.getBoundingClientRect();
                     setSelectedMealType(mealSummary.type);
+                    setModalPosition({ 
+                      top: Math.max(20, rect.bottom + 10) 
+                    });
                     setShowSearchModal(true);
                   }}
-                  className="text-xs font-bold text-primary hover:text-green-600 transition-colors flex items-center gap-1"
+                  className="bg-primary/10 border border-primary/30 text-primary hover:bg-primary hover:text-slate-900 text-xs font-bold px-3 py-1.5 rounded-lg transition-all flex items-center gap-1.5"
                 >
-                  <span className="material-symbols-rounded text-sm">add</span>
-                  Add
+                  <span className="material-symbols-rounded text-sm">add_circle</span>
+                  Add Item
                 </button>
               </div>
               <div className="bg-[#151C2C] rounded-2xl divide-y divide-[#1E293B] border border-[#1E293B]">
@@ -1369,9 +1390,10 @@ const DailyTracker: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNavi
                           e.stopPropagation();
                           removeFood(item.id);
                         }}
-                        className="opacity-0 group-hover:opacity-100 text-slate-500 hover:text-red-500 transition-all"
+                        className="opacity-0 group-hover:opacity-100 bg-red-500/10 hover:bg-red-500/20 text-red-400 hover:text-red-300 p-2 rounded-lg transition-all"
+                        title="Remove food item"
                       >
-                        <span className="material-symbols-rounded text-lg">close</span>
+                        <span className="material-symbols-rounded text-lg">delete</span>
                       </button>
                     </div>
                   ))
@@ -1522,8 +1544,15 @@ const DailyTracker: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNavi
         {/* Food Search Modal */}
         {
           showSearchModal && (
-            <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[100] flex items-center justify-center p-6">
-              <div className="bg-[#1f2937] w-full max-w-sm rounded-3xl overflow-hidden border border-slate-800 shadow-2xl flex flex-col max-h-[90vh]">
+            <div 
+              className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[100] flex p-6"
+              style={{ 
+                paddingTop: modalPosition ? `${modalPosition.top}px` : '5rem',
+                alignItems: modalPosition ? 'flex-start' : 'flex-start',
+                justifyContent: 'center'
+              }}
+            >
+              <div className="bg-[#1f2937] w-full max-w-sm rounded-3xl overflow-hidden border border-slate-800 shadow-2xl flex flex-col max-h-[70vh]">
                 <div className="sticky top-0 p-6 border-b border-slate-800 bg-[#1f2937]">
                   <div className="flex items-center justify-between mb-4">
                     <h2 className="text-xl font-bold text-white">Add Food</h2>
@@ -1532,6 +1561,7 @@ const DailyTracker: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNavi
                         setShowSearchModal(false);
                         setSelectedFood(null);
                         setSearchQuery('');
+                        setModalPosition(null);
                       }}
                       className="text-slate-400 hover:text-white"
                     >
@@ -1540,15 +1570,43 @@ const DailyTracker: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNavi
                   </div>
 
                   {!selectedFood && (
-                    <div>
+                    <div className="space-y-4">
                       <input
                         type="text"
                         placeholder="Search food..."
                         value={searchQuery}
                         onChange={(e) => handleSearch(e.target.value)}
-                        className="w-full bg-slate-800 border border-slate-700 rounded-xl px-4 py-2 text-white placeholder-slate-500 outline-none focus:ring-2 focus:ring-primary"
+                        className="w-full bg-slate-800 border border-slate-700 rounded-xl px-4 py-3 text-white placeholder-slate-500 outline-none focus:ring-2 focus:ring-primary text-sm"
                       />
-                      <p className="text-xs text-slate-500 mt-2">
+                      
+                      {/* Quick Add Popular Foods */}
+                      {!searchQuery && (
+                        <div>
+                          <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Quick Add</p>
+                          <div className="grid grid-cols-2 gap-2">
+                            {[
+                              { name: 'Rice', id: 1 },
+                              { name: 'Chicken Breast', id: 2 },
+                              { name: 'Eggs', id: 3 },
+                              { name: 'Paneer', id: 4 }
+                            ].map((quickFood) => (
+                              <button
+                                key={quickFood.id}
+                                onClick={() => {
+                                  const food = allFoods.find(f => f.dish_name.toLowerCase().includes(quickFood.name.toLowerCase()));
+                                  if (food) handleSelectFood(food);
+                                }}
+                                className="bg-primary/10 border border-primary/20 text-primary hover:bg-primary hover:text-slate-900 text-xs font-bold px-3 py-2 rounded-lg transition-all flex items-center justify-center gap-1"
+                              >
+                                <span className="material-symbols-rounded text-sm">bolt</span>
+                                {quickFood.name}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      
+                      <p className="text-xs text-slate-500">
                         {filteredFoods.length} items available
                       </p>
                     </div>
@@ -1625,18 +1683,26 @@ const DailyTracker: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNavi
                   ) : (
                     <div className="space-y-2">
                       {filteredFoods.length > 0 ? (
-                        filteredFoods.map((food) => (
+                        filteredFoods.slice(0, 20).map((food) => (
                           <button
                             key={food.id}
                             onClick={() => handleSelectFood(food)}
-                            className="w-full p-3 bg-slate-800/50 hover:bg-slate-800 rounded-xl text-left border border-slate-700/30 transition-colors group"
+                            className="w-full p-3 bg-slate-800/50 hover:bg-slate-800 hover:border-primary/50 rounded-xl text-left border border-slate-700/30 transition-all group relative overflow-hidden"
                           >
-                            <p className="font-semibold text-white text-sm group-hover:text-primary transition-colors">
+                            <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                              <span className="material-symbols-rounded text-primary text-sm">add_circle</span>
+                            </div>
+                            <p className="font-semibold text-white text-sm group-hover:text-primary transition-colors pr-6">
                               {food.dish_name}
                             </p>
-                            <p className="text-xs text-slate-500 mt-1">
-                              {food.calories_kcal} kcal • P: {food.protein_g}g • C: {food.carbohydrates_g}g • F: {food.fats_g}g
-                            </p>
+                            <div className="flex items-center gap-3 mt-2 text-xs">
+                              <span className="text-slate-400">{food.calories_kcal} kcal</span>
+                              <div className="flex gap-2">
+                                <span className="text-red-400 font-medium">P:{food.protein_g}g</span>
+                                <span className="text-blue-400 font-medium">C:{food.carbohydrates_g}g</span>
+                                <span className="text-amber-400 font-medium">F:{food.fats_g}g</span>
+                              </div>
+                            </div>
                           </button>
                         ))
                       ) : searchQuery ? (
@@ -1660,14 +1726,16 @@ const DailyTracker: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNavi
                           setSelectedFood(null);
                           setSelectedAmount('100');
                         }}
-                        className="flex-1 bg-slate-800 text-white py-3 rounded-xl font-bold hover:bg-slate-700 transition-colors"
+                        className="flex-1 bg-slate-800/50 border border-slate-600 text-white py-3 rounded-xl font-bold hover:bg-slate-700 transition-all flex items-center justify-center gap-2"
                       >
-                        Back
+                        <span className="material-symbols-rounded text-lg">arrow_back</span>
+                        Back to Search
                       </button>
                       <button
                         onClick={handleAddFood}
-                        className="flex-1 bg-primary text-slate-900 py-3 rounded-xl font-bold hover:bg-green-600 transition-colors"
+                        className="flex-1 bg-primary text-slate-900 py-3 rounded-xl font-bold hover:bg-green-600 transition-all shadow-lg shadow-primary/20 flex items-center justify-center gap-2"
                       >
+                        <span className="material-symbols-rounded text-lg">add_circle</span>
                         Add to {selectedMealType.charAt(0).toUpperCase() + selectedMealType.slice(1)}
                       </button>
                     </div>
@@ -1681,8 +1749,8 @@ const DailyTracker: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNavi
         {/* Nutrition Detail Modal */}
         {
           showNutritionDetail && selectedFoodDetails && (
-            <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[100] flex items-center justify-center p-6">
-              <div className="bg-[#1f2937] w-full max-w-sm rounded-3xl overflow-hidden border border-slate-800 shadow-2xl">
+            <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[100] flex items-start justify-center pt-16 p-6">
+              <div className="bg-[#1f2937] w-full max-w-sm rounded-3xl overflow-hidden border border-slate-800 shadow-2xl mt-8">
                 <div className="p-6 border-b border-slate-800">
                   <div className="flex items-center justify-between mb-4">
                     <h2 className="text-xl font-bold text-white">{selectedFoodDetails.dish_name}</h2>
@@ -1787,8 +1855,15 @@ const DailyTracker: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNavi
         {/* Submit Food Modal */}
         {
           showSubmitFood && (
-            <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[100] flex items-center justify-center p-6">
-              <div className="bg-[#1f2937] w-full max-w-sm rounded-3xl overflow-hidden border border-slate-800 shadow-2xl flex flex-col max-h-[90vh]">
+            <div 
+              className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[100] flex p-6"
+              style={{ 
+                paddingTop: modalPosition ? `${modalPosition.top}px` : '5rem',
+                alignItems: modalPosition ? 'flex-start' : 'flex-start',
+                justifyContent: 'center'
+              }}
+            >
+              <div className="bg-[#1f2937] w-full max-w-sm rounded-3xl overflow-hidden border border-slate-800 shadow-2xl flex flex-col max-h-[60vh]">
                 <div className="sticky top-0 p-6 border-b border-slate-800 bg-[#1f2937]">
                   <div className="flex items-center justify-between">
                     <h2 className="text-xl font-bold text-white">Suggest Food Item</h2>
@@ -1796,6 +1871,7 @@ const DailyTracker: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNavi
                       onClick={() => {
                         setShowSubmitFood(false);
                         setSubmitMessage('');
+                        setModalPosition(null);
                       }}
                       className="text-slate-400 hover:text-white"
                     >
@@ -1984,6 +2060,7 @@ const DailyTracker: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNavi
                     onClick={() => {
                       setShowSubmitFood(false);
                       setSubmitMessage('');
+                      setModalPosition(null);
                     }}
                     className="w-full bg-slate-800 hover:bg-slate-700 text-white py-3 rounded-xl font-bold transition-colors"
                   >
@@ -1996,7 +2073,6 @@ const DailyTracker: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNavi
         }
       </main >
 
-      <BottomNav active="STATS" onNavigate={onNavigate} />
     </div >
   );
 };

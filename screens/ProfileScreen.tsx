@@ -2,7 +2,6 @@
 import React, { useEffect, useState, useRef } from 'react';
 import StatusBar from '../components/StatusBar';
 import Header from '../components/Header';
-import BottomNav from '../components/BottomNav';
 import { AppScreen, Profile } from '../types';
 import { supabase } from '../lib/supabase';
 import { cache, CACHE_KEYS, CACHE_TTL } from '../lib/cache';
@@ -625,7 +624,6 @@ const ProfileScreen: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNav
         </div>
       )}
 
-      <BottomNav active="STATS" onNavigate={onNavigate} />
     </div>
   );
 };

@@ -1099,27 +1099,6 @@ const AdminIndianFoods: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ on
                     )}
                 </div>
             </div>
-
-            <nav className="fixed bottom-0 w-full bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl border-t border-slate-200 dark:border-slate-800 pb-8 pt-3 px-6 max-w-[430px] mx-auto left-1/2 -translate-x-1/2">
-                <div className="flex justify-between items-center">
-                    <button onClick={() => onNavigate('ADMIN_DASHBOARD')} aria-label="Admin Dashboard" className="flex flex-col items-center gap-1 text-slate-400 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-900 focus-visible:ring-slate-400 rounded">
-                        <span className="material-symbols-rounded" aria-hidden="true">dashboard</span>
-                        <span className="text-[10px] font-medium">Dashboard</span>
-                    </button>
-                    <button onClick={() => onNavigate('ADMIN_USERS')} aria-label="Manage Members" className="flex flex-col items-center gap-1 text-slate-400 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-900 focus-visible:ring-slate-400 rounded">
-                        <span className="material-symbols-rounded" aria-hidden="true">people_alt</span>
-                        <span className="text-[10px] font-medium">Members</span>
-                    </button>
-                    <button onClick={() => onNavigate('ADMIN_ORDERS')} aria-label="Manage Orders" className="flex flex-col items-center gap-1 text-slate-400 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-900 focus-visible:ring-slate-400 rounded">
-                        <span className="material-symbols-rounded" aria-hidden="true">shopping_cart_checkout</span>
-                        <span className="text-[10px] font-medium">Orders</span>
-                    </button>
-                    <button onClick={() => onNavigate('ADMIN_SHOP')} aria-label="Manage Shop" className="flex flex-col items-center gap-1 text-primary focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-900 focus-visible:ring-primary rounded">
-                        <span className="material-symbols-rounded" aria-hidden="true">storefront</span>
-                        <span className="text-[10px] font-medium">Shop</span>
-                    </button>
-                </div>
-            </nav>
         </div>
     );
 };

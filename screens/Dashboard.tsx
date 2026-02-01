@@ -2,8 +2,8 @@
 import React, { useEffect, useState, useRef } from 'react';
 import StatusBar from '../components/StatusBar';
 import Header from '../components/Header';
-import BottomNav from '../components/BottomNav';
 import AIChatAssistant from '../components/AIChatAssistant';
+import PWAInstallPrompt from '../components/PWAInstallPrompt';
 import { AppScreen, Profile } from '../types';
 import { supabase } from '../lib/supabase';
 import { cache, CACHE_KEYS, CACHE_TTL } from '../lib/cache';
@@ -649,7 +649,7 @@ const Dashboard: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNavigat
   const showPaymentAlert = (profile?.payment_status === 'pending' || profile?.payment_status === 'unpaid') && profile?.due_amount && profile.due_amount > 0;
 
   return (
-    <div className="min-h-screen bg-[#090E1A] pb-32">
+    <div className="min-h-screen bg-[#090E1A] pb-20">
       <StatusBar />
       <Header
         onProfileClick={() => onNavigate('PROFILE')}
@@ -664,16 +664,16 @@ const Dashboard: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNavigat
       />
 
       <main className="px-5">
-        <div className="py-3 mb-2">
+        <div className="py-2 mb-1">
           <p className="text-slate-400 text-[13px] font-medium">{getGreeting()},</p>
           <h1 className="text-2xl font-bold tracking-tight">{firstName} 👋</h1>
         </div>
 
         {/* Announcements Section */}
         {announcements.length > 0 && (
-          <div className="mb-6">
+          <div className="mb-4">
             <h2 className="text-sm font-bold uppercase tracking-wider text-slate-500 mb-3 ml-2">Gym Announcements</h2>
-            <div className="space-y-3">
+            <div className="space-y-2">
               {announcements.map((announcement) => (
                 <div key={announcement.id} className="bg-gradient-to-r from-primary/10 to-primary/5 border border-primary/20 p-4 rounded-3xl">
                   <div className="flex items-start gap-3">
@@ -708,7 +708,7 @@ const Dashboard: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNavigat
 
         {/* Notifications / Alerts */}
         {(showExpiryAlert || showPaymentAlert) && (
-          <div className="flex flex-col gap-3 mb-6">
+          <div className="flex flex-col gap-3 mb-4">
             {showExpiryAlert && (
               <div className="bg-orange-500/10 border border-orange-500/20 p-4 rounded-3xl flex items-center gap-3 animate-pulse">
                 <div className="w-10 h-10 rounded-full bg-orange-500/20 flex items-center justify-center text-orange-500">
@@ -753,7 +753,7 @@ const Dashboard: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNavigat
         {/* Membership Status */}
         <button
           onClick={() => setIsPlanModalOpen(true)}
-          className="w-full bg-[#151C2C] border border-[#1E293B] p-4 rounded-3xl mb-4 flex items-center justify-between shadow-xl shadow-black/20 text-left active:scale-[0.98] transition-transform"
+          className="w-full bg-[#151C2C] border border-[#1E293B] p-4 rounded-3xl mb-3 flex items-center justify-between shadow-xl shadow-black/20 text-left active:scale-[0.98] transition-transform"
         >
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
@@ -831,7 +831,7 @@ const Dashboard: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNavigat
         {/* Calorie Tracker Card */}
         <div
           onClick={() => onNavigate('DAILY_TRACKER')}
-          className="w-full text-left bg-[#151C2C] border border-[#1E293B] p-5 rounded-3xl mb-4 shadow-xl active:scale-[0.98] transition-transform cursor-pointer"
+          className="w-full text-left bg-[#151C2C] border border-[#1E293B] p-5 rounded-3xl mb-3 shadow-xl active:scale-[0.98] transition-transform cursor-pointer"
         >
           <div className="flex justify-between items-start mb-5">
             <div>
@@ -910,7 +910,7 @@ const Dashboard: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNavigat
         {/* Nutrition Goals Card */}
         <button
           onClick={() => onNavigate('NUTRITION_GOALS')}
-          className="w-full text-left bg-[#151C2C] border border-[#1E293B] p-5 rounded-3xl mb-4 shadow-xl active:scale-[0.98] transition-transform group hover:bg-[#1a2438]"
+          className="w-full text-left bg-[#151C2C] border border-[#1E293B] p-5 rounded-3xl mb-3 shadow-xl active:scale-[0.98] transition-transform group hover:bg-[#1a2438]"
         >
           <div className="flex justify-between items-center">
             <div>
@@ -925,7 +925,7 @@ const Dashboard: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNavigat
         {currentProgram ? (
           <button
             onClick={() => onNavigate('WORKOUT_PROGRAM')}
-            className="w-full text-left bg-primary/10 border border-primary/20 p-5 rounded-[2.5rem] mb-4 shadow-xl active:scale-[0.98] transition-transform group"
+            className="w-full text-left bg-primary/10 border border-primary/20 p-5 rounded-[2.5rem] mb-3 shadow-xl active:scale-[0.98] transition-transform group"
           >
             <div className="flex justify-between items-center mb-4">
               <span className="bg-primary text-slate-950 text-[10px] font-black px-2.5 py-1 rounded-lg uppercase tracking-wider">Current Program</span>
@@ -943,7 +943,7 @@ const Dashboard: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNavigat
         ) : (
           <button
             onClick={() => onNavigate('EXPLORE')}
-            className="w-full text-left bg-slate-800/40 border border-slate-700/30 p-5 rounded-[2.5rem] mb-4 shadow-xl active:scale-[0.98] transition-transform flex items-center justify-between group"
+            className="w-full text-left bg-slate-800/40 border border-slate-700/30 p-5 rounded-[2.5rem] mb-3 shadow-xl active:scale-[0.98] transition-transform flex items-center justify-between group"
           >
             <div>
               <h3 className="text-lg font-bold text-white mb-1">No active program</h3>
@@ -956,12 +956,12 @@ const Dashboard: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNavigat
         )}
 
         {/* Quick Actions */}
-        <section className="mb-6">
+        <section className="mb-4">
           <h2 className="text-sm font-bold uppercase tracking-wider text-slate-500 mb-4 ml-2">Quick Actions</h2>
           <div className="grid grid-cols-4 gap-2">
             <button
               onClick={() => setIsChatOpen(true)}
-              className="bg-[#151C2C] border border-[#1E293B] p-3 rounded-3xl flex flex-col items-center gap-2 active:scale-95 transition-transform"
+              className="bg-[#151C2C] border border-[#1E293B] p-3 rounded-3xl flex flex-col items-center gap-1.5 active:scale-95 transition-transform"
             >
               <div className="w-10 h-10 rounded-2xl bg-primary/10 flex items-center justify-center text-primary">
                 <span className="material-symbols-rounded">smart_toy</span>
@@ -1017,7 +1017,7 @@ const Dashboard: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNavigat
         </section>
 
         {/* PT Session Card */}
-        <div className="bg-[#151C2C] border border-[#1E293B] p-4 rounded-3xl shadow-lg mb-6">
+        <div className="bg-[#151C2C] border border-[#1E293B] p-4 rounded-3xl shadow-lg mb-4">
           <div className="flex justify-between items-center mb-4">
             <h3 className="text-sm font-bold uppercase tracking-wider">Upcoming PT Session</h3>
             <button
@@ -1058,11 +1058,11 @@ const Dashboard: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNavigat
         </div>
 
         {/* Shop Section */}
-        <section className="mb-6">
-          <h2 className="text-sm font-bold uppercase tracking-wider text-slate-500 mb-4 ml-2">Shop Fitness Gear</h2>
+        <section className="mb-3">
+          <h2 className="text-sm font-bold uppercase tracking-wider text-slate-500 mb-3 ml-2">Shop Fitness Gear</h2>
           <button
             onClick={() => onNavigate('STORE')}
-            className="w-full bg-gradient-to-r from-primary/20 to-primary/10 border border-primary/30 p-5 rounded-3xl flex items-center justify-between shadow-xl shadow-primary/10 active:scale-[0.98] transition-transform mb-3"
+            className="w-full bg-gradient-to-r from-primary/20 to-primary/10 border border-primary/30 p-5 rounded-3xl flex items-center justify-between shadow-xl shadow-primary/10 active:scale-[0.98] transition-transform mb-2"
           >
             <div className="flex items-center gap-4">
               <div className="w-12 h-12 rounded-2xl bg-primary/20 flex items-center justify-center">
@@ -1087,8 +1087,6 @@ const Dashboard: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNavigat
           </button>
         </section>
       </main>
-
-      <BottomNav active="HOME" onNavigate={onNavigate} />
 
       {/* Edit Modal */}
       {isEditModalOpen && (
@@ -1224,8 +1222,8 @@ const Dashboard: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNavigat
 
       {/* Notifications Modal */}
       {showNotificationsModal && notifications.length > 0 && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-md z-[100] flex items-center justify-center p-4">
-          <div className="bg-white w-full max-w-[400px] rounded-[32px] overflow-hidden shadow-2xl flex flex-col max-h-[85vh]">
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-md z-[100] flex items-start justify-center pt-20 p-4">
+          <div className="bg-white w-full max-w-[400px] rounded-[32px] overflow-hidden shadow-2xl flex flex-col max-h-[75vh] mt-8">
             <div className="p-6 pb-4 flex items-center justify-between bg-white border-b border-slate-50">
               <h2 className="text-xl font-bold text-slate-900">System Alerts</h2>
               <button
@@ -1287,8 +1285,8 @@ const Dashboard: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNavigat
 
       {/* Push Notifications Modal */}
       {showPushNotificationsModal && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-md z-[100] flex items-center justify-center p-4">
-          <div className="bg-white w-full max-w-[400px] rounded-[32px] overflow-hidden shadow-2xl flex flex-col max-h-[85vh]">
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-md z-[100] flex items-start justify-center pt-20 p-4">
+          <div className="bg-white w-full max-w-[400px] rounded-[32px] overflow-hidden shadow-2xl flex flex-col max-h-[75vh] mt-8">
             <div className="p-6 pb-4 flex items-center justify-between bg-white">
               <h2 className="text-xl font-bold text-slate-900">Notifications</h2>
               <div className="flex bg-slate-100 p-1 rounded-xl">
@@ -1420,8 +1418,8 @@ const Dashboard: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNavigat
 
       {/* BMI Info Modal */}
       {showBMIInfoModal && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[100] flex items-center justify-center p-6">
-          <div className="bg-[#1f2937] w-full max-w-md rounded-3xl overflow-hidden border border-slate-800 shadow-2xl">
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[100] flex items-start justify-center pt-20 p-6">
+          <div className="bg-[#1f2937] w-full max-w-md rounded-3xl overflow-hidden border border-slate-800 shadow-2xl mt-8">
             <div className="p-6 border-b border-slate-800">
               <div className="flex items-center justify-between">
                 <h2 className="text-xl font-bold text-white">BMI Categories</h2>

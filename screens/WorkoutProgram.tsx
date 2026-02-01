@@ -1,7 +1,6 @@
 
 import React, { useEffect, useState } from 'react';
 import StatusBar from '../components/StatusBar';
-import BottomNav from '../components/BottomNav';
 import { AppScreen } from '../types';
 import { supabase } from '../lib/supabase';
 
@@ -255,7 +254,6 @@ const WorkoutProgram: React.FC<{ onNavigate: (s: AppScreen) => void, onSelectWor
         ))}
       </main>
 
-      <BottomNav active="WORKOUTS" onNavigate={onNavigate} />
     </div>
   );
 };

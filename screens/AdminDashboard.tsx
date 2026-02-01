@@ -504,29 +504,6 @@ const AdminDashboard: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNa
           </div>
         </div>
       </main>
-
-      <nav className="fixed bottom-0 left-0 right-0 bg-white/80 dark:bg-[#0F172A]/80 backdrop-blur-lg border-t border-slate-200 dark:border-slate-800 px-4 py-3 pb-8 flex justify-between items-center z-50 max-w-[430px] mx-auto gap-2">
-        <button onClick={() => onNavigate('ADMIN_DASHBOARD')} className="flex flex-col items-center space-y-1 text-primary text-xs">
-          <span className="material-symbols-rounded text-lg">dashboard</span>
-          <span className="font-bold">Home</span>
-        </button>
-
-        <button onClick={() => onNavigate('ADMIN_ORDERS')} className="flex flex-col items-center space-y-1 text-slate-400 dark:text-slate-500 hover:text-primary transition-colors text-xs">
-          <span className="material-symbols-rounded text-lg">shopping_cart_checkout</span>
-          <span className="font-medium">Orders</span>
-        </button>
-        <button onClick={() => onNavigate('DASHBOARD')} className="w-14 h-14 bg-primary text-white rounded-full flex items-center justify-center shadow-lg shadow-primary/30 -mt-10 border-4 border-background-light dark:border-[#0F172A]">
-          <span className="material-symbols-rounded text-3xl">home</span>
-        </button>
-        <button onClick={() => onNavigate('ADMIN_USERS')} className="flex flex-col items-center space-y-1 text-slate-400 dark:text-slate-500 hover:text-primary transition-colors">
-          <span className="material-symbols-rounded">people</span>
-          <span className="text-[10px] font-medium">Users</span>
-        </button>
-        <button onClick={() => onNavigate('CONFIG')} className="flex flex-col items-center space-y-1 text-slate-400 dark:text-slate-500 hover:text-primary transition-colors">
-          <span className="material-symbols-rounded">settings</span>
-          <span className="text-[10px] font-medium">Config</span>
-        </button>
-      </nav>
     </div>
   );
 };

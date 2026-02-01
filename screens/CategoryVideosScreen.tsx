@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import StatusBar from '../components/StatusBar';
 import Header from '../components/Header';
-import BottomNav from '../components/BottomNav';
 import { AppScreen } from '../types';
 import { supabase } from '../lib/supabase';
 import { getYoutubeId, convertToEmbedUrl, isYoutubeUrl } from '../lib/videoUtils';
@@ -321,7 +320,6 @@ const CategoryVideosScreen: React.FC<{
                 </div>
             )}
 
-            <BottomNav active="EXPLORE" onNavigate={onNavigate} />
 
             {/* Background visual elements */}
             <div className="fixed top-0 right-0 -z-10 w-80 h-80 bg-primary/10 blur-[100px] rounded-full translate-x-1/2 -translate-y-1/2"></div>

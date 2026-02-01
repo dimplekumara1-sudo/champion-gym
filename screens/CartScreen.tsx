@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { AppScreen } from '../types';
-import BottomNav from '../components/BottomNav';
 
 const CartScreen: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNavigate }) => {
     const [cartItems, setCartItems] = useState<any[]>([]);
@@ -355,7 +354,6 @@ const CartScreen: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNaviga
                     </>
                 )}
             </main>
-            <BottomNav active="EXPLORE" onNavigate={onNavigate} />
         </div>
     );
 };

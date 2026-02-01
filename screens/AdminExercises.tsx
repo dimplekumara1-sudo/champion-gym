@@ -715,29 +715,6 @@ const AdminExercises: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNa
           </div>
         </div>
       )}
-
-      <nav className="fixed bottom-0 left-0 right-0 bg-slate-900/80 backdrop-blur-lg border-t border-slate-800 px-6 py-3 pb-6 flex justify-between items-center z-40 max-w-[430px] mx-auto">
-        <button onClick={() => onNavigate('ADMIN_DASHBOARD')} className="flex flex-col items-center gap-1 text-slate-400 hover:text-primary transition-colors">
-          <span className="material-symbols-rounded">dashboard</span>
-          <span className="text-[10px] font-bold">Dashboard</span>
-        </button>
-        <button onClick={() => onNavigate('ADMIN_EXERCISES')} className="flex flex-col items-center gap-1 text-primary transition-colors">
-          <span className="material-symbols-rounded">fitness_center</span>
-          <span className="text-[10px] font-bold">Exercises</span>
-        </button>
-        <button onClick={() => onNavigate('ADMIN_WORKOUTS')} className="flex flex-col items-center gap-1 text-slate-400 hover:text-primary transition-colors">
-          <span className="material-symbols-rounded">sports_gymnastics</span>
-          <span className="text-[10px] font-bold">Workouts</span>
-        </button>
-        <button onClick={() => onNavigate('ADMIN_PLANS')} className="flex flex-col items-center gap-1 text-slate-400 hover:text-primary transition-colors">
-          <span className="material-symbols-rounded">card_membership</span>
-          <span className="text-[10px] font-bold">Plans</span>
-        </button>
-        <button onClick={() => onNavigate('ADMIN_CATEGORIES')} className="flex flex-col items-center gap-1 text-slate-400 hover:text-primary transition-colors">
-          <span className="material-symbols-rounded">category</span>
-          <span className="text-[10px] font-bold">Categories</span>
-        </button>
-      </nav>
     </div>
   );
 };
