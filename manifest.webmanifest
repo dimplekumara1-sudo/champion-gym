@@ -3,7 +3,7 @@
   "short_name": "Challenge Gym",
   "description": "Elite Fitness Coaching and Workout Tracking",
   "start_url": "/",
-  "display": "standalone",
+  "display": "fullscreen",
   "background_color": "#020617",
   "theme_color": "#22C55E",
   "icons": [

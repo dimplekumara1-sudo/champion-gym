@@ -1,8 +1,8 @@
-# Adding Videos to PowerFlex - Step-by-Step Guide
+# Adding Videos to Challenge Gym - Step-by-Step Guide
 
 ## Access Admin Video Panel
 
-1. **Open PowerFlex Admin Dashboard**
+1. **Open Challenge Gym Admin Dashboard**
    - Navigate to: Admin Dashboard → Explore Management
    - Or click "Explore" in admin navigation
 

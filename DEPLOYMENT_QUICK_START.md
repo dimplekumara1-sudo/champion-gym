@@ -23,7 +23,7 @@ npx supabase login
 
 ### Step 3: Deploy the Function
 ```powershell
-cd "c:\Users\dimpl\Downloads\powerflex---elite-fitness-coach (1)"
+cd "c:\Users\dimpl\Downloads\Challenge Gym---elite-fitness-coach (1)"
 npx supabase functions deploy fatsecret-proxy
 ```
 

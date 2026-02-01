@@ -13,10 +13,12 @@ const SubscriptionDetails: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({
   const [loading, setLoading] = useState(true);
   const [upgradeSelection, setUpgradeSelection] = useState<any>(null);
   const [isUpgradeModalOpen, setIsUpgradeModalOpen] = useState(false);
+  const [globalGracePeriod, setGlobalGracePeriod] = useState(0);
 
   useEffect(() => {
     fetchSubscriptionData();
     fetchPlans();
+    fetchGlobalGracePeriod();
 
     // Set up real-time subscription for profile updates
     const setupSubscription = async () => {
@@ -58,6 +60,21 @@ const SubscriptionDetails: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({
   const fetchPlans = async () => {
     const { data } = await supabase.from('plans').select('*').order('price', { ascending: true });
     if (data) setPlans(data);
+  };
+
+  const fetchGlobalGracePeriod = async () => {
+    try {
+      const { data } = await supabase
+        .from('app_settings')
+        .select('value')
+        .eq('id', 'gym_settings')
+        .single();
+      if (data?.value) {
+        setGlobalGracePeriod(data.value.global_grace_period || 0);
+      }
+    } catch (error) {
+      console.error('Error fetching global grace period:', error);
+    }
   };
 
   const fetchSubscriptionData = async () => {
@@ -221,6 +238,14 @@ const SubscriptionDetails: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({
                   <span className="text-slate-500 font-bold">Expiry Date</span>
                   <span className="text-white font-bold">{formatDate(profile?.plan_expiry_date || null)}</span>
                 </div>
+                {(profile?.grace_period !== 0 || globalGracePeriod !== 0) && (
+                  <div className="flex justify-between text-[10px] mt-[-10px]">
+                    <span className="text-slate-500 font-medium italic">Grace period included</span>
+                    <span className="text-primary/70 font-bold">
+                      +{profile?.grace_period !== null && profile?.grace_period !== undefined ? profile.grace_period : globalGracePeriod} days
+                    </span>
+                  </div>
+                )}
                 <div className="flex justify-between text-sm">
                   <span className="text-slate-500 font-bold">Price</span>
                   <span className="text-primary font-black">{currentPlan?.price || '₹0'}</span>

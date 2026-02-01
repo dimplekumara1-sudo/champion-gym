@@ -306,7 +306,10 @@ const AdminDashboard: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNa
             </div>
           </div>
 
-          <div className="p-5 bg-white dark:bg-[#1E293B] rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800">
+          <div 
+            onClick={() => onNavigate('ADMIN_SUBSCRIPTION_TRACKER')}
+            className="p-5 bg-white dark:bg-[#1E293B] rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800 cursor-pointer active:scale-95 transition-transform"
+          >
             <p className="text-slate-500 dark:text-slate-400 text-xs font-medium uppercase tracking-wider">Renewals</p>
             <h2 className="text-2xl font-bold mt-1 text-blue-500">{stats.upcomingRenewals}</h2>
             <div className="mt-3 flex items-center text-blue-500 text-xs font-semibold">
@@ -315,7 +318,10 @@ const AdminDashboard: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNa
             </div>
           </div>
 
-          <div className="p-5 bg-white dark:bg-[#1E293B] rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800">
+          <div 
+            onClick={() => onNavigate('ADMIN_ATTENDANCE')}
+            className="p-5 bg-white dark:bg-[#1E293B] rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800 cursor-pointer active:scale-95 transition-transform"
+          >
             <p className="text-slate-500 dark:text-slate-400 text-xs font-medium uppercase tracking-wider">Gym Attendance</p>
             <h2 className="text-2xl font-bold mt-1 text-purple-500">{stats.todayAttendance}</h2>
             <div className="mt-3 flex items-center text-purple-500 text-xs font-semibold">

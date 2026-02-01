@@ -18,7 +18,7 @@
 
 ## What Was Built
 
-A complete **Payment & Plan Lifecycle Management System** for PowerFlex Elite Fitness Coach with:
+A complete **Payment & Plan Lifecycle Management System** for Challenge Gym Elite Fitness Coach with:
 
 ✅ Payment tracking (paid & due amounts)
 ✅ Plan status management (free → pending → active → expired)

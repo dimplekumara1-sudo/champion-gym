@@ -2,7 +2,7 @@
 
 ## 📋 Summary
 
-Converted PowerFlex from a **blob URL approach** to **direct YouTube iframe embeds**. Added real-time video preview in admin panel to validate videos before saving and avoid CORS issues.
+Converted Challenge Gym from a **blob URL approach** to **direct YouTube iframe embeds**. Added real-time video preview in admin panel to validate videos before saving and avoid CORS issues.
 
 ---
 

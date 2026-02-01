@@ -46,6 +46,7 @@ export type AppScreen =
   | 'ADMIN_FOOD_APPROVALS'
   | 'ADMIN_PT'
   | 'ADMIN_ANNOUNCEMENTS'
+  | 'ADMIN_SUBSCRIPTION_TRACKER'
   | 'ATTENDANCE'
   | 'ADMIN_ATTENDANCE';
 
@@ -65,7 +66,7 @@ export interface Profile {
   role: 'user' | 'admin';
   onboarding_completed: boolean;
   approval_status: 'pending' | 'approved' | 'rejected';
-  payment_status: 'pending' | 'paid' | 'failed';
+  payment_status: 'pending' | 'paid' | 'failed' | 'unpaid';
   plan: string | null;
   plan_start_date: string | null;
   plan_expiry_date: string | null;
@@ -77,7 +78,9 @@ export interface Profile {
   phone_number: string | null;
   openwearables_user_id: string | null;
   essl_id: string | null;
+  grace_period: number | null;
   created_at: string;
+  due_amount?: number | null;
 }
 
 export interface Plan {

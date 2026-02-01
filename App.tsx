@@ -44,9 +44,11 @@ import AdminIndianFoods from './screens/AdminIndianFoods';
 import AdminFoodApprovals from './screens/AdminFoodApprovals';
 import AdminPT from './screens/AdminPT';
 import AdminAnnouncements from './screens/AdminAnnouncements';
+import AdminSubscriptionTracker from './screens/AdminSubscriptionTracker';
 import AttendanceScreen from './screens/AttendanceScreen';
 import AdminAttendance from './screens/AdminAttendance';
 import ConfigScreen from './screens/ConfigScreen';
+import PullToRefresh from './components/PullToRefresh';
 import { supabase } from './lib/supabase';
 import { startSessionMonitoring, stopSessionMonitoring, clearSessionState } from './lib/sessionService';
 
@@ -113,7 +115,7 @@ const App: React.FC = () => {
       console.log(`[Navigation] Checking onboarding status for user ${userId}, isInitialLoad=${isInitialLoad}`);
       const { data, error } = await supabase
         .from('profiles')
-        .select('onboarding_completed, role, plan, approval_status, plan_expiry_date, has_password')
+        .select('onboarding_completed, role, plan, approval_status, plan_expiry_date, has_password, grace_period')
         .eq('id', userId)
         .single();
 
@@ -147,10 +149,30 @@ const App: React.FC = () => {
         return;
       }
 
-      // Check if plan has expired
+      // Check if plan has expired with grace period
       const now = new Date();
       const expiryDate = data?.plan_expiry_date ? new Date(data.plan_expiry_date) : null;
-      const isExpired = expiryDate && now > expiryDate;
+      
+      let isExpired = false;
+      if (expiryDate) {
+        // Fetch global grace period from app_settings
+        const { data: gymSettings } = await supabase
+          .from('app_settings')
+          .select('value')
+          .eq('id', 'gym_settings')
+          .single();
+        
+        const globalGracePeriod = gymSettings?.value?.global_grace_period || 0;
+        
+        // Use individual grace period if set, otherwise use global
+        const graceDays = (data?.grace_period !== null && data?.grace_period !== undefined) 
+          ? data.grace_period 
+          : globalGracePeriod;
+
+        const totalExpiryDate = new Date(expiryDate);
+        totalExpiryDate.setDate(totalExpiryDate.getDate() + graceDays);
+        isExpired = now > totalExpiryDate;
+      }
 
       if (isExpired) {
         console.log('[Navigation] Plan expired - navigating to ONBOARDING_PLAN');
@@ -268,6 +290,7 @@ const App: React.FC = () => {
       case 'ADMIN_FOOD_APPROVALS': return <AdminFoodApprovals onNavigate={navigate} />;
       case 'ADMIN_PT': return <AdminPT onNavigate={navigate} />;
       case 'ADMIN_ANNOUNCEMENTS': return <AdminAnnouncements onNavigate={navigate} />;
+      case 'ADMIN_SUBSCRIPTION_TRACKER': return <AdminSubscriptionTracker onNavigate={navigate} />;
       case 'ATTENDANCE': return <AttendanceScreen onNavigate={navigate} />;
       case 'ADMIN_ATTENDANCE': return <AdminAttendance onNavigate={navigate} />;
       case 'STORE': return <StoreScreen onNavigate={navigate} />;
@@ -277,10 +300,17 @@ const App: React.FC = () => {
     }
   };
 
+  const handleRefresh = async () => {
+    // Refresh the page
+    window.location.reload();
+  };
+
   return (
     <div className="min-h-screen bg-[#090E1A] text-white font-sans flex justify-center">
       <div className="w-full max-w-[430px] bg-[#090E1A] min-h-screen relative shadow-2xl overflow-x-hidden no-scrollbar">
-        {renderScreen()}
+        <PullToRefresh onRefresh={handleRefresh}>
+          {renderScreen()}
+        </PullToRefresh>
       </div>
       
       {/* PWA Install Prompt */}

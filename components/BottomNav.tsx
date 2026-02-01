@@ -1,6 +1,5 @@
-
 import React from 'react';
-import { AppScreen, NavTab } from '../types';
+import { AppScreen } from '../types';
 
 interface BottomNavProps {
   active: 'HOME' | 'EXPLORE' | 'STATS' | 'WORKOUTS';
@@ -17,7 +16,7 @@ const BottomNav: React.FC<BottomNavProps> = ({ active, onNavigate }) => {
         <span className="material-symbols-rounded text-[26px]" style={{ fontVariationSettings: active === 'HOME' ? "'FILL' 1" : "'FILL' 0" }}>home</span>
         <span className={`text-[10px] font-bold`}>Home</span>
       </button>
-      
+
       <button 
         onClick={() => onNavigate('EXPLORE')}
         className={`flex flex-col items-center gap-1 transition-colors ${active === 'EXPLORE' ? 'text-primary' : 'text-slate-500'}`}
@@ -50,7 +49,7 @@ const BottomNav: React.FC<BottomNavProps> = ({ active, onNavigate }) => {
         <span className="material-symbols-rounded text-[26px]" style={{ fontVariationSettings: active === 'WORKOUTS' ? "'FILL' 1" : "'FILL' 0" }}>fitness_center</span>
         <span className={`text-[10px] font-bold`}>Workouts</span>
       </button>
-      
+
       <div className="absolute bottom-1.5 left-1/2 -translate-x-1/2 w-32 h-1 bg-white/10 rounded-full"></div>
     </nav>
   );

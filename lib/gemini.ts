@@ -26,7 +26,7 @@ export const getAIConfig = async () => {
       .select('value')
       .eq('id', 'ai_config')
       .single();
-    
+
     if (data?.value && data.value.api_key && !data.value.api_key.includes('PLACEHOLDER')) {
       cachedConfig = data.value;
       return cachedConfig;
@@ -34,7 +34,7 @@ export const getAIConfig = async () => {
   } catch (error) {
     console.error('Error fetching AI config:', error);
   }
-  
+
   // Try to use environment variables if database config is missing or invalid
   const envKey = import.meta.env.VITE_GEMINI_API_KEY || import.meta.env.VITE_OPENROUTER_API_KEY;
   const envProvider = import.meta.env.VITE_AI_PROVIDER || (import.meta.env.VITE_GEMINI_API_KEY ? 'google' : 'openrouter');
@@ -49,7 +49,7 @@ export const getAIConfig = async () => {
     cachedConfig = config;
     return config;
   }
-  
+
   // Default fallback
   const defaultConfig = {
     provider: 'openrouter',
@@ -66,7 +66,7 @@ export const clearAIConfigCache = () => {
 export const analyzeFoodImage = async (base64Image: string): Promise<AINutritionResult | null> => {
   try {
     const config = await getAIConfig();
-    
+
     if (!config.api_key) {
       console.warn('AI API key is missing. Please configure it in settings.');
       return null;
@@ -98,7 +98,7 @@ export const analyzeFoodImage = async (base64Image: string): Promise<AINutrition
           "Authorization": `Bearer ${config.api_key}`,
           "Content-Type": "application/json",
           "HTTP-Referer": window.location.origin,
-          "X-Title": "PowerFlex Fitness"
+          "X-Title": "Challenge Gym Fitness"
         },
         body: JSON.stringify({
           "model": config.model || "google/gemini-2.0-flash-exp:free",
@@ -157,13 +157,13 @@ export const generateAIChatResponse = async (fullPrompt: string): Promise<string
     try {
       let now = Date.now();
       const timeSinceLastCall = now - lastCallTime;
-      
+
       if (timeSinceLastCall < COOLDOWN_MS) {
         const waitTime = COOLDOWN_MS - timeSinceLastCall;
         console.log(`AI request cooldown active. Waiting ${waitTime}ms...`);
         await new Promise(resolve => setTimeout(resolve, waitTime));
       }
-      
+
       lastCallTime = Date.now();
 
       const config = await getAIConfig();
@@ -187,7 +187,7 @@ export const generateAIChatResponse = async (fullPrompt: string): Promise<string
             "Authorization": `Bearer ${config.api_key}`,
             "Content-Type": "application/json",
             "HTTP-Referer": window.location.origin,
-            "X-Title": "PowerFlex Fitness"
+            "X-Title": "Challenge Gym Fitness"
           },
           body: JSON.stringify({
             "model": config.model || "google/gemini-2.0-flash-exp:free",
@@ -235,13 +235,13 @@ export const generateAIChatResponse = async (fullPrompt: string): Promise<string
   // Add this request to the queue to ensure sequential execution with cooldown
   const currentRequest = (async () => {
     try {
-      await requestQueue.catch(() => {}); // Wait for previous request to settle
+      await requestQueue.catch(() => { }); // Wait for previous request to settle
       return await executeRequest();
     } catch (error) {
       throw error;
     }
   })();
-  
+
   requestQueue = currentRequest;
   return currentRequest;
 };

@@ -27,6 +27,10 @@ const ConfigScreen: React.FC<ConfigScreenProps> = ({ onNavigate }) => {
     const [content, setContent] = useState('');
     const [priority, setPriority] = useState<'low' | 'medium' | 'high'>('medium');
     const [isActive, setIsActive] = useState(true);
+    
+    // Gym Settings State
+    const [globalGracePeriod, setGlobalGracePeriod] = useState(1);
+    const [isSavingGym, setIsSavingGym] = useState(false);
 
     // Notifications State
     const [notifications, setNotifications] = useState<PushNotification[]>([]);
@@ -58,9 +62,47 @@ const ConfigScreen: React.FC<ConfigScreenProps> = ({ onNavigate }) => {
         fetchCounts();
         fetchAnnouncements();
         fetchAIConfig();
+        fetchGymSettings();
         fetchNotifications();
         fetchUsers();
     }, []);
+
+    const fetchGymSettings = async () => {
+        try {
+            const { data, error } = await supabase
+                .from('app_settings')
+                .select('value')
+                .eq('id', 'gym_settings')
+                .single();
+            
+            if (data?.value) {
+                setGlobalGracePeriod(data.value.global_grace_period || 0);
+            }
+        } catch (error) {
+            console.error('Error fetching gym settings:', error);
+        }
+    };
+
+    const handleSaveGymSettings = async () => {
+        try {
+            setIsSavingGym(true);
+            const { error } = await supabase
+                .from('app_settings')
+                .upsert({
+                    id: 'gym_settings',
+                    value: { global_grace_period: globalGracePeriod },
+                    updated_at: new Date().toISOString()
+                });
+
+            if (error) throw error;
+            alert('Gym settings saved successfully');
+        } catch (error) {
+            console.error('Error saving gym settings:', error);
+            alert('Failed to save gym settings');
+        } finally {
+            setIsSavingGym(false);
+        }
+    };
 
     const calculateBMI = (weight: number, height: number) => {
         if (!weight || !height) return 0;
@@ -431,6 +473,56 @@ const ConfigScreen: React.FC<ConfigScreenProps> = ({ onNavigate }) => {
                         </div>
                     </div>
                 )}
+
+                {/* Gym & eSSL Access Settings */}
+                <div className="bg-slate-800/50 border border-slate-700 rounded-2xl p-6 mb-8">
+                    <div className="flex items-center gap-3 mb-4">
+                        <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center text-primary">
+                            <span className="material-symbols-rounded">door_front</span>
+                        </div>
+                        <div>
+                            <h2 className="text-lg font-bold">Gym & eSSL Access</h2>
+                            <p className="text-xs text-slate-400">Manage entry logs and grace periods</p>
+                        </div>
+                    </div>
+                    
+                    <div className="space-y-4">
+                        <div>
+                            <label className="block text-xs font-black text-slate-500 uppercase mb-2">Global Grace Period (Days)</label>
+                            <div className="flex gap-2">
+                                <input 
+                                    type="number" 
+                                    min="0"
+                                    max="30"
+                                    value={globalGracePeriod}
+                                    onChange={(e) => setGlobalGracePeriod(parseInt(e.target.value) || 0)}
+                                    className="flex-1 bg-slate-900 border border-slate-700 rounded-xl px-4 py-2 text-sm focus:outline-none focus:border-primary"
+                                    placeholder="Enter days..."
+                                />
+                                <button
+                                    onClick={handleSaveGymSettings}
+                                    disabled={isSavingGym}
+                                    className="px-6 py-2 bg-primary text-slate-900 font-bold rounded-xl hover:bg-green-600 transition-colors disabled:opacity-50"
+                                >
+                                    {isSavingGym ? '...' : 'Save'}
+                                </button>
+                            </div>
+                            <p className="text-[10px] text-slate-500 mt-2 italic">
+                                * Users can access the gym for this many days after their subscription expires.
+                            </p>
+                        </div>
+                        
+                        <div className="pt-2">
+                            <button
+                                onClick={() => onNavigate('ADMIN_ATTENDANCE')}
+                                className="w-full py-3 bg-white/5 border border-white/10 rounded-xl text-sm font-bold hover:bg-white/10 transition-colors flex items-center justify-center gap-2"
+                            >
+                                <span className="material-symbols-rounded text-primary">analytics</span>
+                                View Attendance Logs
+                            </button>
+                        </div>
+                    </div>
+                </div>
 
                 <div className="space-y-4">
                     {/* Exercise Database Button */}

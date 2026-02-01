@@ -24,11 +24,29 @@ const AdminUsers: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNaviga
   const [userPaymentHistory, setUserPaymentHistory] = useState<any[]>([]);
   const [exportModal, setExportModal] = useState(false);
   const [esslId, setEsslId] = useState('');
+  const [gracePeriod, setGracePeriod] = useState<string>('0');
+  const [globalGracePeriod, setGlobalGracePeriod] = useState(0);
 
   useEffect(() => {
     fetchUsers();
     fetchPlans();
+    fetchGlobalGracePeriod();
   }, []);
+
+  const fetchGlobalGracePeriod = async () => {
+    try {
+      const { data } = await supabase
+        .from('app_settings')
+        .select('value')
+        .eq('id', 'gym_settings')
+        .single();
+      if (data?.value) {
+        setGlobalGracePeriod(data.value.global_grace_period || 0);
+      }
+    } catch (error) {
+      console.error('Error fetching global grace period:', error);
+    }
+  };
 
   useEffect(() => {
     if (selectedUser?.plan_expiry_date) {
@@ -48,9 +66,11 @@ const AdminUsers: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNaviga
     if (selectedUser?.id) {
       fetchUserPaymentHistory(selectedUser.id);
       setEsslId(selectedUser.essl_id || '');
+      setGracePeriod(selectedUser.grace_period?.toString() || '0');
     } else {
       setUserPaymentHistory([]);
       setEsslId('');
+      setGracePeriod('0');
     }
   }, [selectedUser]);
 
@@ -441,6 +461,24 @@ const AdminUsers: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNaviga
     } catch (error) {
       console.error('Error updating eSSL ID:', error);
       alert('Failed to update eSSL ID');
+    }
+  };
+
+  const handleUpdateGracePeriod = async (userId: string) => {
+    try {
+      const gp = parseInt(gracePeriod) || 0;
+      const { error } = await supabase
+        .from('profiles')
+        .update({ grace_period: gp })
+        .eq('id', userId);
+
+      if (error) throw error;
+      setUsers(users.map(u => u.id === userId ? { ...u, grace_period: gp } : u));
+      setSelectedUser({ ...selectedUser, grace_period: gp });
+      alert('Grace period updated successfully');
+    } catch (error) {
+      console.error('Error updating grace period:', error);
+      alert('Failed to update grace period');
     }
   };
 
@@ -912,6 +950,33 @@ const AdminUsers: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNaviga
                         </button>
                       </div>
                       <p className="text-[9px] text-slate-500 mt-1 italic">Mapping ID from biometric device to this member.</p>
+                    </div>
+                  </div>
+                </section>
+
+                <section>
+                  <h3 className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">Access Control</h3>
+                  <div className="bg-slate-900/50 rounded-2xl p-4">
+                    <div className="flex flex-col gap-2">
+                      <label className="text-[10px] text-slate-400 font-bold uppercase">
+                        Individual Grace Period (Global: {globalGracePeriod} days)
+                      </label>
+                      <div className="flex gap-2">
+                        <input
+                          type="number"
+                          className="flex-1 bg-slate-800 border border-slate-700 rounded-xl text-sm p-2.5 text-white outline-none focus:ring-2 focus:ring-primary"
+                          placeholder="Days"
+                          value={gracePeriod}
+                          onChange={(e) => setGracePeriod(e.target.value)}
+                        />
+                        <button
+                          onClick={() => handleUpdateGracePeriod(selectedUser.id)}
+                          className="bg-primary text-slate-900 px-4 py-2 rounded-xl font-bold text-xs active:scale-95 transition-transform"
+                        >
+                          SET
+                        </button>
+                      </div>
+                      <p className="text-[9px] text-slate-500 mt-1 italic">Extra days allowed after subscription expiry.</p>
                     </div>
                   </div>
                 </section>

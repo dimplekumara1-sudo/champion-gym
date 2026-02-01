@@ -23,7 +23,7 @@ Updated AdminIndianFoods.tsx to display nutrition values with exactly 2 decimal 
 ### 2. Deployment SQL Script
 Created `deploy1.sql` with complete database setup:
 
-**File Location:** `C:\Users\dimpl\Downloads\powerflex---elite-fitness-coach (1)\deploy1.sql`
+**File Location:** `C:\Users\dimpl\Downloads\Challenge Gym---elite-fitness-coach (1)\deploy1.sql`
 
 **Contains:**
 - ✅ Table creation (indian_foods)

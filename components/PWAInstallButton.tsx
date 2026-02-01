@@ -111,15 +111,29 @@ const PWAInstallButton: React.FC<PWAInstallButtonProps> = ({
   };
 
   const showInstallInstructions = () => {
+    // Simplified install instructions - just redirect to browser install flow
     const isIOS = /iPhone|iPad|iPod/.test(navigator.userAgent);
     const isAndroid = /Android/.test(navigator.userAgent);
     
     if (isIOS) {
-      alert('To install PowerFlex:\n\n1. Tap Share (⎋) in Safari\n2. Scroll down and tap "Add to Home Screen"\n3. Tap "Add" to install');
+      // iOS: Try to trigger the install prompt directly
+      if (deferredPrompt) {
+        handleInstallClick();
+      } else {
+        // Simple alert for iOS
+        alert('To install PowerFlex:\n\n1. Open this page in Safari browser\n2. Tap Share button (⎋)\n3. Scroll down and tap "Add to Home Screen"\n4. Tap "Add" to complete');
+      }
     } else if (isAndroid) {
-      alert('To install PowerFlex:\n\n1. Tap Menu (⋮) in Chrome\n2. Tap "Install app" or "Add to Home screen"\n3. Tap "Add" to install');
+      // Android: Try to trigger the install prompt directly
+      if (deferredPrompt) {
+        handleInstallClick();
+      } else {
+        // Simple alert for Android
+        alert('To install PowerFlex:\n\n1. Tap Menu (⋮) in Chrome\n2. Tap "Install app" or "Add to Home screen"\n3. Tap "Add" to install');
+      }
     } else {
-      alert('To install PowerFlex:\n\nLook for the install icon in your browser\'s address bar and click it to add to your device.');
+      // Desktop: Simple alert
+      alert('Look for the install icon (⬇) in your browser\'s address bar and click it to add PowerFlex to your device.');
     }
   };
 

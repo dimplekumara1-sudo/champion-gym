@@ -280,4 +280,4 @@ Top of page shows:
 
 **Version**: 1.0  
 **Last Updated**: January 26, 2026  
-**For**: PowerFlex Elite Fitness Coach Admin Panel
+**For**: Challenge Gym Elite Fitness Coach Admin Panel

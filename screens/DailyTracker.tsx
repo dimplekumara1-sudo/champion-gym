@@ -9,7 +9,6 @@ import { analyzeFoodImage, generateAIChatResponse } from '../lib/gemini';
 import { cache, CACHE_KEYS, CACHE_TTL } from '../lib/cache';
 import { agenticNutritionCoach, AIRecommendation, NutritionContext } from '../lib/agentic-nutrition-coach';
 import PWAInstallButton from '../components/PWAInstallButton';
-import { useFullscreenManager } from '../hooks/useFullscreen';
 
 interface DailyNutrition {
   totalCalories: number;
@@ -99,7 +98,7 @@ const DailyTracker: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNavi
   const [aiAdvice, setAiAdvice] = useState<string>(() => localStorage.getItem('last_ai_advice') || '');
   const [isAiLoading, setIsAiLoading] = useState(false);
   const [currentRecommendation, setCurrentRecommendation] = useState<AIRecommendation | null>(null);
-  const { isFullscreen, canEnterFullscreen, enterFullscreen, exitFullscreen } = useFullscreenManager();
+  const [isFullscreen, setIsFullscreen] = useState(false);
   const isFetchingAIAdvice = useRef(false);
   const lastFetchParams = useRef<string>('');
   const lastFetchTime = useRef<number>(0);
@@ -580,7 +579,7 @@ const DailyTracker: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNavi
     event.preventDefault();
     const file = event.target.files?.[0];
     if (!file) return;
-
+    
     try {
       setIsScanning(true);
       setSubmitMessage('');
@@ -609,12 +608,15 @@ const DailyTracker: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNavi
           });
           setSubmitMessage('success:✓ AI Scan successful! Review values below.');
         } else {
-          setSubmitMessage('error:AI could not analyze image. Try again or enter manually.');
-        }
+          setSubmitMessage('error: AI could not analyze image. Try again or enter manually.');
+          }
         setIsScanning(false);
-      };
+      }
     } catch (err) {
-      setSubmitMessage('error:Error scanning image');
+      console.error('Error scanning image:', err);
+      setSubmitMessage('Error scanning image');
+      setIsScanning(false);
+    } finally {
       setIsScanning(false);
     }
   };
@@ -738,23 +740,6 @@ const DailyTracker: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNavi
   }));
   return (
     <div className="pb-32 bg-[#090E1A] min-h-screen relative">
-      {/* PWA Install Button */}
-      <div className="fixed top-20 right-4 z-40">
-        <PWAInstallButton compact={true} />
-      </div>
-
-      {/* Fullscreen Toggle Button */}
-      {canEnterFullscreen && (
-        <button
-          onClick={isFullscreen ? exitFullscreen : enterFullscreen}
-          className="fixed top-20 left-4 z-40 w-12 h-12 bg-slate-800/80 backdrop-blur-sm border border-slate-700/50 rounded-full flex items-center justify-center hover:bg-slate-700/90 transition-colors"
-        >
-          <span className="material-symbols-rounded text-white text-lg">
-            {isFullscreen ? 'fullscreen_exit' : 'fullscreen'}
-          </span>
-        </button>
-      )}
-
       <StatusBar />
       <main className="pt-4 px-5">
         <header className="mb-6 flex items-center justify-between">
@@ -774,9 +759,30 @@ const DailyTracker: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNavi
           </div>
           <button
             onClick={() => setShowSubmitFood(true)}
-            className="p-2 rounded-full hover:bg-slate-800 text-primary transition-colors"
+            className="bg-primary text-slate-900 font-bold py-3 rounded-xl hover:bg-green-600 transition-colors"
           >
-            <span className="material-symbols-rounded text-2xl font-bold">add_circle</span>
+            <span className="material-symbols-rounded text-2xl font-bold">Add Food</span>
+          </button>
+          <button
+            onClick={async () => {
+              const currentRecommendation = await agenticNutritionCoach.getTodaysRecommendation();
+              if (currentRecommendation) {
+                setAiAdvice(currentRecommendation.recommendation_text);
+                localStorage.setItem('last_ai_advice', currentRecommendation.recommendation_text);
+                lastFetchTime.current = Date.now();
+                
+                // Track the recommendation interaction
+                await agenticNutritionCoach.recordRecommendationFeedback(
+                  currentRecommendation.id,
+                  5, // 5 stars (highest rating)
+                  'Excellent advice! Very helpful and actionable.',
+                  true // was_followed
+                );
+              }
+            }}
+            className="ml-2 bg-green-500 text-white text-xs font-bold py-2 rounded-lg hover:bg-green-600 transition-colors"
+          >
+            <span className="material-symbols-rounded text-lg">Rate This Advice</span>
           </button>
         </header>
 
@@ -1990,7 +1996,7 @@ const DailyTracker: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNavi
         }
       </main >
 
-      <BottomNav active="HOME" onNavigate={onNavigate} />
+      <BottomNav active="STATS" onNavigate={onNavigate} />
     </div >
   );
 };

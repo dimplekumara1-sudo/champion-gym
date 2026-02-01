@@ -4,7 +4,7 @@
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                         POWERFLEX APP                            │
+│                         Challenge Gym APP                            │
 └─────────────────────────────────────────────────────────────────┘
                               │
                               ▼
@@ -513,4 +513,4 @@ Deployment:
 
 **Architecture Version**: 1.0  
 **Last Updated**: January 26, 2026  
-**System**: PowerFlex Elite Fitness Coach - Food Management
+**System**: Challenge Gym Elite Fitness Coach - Food Management

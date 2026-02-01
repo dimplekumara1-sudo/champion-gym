@@ -11,9 +11,7 @@ import { notificationService, PlanNotification } from '../lib/notifications';
 import { getUserNotifications, getUnreadNotificationCount, markNotificationAsRead, markAllNotificationsAsRead, deleteNotificationForUser, PushNotification } from '../lib/push-notifications';
 import { generateAIChatResponse } from '../lib/gemini';
 import { agenticNutritionCoach } from '../lib/agentic-nutrition-coach';
-import PWAInstallPrompt from '../components/PWAInstallPrompt';
-import PWAInstallButton from '../components/PWAInstallButton';
-import { useFullscreenManager } from '../hooks/useFullscreen';
+
 
 interface DailyNutrition {
   totalCalories: number;
@@ -24,7 +22,7 @@ interface DailyNutrition {
 
 const Dashboard: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNavigate }) => {
   const [showPWAInstall, setShowPWAInstall] = useState(false);
-  const { isFullscreen, canEnterFullscreen, enterFullscreen, exitFullscreen, platform } = useFullscreenManager();
+
   const [user, setUser] = useState<any>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [planDetails, setPlanDetails] = useState<any>(null);
@@ -648,7 +646,7 @@ const Dashboard: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNavigat
     : null;
 
   const showExpiryAlert = daysUntilExpiry !== null && daysUntilExpiry <= 5 && daysUntilExpiry >= 0;
-  const showPaymentAlert = (profile?.payment_status === 'pending' || profile?.payment_status === 'unpaid') && profile?.due_amount > 0;
+  const showPaymentAlert = (profile?.payment_status === 'pending' || profile?.payment_status === 'unpaid') && profile?.due_amount && profile.due_amount > 0;
 
   return (
     <div className="min-h-screen bg-[#090E1A] pb-32">
@@ -721,7 +719,7 @@ const Dashboard: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNavigat
                   <p className="text-[11px] text-orange-500/80 font-medium">Your {planDetails?.name} plan expires in {daysUntilExpiry} days. Renew now!</p>
                 </div>
                 <div className="flex flex-col items-end gap-1">
-                  {profile?.due_amount > 0 && (
+                  {profile?.due_amount && profile.due_amount > 0 && (
                     <span className="text-[10px] font-black text-orange-500">DUE: ₹{profile.due_amount}</span>
                   )}
                   <button
@@ -1355,12 +1353,12 @@ const Dashboard: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNavigat
                                 <span className="material-symbols-rounded text-slate-400 text-2xl">person</span>
                               )}
                             </div>
-                            <div className={`absolute -bottom-1 -right-1 w-5 h-5 rounded-full flex items-center justify-center border-2 border-white ${notification.type === 'comment' ? 'bg-purple-500' : 'bg-primary'
-                              }`}>
-                              <span className="material-symbols-rounded text-white" style={{ fontSize: '10px' }}>
-                                {notification.type === 'comment' ? 'chat_bubble' : 'notifications'}
-                              </span>
-                            </div>
+                        <div className={`absolute -bottom-1 -right-1 w-5 h-5 rounded-full flex items-center justify-center border-2 border-white ${(notification as any).type === 'comment' ? 'bg-purple-500' : 'bg-primary'
+                        }`}>
+                          <span className="material-symbols-rounded text-white" style={{ fontSize: '10px' }}>
+                            {(notification as any).type === 'comment' ? 'chat_bubble' : 'notifications'}
+                          </span>
+                        </div>
                           </div>
 
                           <div className="flex-1 min-w-0">
@@ -1513,25 +1511,6 @@ const Dashboard: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNavigat
         nutritionGoals={nutritionGoals}
         waterIntake={waterIntake}
       />
-
-      {/* PWA Install Button */}
-      {!showPWAInstall && (
-        <div className="fixed top-20 right-4 z-40">
-          <PWAInstallButton />
-        </div>
-      )}
-
-      {/* Fullscreen Toggle Button */}
-      {canEnterFullscreen && (
-        <button
-          onClick={isFullscreen ? exitFullscreen : enterFullscreen}
-          className="fixed top-20 left-4 z-40 w-12 h-12 bg-slate-800/80 backdrop-blur-sm border border-slate-700/50 rounded-full flex items-center justify-center hover:bg-slate-700/90 transition-colors"
-        >
-          <span className="material-symbols-rounded text-white text-lg">
-            {isFullscreen ? 'fullscreen_exit' : 'fullscreen'}
-          </span>
-        </button>
-      )}
 
       {/* PWA Install Prompt */}
       {showPWAInstall && (

@@ -36,6 +36,7 @@ const PWAInstallPrompt: React.FC<PWAInstallPromptProps> = ({ onClose }) => {
     // Check if running in standalone mode
     const isStandalone = 
       (window.matchMedia('(display-mode: standalone)').matches) ||
+      (window.matchMedia('(display-mode: fullscreen)').matches) ||
       ('standalone' in window && (window as any).standalone === true) ||
       (navigator as any).standalone === true;
 

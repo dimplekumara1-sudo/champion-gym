@@ -1,4 +1,4 @@
-# 🚀 PowerFlex Payment & Plan System - Feature Overview
+# 🚀 Challenge Gym Payment & Plan System - Feature Overview
 
 ## What You Now Have
 

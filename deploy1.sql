@@ -1,4 +1,4 @@
--- PowerFlex Elite Fitness Coach - Indian Foods Database Deployment Script
+-- Challenge Gym Elite Fitness Coach - Indian Foods Database Deployment Script
 -- This script sets up the complete indian_foods table with indexes and security policies
 -- Date: January 26, 2026
 

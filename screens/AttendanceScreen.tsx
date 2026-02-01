@@ -61,15 +61,14 @@ const AttendanceScreen: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ on
         return (new Date(end).getTime() - new Date(start).getTime()) / (1000 * 60);
     };
 
-    const totalInTime = useMemo(() => {
+    const uniqueDaysCount = useMemo(() => {
         const filtered = selectedDate 
             ? attendance.filter(a => a.check_in.startsWith(selectedDate))
             : attendance;
         
-        const totalMinutes = filtered.reduce((acc, curr) => acc + getDurationInMinutes(curr.check_in, curr.check_out), 0);
-        const h = Math.floor(totalMinutes / 60);
-        const m = Math.round(totalMinutes % 60);
-        return `${h}h ${m}m`;
+        // Count unique dates
+        const days = new Set(filtered.map(a => a.check_in.split('T')[0]));
+        return days.size;
     }, [attendance, selectedDate]);
 
     const getDaysInMonth = (date: Date) => {
@@ -109,14 +108,14 @@ const AttendanceScreen: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ on
                 {/* Stats Summary */}
                 <div className="bg-primary/10 border border-primary/20 rounded-3xl p-5 mb-6 flex justify-between items-center shadow-lg shadow-primary/5">
                     <div>
-                        <p className="text-[10px] font-black text-primary uppercase tracking-widest mb-1">Total Time Spent</p>
-                        <h2 className="text-3xl font-black text-white">{totalInTime}</h2>
+                        <p className="text-[10px] font-black text-primary uppercase tracking-widest mb-1">Days Present</p>
+                        <h2 className="text-3xl font-black text-white">{uniqueDaysCount} {uniqueDaysCount === 1 ? 'Day' : 'Days'}</h2>
                         <p className="text-[10px] text-slate-400 mt-1 font-bold">
                             {selectedDate ? `Records for ${new Date(selectedDate).toLocaleDateString('en-US', { day: 'numeric', month: 'short' })}` : 'For this month'}
                         </p>
                     </div>
                     <div className="w-12 h-12 rounded-2xl bg-primary/20 flex items-center justify-center">
-                        <span className="material-symbols-rounded text-primary text-2xl" style={{ fontVariationSettings: "'FILL' 1" }}>timer</span>
+                        <span className="material-symbols-rounded text-primary text-2xl" style={{ fontVariationSettings: "'FILL' 1" }}>calendar_today</span>
                     </div>
                 </div>
 
@@ -216,8 +215,8 @@ const AttendanceScreen: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ on
                                     </div>
                                 </div>
                                 <div className="text-right">
-                                    <p className="text-xs font-black text-primary uppercase">{formatDuration(record.check_in, record.check_out)}</p>
-                                    <p className="text-[9px] text-slate-500 font-bold uppercase">Duration</p>
+                                    <p className="text-xs font-black text-primary uppercase">Recorded</p>
+                                    <p className="text-[9px] text-slate-500 font-bold uppercase">Entry</p>
                                 </div>
                             </div>
                         ))

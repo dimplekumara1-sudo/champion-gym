@@ -1,6 +1,6 @@
 # eSSL Biometric Integration Guide
 
-This guide explains how to connect your eSSL/ZKTeco biometric attendance device to the PowerFlex management system.
+This guide explains how to connect your eSSL/ZKTeco biometric attendance device to the Challenge Gym management system.
 
 ## 1. Server Configuration
 

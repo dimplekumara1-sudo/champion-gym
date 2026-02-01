@@ -1,6 +1,6 @@
 {
-  "name": "PowerFlex Elite Fitness Coach",
-  "short_name": "PowerFlex",
+  "name": "Challenge Gym Elite Fitness Coach",
+  "short_name": "Challenge Gym",
   "description": "Your elite fitness companion with AI nutrition coaching, workout tracking, and personalized training programs.",
   "start_url": "/",
   "display": "fullscreen",
@@ -13,11 +13,20 @@
   "theme_color": "#22C55E",
   "orientation": "any",
   "launch_handler": {
-    "client_mode": ["focus-existing", "navigate-existing", "create-new"]
+    "client_mode": [
+      "focus-existing",
+      "navigate-existing",
+      "create-new"
+    ]
   },
   "scope": "/",
   "lang": "en",
-  "categories": ["fitness", "health", "lifestyle", "sports"],
+  "categories": [
+    "fitness",
+    "health",
+    "lifestyle",
+    "sports"
+  ],
   "icons": [
     {
       "src": "/icon-72x72.png",
@@ -74,21 +83,36 @@
       "short_name": "Track",
       "description": "Log your daily nutrition and meals",
       "url": "/daily-tracker",
-      "icons": [{ "src": "/icon-96x96.png", "sizes": "96x96" }]
+      "icons": [
+        {
+          "src": "/icon-96x96.png",
+          "sizes": "96x96"
+        }
+      ]
     },
     {
       "name": "Workout Programs",
       "short_name": "Workouts",
       "description": "Browse and start workout programs",
       "url": "/workout-program",
-      "icons": [{ "src": "/icon-96x96.png", "sizes": "96x96" }]
+      "icons": [
+        {
+          "src": "/icon-96x96.png",
+          "sizes": "96x96"
+        }
+      ]
     },
     {
       "name": "AI Coach",
       "short_name": "Coach",
       "description": "Get personalized nutrition advice",
       "url": "/dashboard",
-      "icons": [{ "src": "/icon-96x96.png", "sizes": "96x96" }]
+      "icons": [
+        {
+          "src": "/icon-96x96.png",
+          "sizes": "96x96"
+        }
+      ]
     }
   ],
   "screenshots": [
@@ -112,6 +136,9 @@
     "preferred_width": 400
   },
   "launch_handler": {
-    "client_mode": ["focus-existing", "navigate-existing"]
+    "client_mode": [
+      "focus-existing",
+      "navigate-existing"
+    ]
   }
 }

@@ -23,18 +23,18 @@ interface AIChatAssistantProps {
   waterIntake: number;
 }
 
-const AIChatAssistant: React.FC<AIChatAssistantProps> = ({ 
-  isOpen, 
-  onClose, 
-  profile, 
-  dailyNutrition, 
+const AIChatAssistant: React.FC<AIChatAssistantProps> = ({
+  isOpen,
+  onClose,
+  profile,
+  dailyNutrition,
   nutritionGoals,
-  waterIntake 
+  waterIntake
 }) => {
   const [messages, setMessages] = useState<Message[]>([
-    { 
-      role: 'assistant', 
-      content: `Hello ${profile?.full_name || 'there'}! I'm your AI Fitness & Nutrition Coach. How can I help you reach your goals today?` 
+    {
+      role: 'assistant',
+      content: `Hello ${profile?.full_name || 'there'}! I'm your AI Fitness & Nutrition Coach. How can I help you reach your goals today?`
     }
   ]);
   const [input, setInput] = useState('');
@@ -59,7 +59,7 @@ const AIChatAssistant: React.FC<AIChatAssistantProps> = ({
 
     try {
       const systemPrompt = `
-        You are an expert Fitness and Nutrition Coach for the PowerFlex Elite Fitness app.
+        You are an expert Fitness and Nutrition Coach for the Challenge Gym Elite Fitness app.
         
         User Profile:
         - Name: ${profile?.full_name}
@@ -124,11 +124,10 @@ const AIChatAssistant: React.FC<AIChatAssistantProps> = ({
         <div className="flex-1 overflow-y-auto p-6 space-y-4 no-scrollbar">
           {messages.map((m, i) => (
             <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-              <div className={`max-w-[85%] p-4 rounded-3xl text-sm ${
-                m.role === 'user' 
-                ? 'bg-primary text-slate-950 font-bold rounded-tr-none' 
-                : 'bg-slate-800/50 text-slate-200 rounded-tl-none border border-slate-700/50'
-              }`}>
+              <div className={`max-w-[85%] p-4 rounded-3xl text-sm ${m.role === 'user'
+                  ? 'bg-primary text-slate-950 font-bold rounded-tr-none'
+                  : 'bg-slate-800/50 text-slate-200 rounded-tl-none border border-slate-700/50'
+                }`}>
                 {m.content}
               </div>
             </div>

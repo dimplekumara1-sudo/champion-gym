@@ -76,7 +76,8 @@ self.addEventListener('activate', (event) => {
       })
       .then(() => {
         console.log('✅ Service Worker: Activation complete');
-        return self.clients.claim();
+        // Don't claim clients immediately to prevent fullscreen overlay
+        return self.skipWaiting();
       })
       .catch((error) => {
         console.error('❌ Service Worker: Activation failed', error);
@@ -94,24 +95,8 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Handle fullscreen requests for PWA
-  if (url.searchParams.has('fullscreen') && url.searchParams.get('fullscreen') === 'true') {
-    event.respondWith(
-      new Response(`
-        <script>
-          // Enter fullscreen mode immediately
-          if (document.documentElement.requestFullscreen) {
-            document.documentElement.requestFullscreen();
-          } else if (document.documentElement.webkitRequestFullscreen) {
-            document.documentElement.webkitRequestFullscreen();
-          }
-        </script>
-      `, {
-        headers: { 'Content-Type': 'text/html' }
-      })
-    );
-    return;
-  }
+  // Handle fullscreen requests for PWA (removed to prevent overlay issues)
+  // Fullscreen is now handled by the React components instead
 
   // Network-first for API routes
   if (NETWORK_FIRST_ROUTES.some(route => url.pathname.includes(route))) {
