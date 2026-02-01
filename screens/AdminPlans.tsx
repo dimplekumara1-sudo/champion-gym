@@ -43,7 +43,8 @@ const AdminPlans: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNaviga
           features: typeof editingPlan.features === 'string' ? editingPlan.features.split('\n').filter((f: string) => f.trim() !== '') : editingPlan.features,
           discount_percentage: parseFloat(editingPlan.discount_percentage) || 0,
           discount_amount: parseFloat(editingPlan.discount_amount) || 0,
-          discount_expiry: editingPlan.discount_expiry || null
+          discount_expiry: editingPlan.discount_expiry || null,
+          hidden: editingPlan.hidden || false
         })
         .eq('id', editingPlan.id);
 
@@ -54,7 +55,8 @@ const AdminPlans: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNaviga
         features: typeof editingPlan.features === 'string' ? editingPlan.features.split('\n').filter((f: string) => f.trim() !== '') : editingPlan.features,
         discount_percentage: parseFloat(editingPlan.discount_percentage) || 0,
         discount_amount: parseFloat(editingPlan.discount_amount) || 0,
-        discount_expiry: editingPlan.discount_expiry || null
+        discount_expiry: editingPlan.discount_expiry || null,
+        hidden: editingPlan.hidden || false
       } : p));
       setEditingPlan(null);
     } catch (error) {
@@ -81,7 +83,8 @@ const AdminPlans: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNaviga
           features: typeof editingPlan.features === 'string' ? editingPlan.features.split('\n').filter((f: string) => f.trim() !== '') : [],
           discount_percentage: parseFloat(editingPlan.discount_percentage) || 0,
           discount_amount: parseFloat(editingPlan.discount_amount) || 0,
-          discount_expiry: editingPlan.discount_expiry || null
+          discount_expiry: editingPlan.discount_expiry || null,
+          hidden: editingPlan.hidden || false
         }]);
 
       if (error) throw error;
@@ -127,7 +130,8 @@ const AdminPlans: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNaviga
             features: '',
             discount_percentage: 0,
             discount_amount: 0,
-            discount_expiry: ''
+            discount_expiry: '',
+            hidden: false
           })}
           className="bg-primary text-slate-900 w-8 h-8 rounded-full flex items-center justify-center active:scale-95 transition-transform"
         >
@@ -149,8 +153,13 @@ const AdminPlans: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNaviga
             )}
             <div className="flex justify-between items-start mb-4">
               <div>
-                <h3 className="font-bold text-lg text-white">{plan.name}</h3>
-                <p className="text-primary font-black text-2xl">{plan.price}<span className="text-xs text-slate-500 font-medium">/{plan.duration_months === 1 ? 'mo' : `${plan.duration_months}m`}</span></p>
+                <div className="flex items-center gap-2 mb-1">
+                  <h3 className="font-bold text-lg text-white">{plan.name}</h3>
+                  {plan.hidden && (
+                    <span className="bg-slate-700 text-slate-400 text-[8px] font-black px-1.5 py-0.5 rounded uppercase tracking-widest">Hidden</span>
+                  )}
+                </div>
+                <p className="text-primary font-black text-2xl">{plan.price.startsWith('₹') ? plan.price : `₹${plan.price}`}<span className="text-xs text-slate-500 font-medium">/{plan.duration_months === 1 ? 'mo' : `${plan.duration_months}m`}</span></p>
               </div>
               <div className="text-right">
                 <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1">ID</span>
@@ -272,15 +281,27 @@ const AdminPlans: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNaviga
                     onChange={e => setEditingPlan({ ...editingPlan, discount_expiry: e.target.value })}
                   />
                 </div>
-                <div className="flex items-center gap-2">
-                  <input
-                    type="checkbox"
-                    id="popular"
-                    checked={editingPlan.popular}
-                    onChange={e => setEditingPlan({ ...editingPlan, popular: e.target.checked })}
-                    className="rounded text-primary focus:ring-primary bg-slate-900 border-none"
-                  />
-                  <label htmlFor="popular" className="text-sm font-bold text-slate-300">Mark as Popular</label>
+                <div className="flex flex-col gap-3">
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      id="popular"
+                      checked={editingPlan.popular}
+                      onChange={e => setEditingPlan({ ...editingPlan, popular: e.target.checked })}
+                      className="rounded text-primary focus:ring-primary bg-slate-900 border-none"
+                    />
+                    <label htmlFor="popular" className="text-sm font-bold text-slate-300">Mark as Popular</label>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      id="hidden"
+                      checked={editingPlan.hidden}
+                      onChange={e => setEditingPlan({ ...editingPlan, hidden: e.target.checked })}
+                      className="rounded text-primary focus:ring-primary bg-slate-900 border-none"
+                    />
+                    <label htmlFor="hidden" className="text-sm font-bold text-slate-300">Hidden from Users</label>
+                  </div>
                 </div>
               </div>
               <div className="flex gap-3 mt-6">

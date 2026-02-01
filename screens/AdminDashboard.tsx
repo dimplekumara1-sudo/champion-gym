@@ -114,7 +114,7 @@ const AdminDashboard: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNa
       const todayDate = `${now_local.getFullYear()}-${String(now_local.getMonth() + 1).padStart(2, '0')}-${String(now_local.getDate()).padStart(2, '0')}`;
       const { data: attendanceData } = await supabase
         .from('attendance')
-        .select('user_id, raw_data')
+        .select('user_id, essl_id, raw_data')
         .gte('check_in', `${todayDate} 00:00:00`);
 
       const membersOnly = attendanceData?.filter(r => r.user_id) || [];
@@ -125,7 +125,7 @@ const AdminDashboard: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNa
 
       // Unique unknowns grouped by eSSL ID if available
       const uniqueUnknowns = new Set(unknownsOnly.map(r => {
-        const esslId = r.raw_data?.UserId || r.raw_data?.EmployeeCode || `temp_${Math.random()}`;
+        const esslId = r.essl_id || r.raw_data?.essl_id || r.raw_data?.UserId || r.raw_data?.EmployeeCode || `temp_${Math.random()}`;
         return `essl_${esslId}`;
       })).size;
       const totalUnknownCheckIns = unknownsOnly.length;

@@ -58,6 +58,18 @@ const ConfigScreen: React.FC<ConfigScreenProps> = ({ onNavigate }) => {
     const [showAIModal, setShowAIModal] = useState(false);
     const [isSavingAI, setIsSavingAI] = useState(false);
 
+    // eSSL Management State
+    const [esslCommands, setEsslCommands] = useState<any[]>([]);
+    const [isFetchingEssl, setIsFetchingEssl] = useState(false);
+    const [isExecutingEssl, setIsExecutingEssl] = useState(false);
+    const [customEsslCommand, setCustomEsslCommand] = useState('');
+    const [esslTargetId, setEsslTargetId] = useState('CUB7252100258');
+    const [showEsslModal, setShowEsslModal] = useState(false);
+    const [esslHistoryPage, setEsslHistoryPage] = useState(0);
+    const [totalEsslCommands, setTotalEsslCommands] = useState(0);
+    const [esslHistory, setEsslHistory] = useState<any[]>([]);
+    const esslPageSize = 10;
+
     useEffect(() => {
         fetchCounts();
         fetchAnnouncements();
@@ -65,7 +77,93 @@ const ConfigScreen: React.FC<ConfigScreenProps> = ({ onNavigate }) => {
         fetchGymSettings();
         fetchNotifications();
         fetchUsers();
+        fetchEsslCommands();
     }, []);
+
+    const fetchEsslCommands = async () => {
+        try {
+            setIsFetchingEssl(true);
+            const { data, count, error } = await supabase
+                .from('essl_commands')
+                .select('*', { count: 'exact' })
+                .order('created_at', { ascending: false })
+                .limit(5);
+            
+            if (error) throw error;
+            setEsslCommands(data || []);
+            setTotalEsslCommands(count || 0);
+        } catch (error) {
+            console.error('Error fetching eSSL commands:', error);
+        } finally {
+            setIsFetchingEssl(false);
+        }
+    };
+
+    const fetchEsslHistory = async (page: number) => {
+        try {
+            setIsFetchingEssl(true);
+            const from = page * esslPageSize;
+            const to = from + esslPageSize - 1;
+
+            const { data, error } = await supabase
+                .from('essl_commands')
+                .select('*')
+                .order('created_at', { ascending: false })
+                .range(from, to);
+            
+            if (error) throw error;
+            setEsslHistory(data || []);
+            setEsslHistoryPage(page);
+        } catch (error) {
+            console.error('Error fetching eSSL history:', error);
+        } finally {
+            setIsFetchingEssl(false);
+        }
+    };
+
+    const handleEsslAction = async (action: string, payload: any = {}) => {
+        try {
+            setIsExecutingEssl(true);
+            
+            const { data, error } = await supabase.functions.invoke('essl-management', {
+                body: { action, ...payload }
+            });
+
+            if (error) throw error;
+            
+            alert('Action triggered successfully');
+            fetchEsslCommands();
+        } catch (error: any) {
+            console.error('Error executing eSSL action:', error);
+            alert(error.message);
+        } finally {
+            setIsExecutingEssl(false);
+        }
+    };
+
+    const handleSendCustomCommand = async () => {
+        if (!customEsslCommand) return;
+        try {
+            setIsExecutingEssl(true);
+            const { error } = await supabase
+                .from('essl_commands')
+                .insert({
+                    essl_id: esslTargetId,
+                    command: customEsslCommand,
+                    status: 'pending'
+                });
+
+            if (error) throw error;
+            setCustomEsslCommand('');
+            alert('Command queued successfully');
+            fetchEsslCommands();
+        } catch (error: any) {
+            console.error('Error sending custom command:', error);
+            alert(error.message);
+        } finally {
+            setIsExecutingEssl(false);
+        }
+    };
 
     const fetchGymSettings = async () => {
         try {
@@ -519,6 +617,131 @@ const ConfigScreen: React.FC<ConfigScreenProps> = ({ onNavigate }) => {
                             >
                                 <span className="material-symbols-rounded text-primary">analytics</span>
                                 View Attendance Logs
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <div className="bg-slate-800/50 border border-slate-700 rounded-2xl p-6 mb-8">
+                    <div className="flex items-center gap-3 mb-4">
+                        <div className="w-10 h-10 rounded-xl bg-orange-500/10 flex items-center justify-center text-orange-500">
+                            <span className="material-symbols-rounded">developer_board</span>
+                        </div>
+                        <div>
+                            <h2 className="text-lg font-bold">eSSL Device Management</h2>
+                            <p className="text-xs text-slate-400">Control and sync biometric devices</p>
+                        </div>
+                    </div>
+
+                    <div className="grid grid-cols-3 gap-3 mb-6">
+                        <button
+                            onClick={() => handleEsslAction('sync-names', { essl_id: esslTargetId })}
+                            disabled={isExecutingEssl}
+                            className="flex flex-col items-center justify-center p-4 bg-slate-900 border border-slate-700 rounded-xl hover:border-primary/50 transition-colors gap-2"
+                        >
+                            <span className="material-symbols-rounded text-primary">group</span>
+                            <span className="text-[10px] font-bold uppercase">Sync Users</span>
+                        </button>
+                        <button
+                            onClick={() => handleEsslAction('sync-attendance', { essl_id: esslTargetId })}
+                            disabled={isExecutingEssl}
+                            className="flex flex-col items-center justify-center p-4 bg-slate-900 border border-slate-700 rounded-xl hover:border-green-500/50 transition-colors gap-2"
+                        >
+                            <span className="material-symbols-rounded text-green-500">history</span>
+                            <span className="text-[10px] font-bold uppercase">Fetch Logs</span>
+                        </button>
+                        <button
+                            onClick={() => handleEsslAction('block-expired')}
+                            disabled={isExecutingEssl}
+                            className="flex flex-col items-center justify-center p-4 bg-slate-900 border border-slate-700 rounded-xl hover:border-red-500/50 transition-colors gap-2"
+                        >
+                            <span className="material-symbols-rounded text-red-500">block</span>
+                            <span className="text-[10px] font-bold uppercase">Block Expired</span>
+                        </button>
+                        <button
+                            onClick={() => handleEsslAction('sync-all-expiry')}
+                            disabled={isExecutingEssl}
+                            className="flex flex-col items-center justify-center p-4 bg-slate-900 border border-slate-700 rounded-xl hover:border-purple-500/50 transition-colors gap-2"
+                        >
+                            <span className="material-symbols-rounded text-purple-500">calendar_month</span>
+                            <span className="text-[10px] font-bold uppercase">Sync Expiry</span>
+                        </button>
+                    </div>
+
+                    <div className="space-y-4">
+                        <div>
+                            <label className="block text-xs font-black text-slate-500 uppercase mb-2">Send Custom Command</label>
+                            <div className="flex flex-col gap-2">
+                                <div className="flex gap-2">
+                                    <input 
+                                        type="text" 
+                                        value={esslTargetId}
+                                        onChange={(e) => setEsslTargetId(e.target.value)}
+                                        className="w-24 bg-slate-900 border border-slate-700 rounded-xl px-4 py-2 text-sm focus:outline-none focus:border-primary"
+                                        placeholder="Target (SN/PIN)"
+                                    />
+                                    <input 
+                                        type="text" 
+                                        value={customEsslCommand}
+                                        onChange={(e) => setCustomEsslCommand(e.target.value)}
+                                        className="flex-1 bg-slate-900 border border-slate-700 rounded-xl px-4 py-2 text-sm focus:outline-none focus:border-primary"
+                                        placeholder="Command (e.g. REBOOT)"
+                                    />
+                                </div>
+                                <button
+                                    onClick={handleSendCustomCommand}
+                                    disabled={isExecutingEssl || !customEsslCommand}
+                                    className="w-full py-2 bg-slate-700 text-white font-bold rounded-xl hover:bg-slate-600 transition-colors disabled:opacity-50 text-xs"
+                                >
+                                    {isExecutingEssl ? 'Executing...' : 'Queue Command'}
+                                </button>
+                            </div>
+                        </div>
+
+                        <div>
+                            <div className="flex items-center justify-between mb-2">
+                                <label className="text-xs font-black text-slate-500 uppercase">Recent Commands</label>
+                                <button onClick={fetchEsslCommands} className="text-primary text-[10px] uppercase font-bold">Refresh</button>
+                            </div>
+                            <div className="bg-slate-900 rounded-xl border border-slate-700 overflow-hidden">
+                                {isFetchingEssl ? (
+                                    <div className="p-4 text-center text-xs text-slate-500">Loading commands...</div>
+                                ) : esslCommands.length === 0 ? (
+                                    <div className="p-4 text-center text-xs text-slate-500">No recent commands</div>
+                                ) : (
+                                    <div className="divide-y divide-slate-700">
+                                        {esslCommands.map((cmd) => (
+                                            <div key={cmd.id} className="p-3">
+                                                <div className="flex items-center justify-between mb-1">
+                                                    <span className="text-[10px] font-mono text-slate-400">{cmd.command}</span>
+                                                    <span className={`px-2 py-0.5 rounded-full text-[8px] font-bold uppercase ${
+                                                        cmd.status === 'completed' ? 'bg-green-500/20 text-green-500' :
+                                                        cmd.status === 'pending' ? 'bg-yellow-500/20 text-yellow-500' :
+                                                        cmd.status === 'sent' ? 'bg-blue-500/20 text-blue-500' :
+                                                        'bg-red-500/20 text-red-500'
+                                                    }`}>
+                                                        {cmd.status}
+                                                    </span>
+                                                </div>
+                                                <div className="flex items-center justify-between">
+                                                    <span className="text-[8px] text-slate-500">Target: {cmd.essl_id}</span>
+                                                    <span className="text-[8px] text-slate-500">
+                                                        {new Date(cmd.created_at).toLocaleString([], { hour: '2-digit', minute: '2-digit' })}
+                                                    </span>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                            <button 
+                                onClick={() => {
+                                    setShowEsslModal(true);
+                                    fetchEsslHistory(0);
+                                }}
+                                className="w-full mt-3 py-2 text-primary text-xs font-bold uppercase hover:bg-primary/5 rounded-xl transition-colors border border-primary/20"
+                            >
+                                View All Commands ({totalEsslCommands})
                             </button>
                         </div>
                     </div>
@@ -1034,6 +1257,75 @@ const ConfigScreen: React.FC<ConfigScreenProps> = ({ onNavigate }) => {
                                         </div>
                                     ))
                                 )}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+            {/* eSSL Command History Modal */}
+            {showEsslModal && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+                    <div className="bg-slate-900 border border-white/10 rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col">
+                        <div className="px-6 py-4 border-b border-white/10 flex items-center justify-between">
+                            <h3 className="text-xl font-bold">eSSL Command History</h3>
+                            <button onClick={() => setShowEsslModal(false)} className="text-slate-400 hover:text-white">
+                                <span className="material-symbols-rounded">close</span>
+                            </button>
+                        </div>
+                        <div className="flex-1 overflow-y-auto p-6">
+                            {isFetchingEssl && esslHistory.length === 0 ? (
+                                <div className="text-center py-20 text-slate-500">Loading history...</div>
+                            ) : (
+                                <div className="space-y-4">
+                                    {esslHistory.map((cmd) => (
+                                        <div key={cmd.id} className="bg-slate-800/50 border border-slate-700 rounded-xl p-4">
+                                            <div className="flex justify-between items-start mb-2">
+                                                <div>
+                                                    <p className="text-sm font-mono text-primary">{cmd.command}</p>
+                                                    <p className="text-xs text-slate-500 mt-1">Target: {cmd.essl_id}</p>
+                                                </div>
+                                                <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${
+                                                    cmd.status === 'completed' ? 'bg-green-500/20 text-green-500' :
+                                                    cmd.status === 'pending' ? 'bg-yellow-500/20 text-yellow-500' :
+                                                    cmd.status === 'sent' ? 'bg-blue-500/20 text-blue-500' :
+                                                    'bg-red-500/20 text-red-500'
+                                                }`}>
+                                                    {cmd.status}
+                                                </span>
+                                            </div>
+                                            <div className="flex justify-between items-center text-[10px] text-slate-500">
+                                                <span>ID: {cmd.id}</span>
+                                                <span>{new Date(cmd.created_at).toLocaleString()}</span>
+                                            </div>
+                                            {cmd.payload && (
+                                                <pre className="mt-2 p-2 bg-black/30 rounded text-[10px] text-slate-400 overflow-x-auto">
+                                                    {JSON.stringify(cmd.payload, null, 2)}
+                                                </pre>
+                                            )}
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                        <div className="px-6 py-4 border-t border-white/10 flex items-center justify-between bg-slate-800/50">
+                            <span className="text-xs text-slate-400">
+                                Showing {esslHistoryPage * esslPageSize + 1} - {Math.min((esslHistoryPage + 1) * esslPageSize, totalEsslCommands)} of {totalEsslCommands}
+                            </span>
+                            <div className="flex gap-2">
+                                <button
+                                    disabled={esslHistoryPage === 0 || isFetchingEssl}
+                                    onClick={() => fetchEsslHistory(esslHistoryPage - 1)}
+                                    className="px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-xs font-bold hover:bg-white/10 disabled:opacity-30"
+                                >
+                                    Previous
+                                </button>
+                                <button
+                                    disabled={((esslHistoryPage + 1) * esslPageSize) >= totalEsslCommands || isFetchingEssl}
+                                    onClick={() => fetchEsslHistory(esslHistoryPage + 1)}
+                                    className="px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-xs font-bold hover:bg-white/10 disabled:opacity-30"
+                                >
+                                    Next
+                                </button>
                             </div>
                         </div>
                     </div>

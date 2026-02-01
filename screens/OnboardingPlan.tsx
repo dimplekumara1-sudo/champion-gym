@@ -67,6 +67,7 @@ const OnboardingPlan: React.FC<OnboardingPlanProps> = ({ onNext, onBack, onboard
       const { data, error } = await supabase
         .from('plans')
         .select('*')
+        .eq('hidden', false)
         .order('duration_months', { ascending: true });
 
       if (error) throw error;

@@ -1,5 +1,4 @@
 
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
@@ -12,115 +11,265 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-serve(async (req) => {
+Deno.serve(async (req) => {
   // Handle CORS
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
   }
 
   try {
-    const contentType = req.headers.get("content-type") || "";
-    let payload: any = {};
-    const rawData = await req.text();
-    console.log("Raw Payload from Device:", rawData);
+    const url = new URL(req.url);
+    const sn = url.searchParams.get("SN") || "";
+    
+    // 1. Handle ADMS GET Request (Command Polling)
+    if (req.method === "GET") {
+      console.log(`GET Request from Device (SN: ${sn})`);
+      
+      // Fetch pending commands for this device or broadcast commands
+      const { data: commands, error: cmdError } = await supabase
+        .from("essl_commands")
+        .select("id, sequence_id, command")
+        .eq("status", "pending")
+        .or(`essl_id.eq.${sn},essl_id.eq.ALL`)
+        .order("created_at", { ascending: true })
+        .limit(10);
 
-    if (!rawData || rawData.trim() === "") {
-      console.log("Empty body received");
+      if (cmdError) {
+        console.error("Error fetching commands:", cmdError);
+        return new Response("OK", { headers: { "Content-Type": "text/plain" } });
+      }
+
+      if (commands && commands.length > 0) {
+        let responseText = "";
+        for (const cmd of commands) {
+          // Format: C:ID:COMMAND
+          // Use sequence_id as it's numeric and compatible with device expectations
+          responseText += `C:${cmd.sequence_id}:${cmd.command}\n`;
+          
+          // Mark command as sent
+          await supabase
+            .from("essl_commands")
+            .update({ status: "sent", updated_at: new Date().toISOString() })
+            .eq("id", cmd.id);
+        }
+        console.log(`Sending ${commands.length} commands to device:`, responseText);
+        return new Response(responseText, { headers: { "Content-Type": "text/plain" } });
+      }
+
       return new Response("OK", { headers: { "Content-Type": "text/plain" } });
     }
 
-    if (contentType.includes("application/json")) {
+    // 2. Handle ADMS POST Request (Data Upload or Command Result)
+    const table = url.searchParams.get("table") || "";
+    const rawData = await req.text();
+    
+    if (!rawData || rawData.trim().length === 0) {
+      console.log(`Empty body received from SN: ${sn}, Table: ${table}`);
+      return new Response("OK", { headers: { "Content-Type": "text/plain" } });
+    }
+
+    console.log(`Processing payload from SN: ${sn}, Table: ${table}, Size: ${rawData.length} chars`);
+    
+    const lines = rawData.trim().split("\n");
+    let processedCount = 0;
+
+    for (const line of lines) {
+      const trimmedLine = line.trim();
+      if (!trimmedLine) continue;
+
       try {
-        payload = JSON.parse(rawData);
-      } catch (e) {
-        console.error("Failed to parse JSON, trying form-urlencoded");
-        const params = new URLSearchParams(rawData);
-        payload = Object.fromEntries(params);
-      }
-    } else {
-      // ADMS devices often send data as Text/Form Data
-      const params = new URLSearchParams(rawData);
-      payload = Object.fromEntries(params);
-    }
-
-    console.log("Parsed payload:", payload);
-
-    // eSSL/ADMS raw tab-separated data parsing
-    // Format: "UserID\tTimestamp\tStatus\tVerifyType\t..."
-    if (rawData.includes("\t")) {
-      const lines = rawData.trim().split('\n');
-      for (const line of lines) {
-        const parts = line.split('\t');
-        if (parts.length >= 2) {
-          const esslUserId = parts[0].trim();
-          const logTime = parts[1].trim();
-          console.log(`Parsed TSV Data - User: ${esslUserId}, Time: ${logTime}`);
-          
-          // Map to payload object for consistent processing
-          payload.UserId = esslUserId;
-          payload.LogTime = logTime;
-          break; // Process first valid line
+        // A. Handle OPLOG / OPERLOG
+        if (trimmedLine.startsWith("OPLOG") || table.toLowerCase().includes("oplog") || table.toLowerCase().includes("operlog")) {
+          await handleOperLog(trimmedLine, sn);
+        } 
+        // B. Handle Command Result
+        else if (trimmedLine.includes("ID=") && trimmedLine.includes("Return=")) {
+          await handleCommandResult(trimmedLine);
         }
+        // C. Handle User Sync
+        else if (table === "user" || (trimmedLine.includes("PIN=") && trimmedLine.includes("Name="))) {
+          await handleUserSync(trimmedLine);
+        }
+        // D. Handle Attendance (ATTLOG)
+        else {
+          await handleAttendance(trimmedLine, sn);
+        }
+        processedCount++;
+      } catch (lineError) {
+        console.error(`Error processing line: ${trimmedLine}`, lineError);
       }
     }
 
-    // eSSL/ADMS payload mapping
-    // ADMS uses 'ID' or 'PIN' or 'EmployeeCode'
-    const esslUserId = payload.EmployeeCode || payload.UserId || payload.userId || payload.ID || payload.PIN;
-    const logTime = payload.LogTime || payload.timestamp || payload.Time || new Date().toISOString();
-    const deviceId = payload.DeviceId || payload.device_id || payload.SN || "UNKNOWN";
-    const status = payload.Status || "IN"; 
+    console.log(`Successfully processed ${processedCount}/${lines.length} lines from SN: ${sn}`);
+    return new Response("OK", { headers: { "Content-Type": "text/plain" } });
 
-    if (!esslUserId) {
-      console.error("No UserId found in payload:", payload);
-      // For ADMS, we should still return OK to prevent retries if it's a heartbeat/ping
-      if (rawData.includes("INFO") || rawData.includes("Registry")) {
-        return new Response("OK", { headers: { "Content-Type": "text/plain" } });
-      }
-      return new Response("ERROR: No UserId provided", { 
-        status: 400,
-        headers: { "Content-Type": "text/plain" }
+  } catch (error) {
+    console.error("Critical error in essl-attendance:", error);
+    return new Response("OK", { headers: { "Content-Type": "text/plain" } }); // Always return OK to device to avoid retry loops
+  }
+});
+
+async function handleOperLog(line: string, sn: string) {
+  // OPLOG Format: OPLOG <UserID/PIN> <EventCode> <Time> <P1> <P2> <P3> <P4>
+  const cleanLine = line.replace("OPLOG", "").trim();
+  const parts = cleanLine.split(/\s+/); // Handle both tabs and spaces
+  
+  if (parts.length >= 3) {
+    const esslUserId = parts[0].trim();
+    const eventCode = parts[1].trim();
+    const logTime = `${parts[2].trim()} ${parts[3].trim()}`; // Date and Time are usually space-separated
+    
+    if (esslUserId && esslUserId !== "0") {
+      const { data: existing } = await supabase
+        .from("attendance")
+        .select("id")
+        .eq("essl_id", esslUserId)
+        .eq("check_in", logTime)
+        .eq("device_id", sn || "UNKNOWN")
+        .maybeSingle();
+
+      if (existing) return;
+
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("id")
+        .eq("essl_id", esslUserId)
+        .maybeSingle();
+
+      await supabase.from("attendance").insert({
+        user_id: profile?.id || null,
+        essl_id: esslUserId,
+        check_in: logTime,
+        device_id: sn || "UNKNOWN",
+        raw_data: { 
+          raw_line: line, 
+          event_code: eventCode, 
+          type: "operational_log",
+          known_user: !!profile 
+        },
       });
     }
+  }
+}
 
-    // Find the user in our profiles table
-    const { data: profile, error: profileError } = await supabase
+async function handleCommandResult(line: string) {
+  const params = new URLSearchParams(line.replace(/\s+/g, "&"));
+  const cmdId = params.get("ID");
+  const returnCode = params.get("Return");
+  
+  if (cmdId) {
+    // 1. Try updating by sequence_id (numeric ID sent to device)
+    const { data: updatedBySeq } = await supabase
+      .from("essl_commands")
+      .update({ 
+        status: returnCode === "0" ? "completed" : "failed",
+        updated_at: new Date().toISOString()
+      })
+      .eq("sequence_id", cmdId)
+      .select("id")
+      .maybeSingle();
+
+    if (updatedBySeq) return;
+
+    // 2. Fallback to UUID if necessary (for older logic compatibility)
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (!uuidRegex.test(cmdId)) return;
+
+    await supabase
+      .from("essl_commands")
+      .update({ 
+        status: returnCode === "0" ? "completed" : "failed",
+        updated_at: new Date().toISOString()
+      })
+      .eq("id", cmdId);
+  }
+}
+
+async function handleUserSync(line: string) {
+  // Try tab first, then fall back to multiple spaces
+  let parts = line.split('\t');
+  if (parts.length <= 1) parts = line.split(/\s{2,}/);
+  if (parts.length <= 1) parts = line.split(' ');
+
+  const userMap: any = {};
+  for (const part of parts) {
+    if (part.includes('=')) {
+      const [key, value] = part.split('=');
+      if (key && value) userMap[key.trim()] = value.trim();
+    }
+  }
+
+  const esslId = userMap.PIN || userMap.EmployeeCode || userMap.UserID;
+  const name = userMap.Name;
+
+  if (esslId && name) {
+    await supabase
+      .from("profiles")
+      .update({ username: name })
+      .eq("essl_id", esslId.toString());
+  }
+}
+
+async function handleAttendance(line: string, sn: string) {
+  let esslUserId = "";
+  let logTime = "";
+  let recordPayload: any = { raw_line: line };
+
+  if (line.includes("=")) {
+    // Key=Value format - usually tab separated
+    let parts = line.split('\t');
+    if (parts.length <= 1) parts = line.split(/\s{2,}/); // fallback to multiple spaces
+    
+    for (const part of parts) {
+      if (part.includes('=')) {
+        const [k, v] = part.split('=');
+        const key = k.trim();
+        const val = v.trim();
+        if (["PIN", "UserID", "EmployeeCode"].includes(key)) esslUserId = val;
+        if (["Time", "LogTime"].includes(key)) logTime = val;
+        if (key) recordPayload[key] = val;
+      }
+    }
+  } else {
+    // Tab/Space separated format
+    let parts = line.split('\t');
+    if (parts.length <= 1) parts = line.split(/\s+/);
+    
+    if (parts.length >= 2) {
+      esslUserId = parts[0].trim();
+      // Date and Time might be separate parts or one part
+      if (parts[2] && (parts[2].includes(":") || parts[2].match(/^\d{2}:\d{2}:\d{2}$/))) {
+        logTime = `${parts[1].trim()} ${parts[2].trim()}`;
+      } else {
+        logTime = parts[1].trim();
+      }
+    }
+  }
+
+  if (esslUserId && logTime) {
+    const { data: existing } = await supabase
+      .from("attendance")
+      .select("id")
+      .eq("essl_id", esslUserId.toString())
+      .eq("check_in", logTime)
+      .eq("device_id", sn || "UNKNOWN")
+      .maybeSingle();
+
+    if (existing) return;
+
+    const { data: profile } = await supabase
       .from("profiles")
       .select("id")
       .eq("essl_id", esslUserId.toString())
-      .single();
+      .maybeSingle();
 
-    if (profileError || !profile) {
-      console.warn(`User with eSSL ID ${esslUserId} not found in profiles:`, profileError?.message || "Not found");
-    }
-
-    console.log(`Inserting attendance for user_id: ${profile?.id || 'NULL'} (eSSL ID: ${esslUserId})`);
-
-    // Insert into attendance table
-    const { data: insertData, error: attendanceError } = await supabase.from("attendance").insert({
+    await supabase.from("attendance").insert({
       user_id: profile?.id || null,
+      essl_id: esslUserId.toString(),
       check_in: logTime,
-      device_id: deviceId,
-      raw_data: payload,
-    }).select();
-
-    if (attendanceError) {
-      console.error("Database Insert Error:", attendanceError);
-      throw attendanceError;
-    }
-
-    console.log("Successfully inserted attendance record:", insertData);
-
-    // ADMS REQUIREMENT: You MUST return "OK" for the device to stop retrying
-    return new Response("OK", { 
-      status: 200, 
-      headers: { "Content-Type": "text/plain" } 
-    });
-  } catch (error) {
-    console.error("Error processing attendance:", error);
-    return new Response("ERROR", { 
-      status: 500,
-      headers: { "Content-Type": "text/plain" }
+      device_id: sn || "UNKNOWN",
+      raw_data: { ...recordPayload, known_user: !!profile },
     });
   }
-});
+}
+

@@ -16,10 +16,65 @@ const AttendanceScreen: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ on
     const [loading, setLoading] = useState(true);
     const [currentMonth, setCurrentMonth] = useState(new Date());
     const [selectedDate, setSelectedDate] = useState<string | null>(null);
+    const [stats, setStats] = useState({
+        planDays: 0,
+        overallDays: 0
+    });
 
     useEffect(() => {
         fetchAttendance();
+        fetchGlobalStats();
     }, [currentMonth]);
+
+    const fetchGlobalStats = async () => {
+        try {
+            const { data: { user } } = await supabase.auth.getUser();
+            if (!user) return;
+
+            // Get profile for plan dates
+            const { data: profile } = await supabase
+                .from('profiles')
+                .select('plan_start_date, plan_expiry_date')
+                .eq('id', user.id)
+                .single();
+
+            // Fetch unique check_in dates overall
+            const { data: allCheckIns } = await supabase
+                .from('attendance')
+                .select('check_in')
+                .eq('user_id', user.id);
+
+            if (allCheckIns) {
+                // Get all unique dates as YYYY-MM-DD
+                const allUniqueDates = allCheckIns.map(a => a.check_in.split(/[ T]/)[0]);
+                const uniqueDatesSet = new Set(allUniqueDates);
+                
+                // Overall unique days
+                const overallDays = uniqueDatesSet.size;
+
+                // Plan unique days
+                let planDays = 0;
+                if (profile?.plan_start_date) {
+                    // Normalize dates to YYYY-MM-DD for comparison
+                    const startDateStr = profile.plan_start_date.split(/[ T]/)[0];
+                    // If no expiry, use a far future date
+                    const expiryDateStr = profile.plan_expiry_date ? profile.plan_expiry_date.split(/[ T]/)[0] : '9999-12-31';
+                    
+                    const planUniqueDates = new Set(allUniqueDates.filter(dateStr => {
+                        return dateStr >= startDateStr && dateStr <= expiryDateStr;
+                    }));
+                    planDays = planUniqueDates.size;
+                }
+
+                setStats({
+                    planDays,
+                    overallDays
+                });
+            }
+        } catch (error) {
+            console.error('Error fetching global stats:', error);
+        }
+    };
 
     const fetchAttendance = async () => {
         try {
@@ -60,16 +115,24 @@ const AttendanceScreen: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ on
         return (new Date(end).getTime() - new Date(start).getTime()) / (1000 * 60);
     };
 
-    const uniqueDaysCount = useMemo(() => {
-        // Since check_in is now a TIMESTAMP without timezone, it comes as 'YYYY-MM-DD HH:mm:ss'
-        const filtered = selectedDate 
-            ? attendance.filter(a => a.check_in.startsWith(selectedDate))
-            : attendance;
+    const formatDateTime = (dateString: string) => {
+        if (!dateString) return 'N/A';
+        const date = new Date(dateString);
+        if (isNaN(date.getTime())) return dateString;
         
-        // Count unique dates
-        const days = new Set(filtered.map(a => a.check_in.split(' ')[0]));
-        return days.size;
-    }, [attendance, selectedDate]);
+        const d = String(date.getDate()).padStart(2, '0');
+        const m = String(date.getMonth() + 1).padStart(2, '0');
+        const y = date.getFullYear();
+        let hours = date.getHours();
+        const ampm = hours >= 12 ? 'PM' : 'AM';
+        hours = hours % 12;
+        hours = hours ? hours : 12;
+        const mm = String(date.getMinutes()).padStart(2, '0');
+        return {
+            date: `${d}-${m}-${y}`,
+            time: `${hours}:${mm} ${ampm}`
+        };
+    };
 
     const getDaysInMonth = (date: Date) => {
         const year = date.getFullYear();
@@ -106,18 +169,39 @@ const AttendanceScreen: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ on
 
             <div className="flex-1 px-4 py-6 overflow-y-auto pb-32">
                 {/* Stats Summary */}
-                <div className="bg-primary/10 border border-primary/20 rounded-3xl p-5 mb-6 flex justify-between items-center shadow-lg shadow-primary/5">
-                    <div>
-                        <p className="text-[10px] font-black text-primary uppercase tracking-widest mb-1">Days Present</p>
-                        <h2 className="text-3xl font-black text-white">{uniqueDaysCount} {uniqueDaysCount === 1 ? 'Day' : 'Days'}</h2>
-                        <p className="text-[10px] text-slate-400 mt-1 font-bold">
-                            {selectedDate ? `Records for ${new Date(selectedDate).toLocaleDateString('en-US', { day: 'numeric', month: 'short' })}` : 'For this month'}
-                        </p>
+                <div className="grid grid-cols-2 gap-4 mb-6">
+                    <div className="bg-primary/10 border border-primary/20 rounded-3xl p-5 shadow-lg shadow-primary/5">
+                        <div className="flex justify-between items-start mb-2">
+                            <p className="text-[10px] font-black text-primary uppercase tracking-widest">Plan Cycle</p>
+                            <span className="material-symbols-rounded text-primary text-xl" style={{ fontVariationSettings: "'FILL' 1" }}>calendar_today</span>
+                        </div>
+                        <h2 className="text-3xl font-black text-white">{stats.planDays}</h2>
+                        <p className="text-[10px] text-slate-400 font-bold uppercase tracking-tight">Days Present</p>
                     </div>
-                    <div className="w-12 h-12 rounded-2xl bg-primary/20 flex items-center justify-center">
-                        <span className="material-symbols-rounded text-primary text-2xl" style={{ fontVariationSettings: "'FILL' 1" }}>calendar_today</span>
+
+                    <div className="bg-white/5 border border-white/10 rounded-3xl p-5">
+                        <div className="flex justify-between items-start mb-2">
+                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Overall</p>
+                            <span className="material-symbols-rounded text-slate-500 text-xl" style={{ fontVariationSettings: "'FILL' 1" }}>history</span>
+                        </div>
+                        <h2 className="text-3xl font-black text-white">{stats.overallDays}</h2>
+                        <p className="text-[10px] text-slate-400 font-bold uppercase tracking-tight">Total Days</p>
                     </div>
                 </div>
+
+                {selectedDate && (
+                    <div className="mb-6 bg-primary/5 border border-primary/10 p-3 rounded-2xl flex items-center gap-3">
+                        <div className="w-8 h-8 rounded-lg bg-primary/20 flex items-center justify-center text-primary">
+                            <span className="material-symbols-rounded text-sm">event_note</span>
+                        </div>
+                        <div>
+                            <p className="text-[10px] text-slate-500 font-bold uppercase">Selected Date</p>
+                            <p className="text-xs font-black text-white">
+                                {new Date(selectedDate).toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric' })}
+                            </p>
+                        </div>
+                    </div>
+                )}
 
                 {/* Month Selector */}
                 <div className="flex items-center justify-between mb-8 bg-slate-800/50 p-4 rounded-2xl border border-slate-700">
@@ -198,28 +282,34 @@ const AttendanceScreen: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ on
                             <p className="text-sm text-slate-500">No attendance records found</p>
                         </div>
                     ) : (
-                        filteredLogs.map((record) => (
-                            <div key={record.id} className="bg-[#151C2C] border border-[#1E293B] p-4 rounded-2xl flex items-center justify-between">
-                                <div className="flex items-center gap-3">
-                                    <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center text-primary">
-                                        <span className="material-symbols-rounded">login</span>
+                        filteredLogs.map((record) => {
+                            const checkIn = formatDateTime(record.check_in);
+                            const checkOut = record.check_out ? formatDateTime(record.check_out) : null;
+                            const isComplex = typeof checkIn === 'object';
+
+                            return (
+                                <div key={record.id} className="bg-[#151C2C] border border-[#1E293B] p-4 rounded-2xl flex items-center justify-between">
+                                    <div className="flex items-center gap-3">
+                                        <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center text-primary">
+                                            <span className="material-symbols-rounded">login</span>
+                                        </div>
+                                        <div>
+                                            <p className="text-xs font-bold text-white">
+                                                {isComplex ? checkIn.date : record.check_in}
+                                            </p>
+                                            <p className="text-[10px] text-slate-400">
+                                                {isComplex ? checkIn.time : ''} - 
+                                                {checkOut && typeof checkOut === 'object' ? checkOut.time : ' ...'}
+                                            </p>
+                                        </div>
                                     </div>
-                                    <div>
-                                        <p className="text-xs font-bold text-white">
-                                            {record.check_in.split(' ')[0]}
-                                        </p>
-                                        <p className="text-[10px] text-slate-400">
-                                            {record.check_in.split(' ')[1].substring(0, 5)} - 
-                                            {record.check_out ? record.check_out.split(' ')[1].substring(0, 5) : ' ...'}
-                                        </p>
+                                    <div className="text-right">
+                                        <p className="text-xs font-black text-primary uppercase">Recorded</p>
+                                        <p className="text-[9px] text-slate-500 font-bold uppercase">Entry</p>
                                     </div>
                                 </div>
-                                <div className="text-right">
-                                    <p className="text-xs font-black text-primary uppercase">Recorded</p>
-                                    <p className="text-[9px] text-slate-500 font-bold uppercase">Entry</p>
-                                </div>
-                            </div>
-                        ))
+                            );
+                        })
                     )}
                 </div>
             </div>

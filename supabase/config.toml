@@ -1,0 +1,8 @@
+[functions.essl-attendance]
+verify_jwt = false
+
+[functions.essl-management]
+verify_jwt = false
+
+[functions.fatsecret-proxy]
+verify_jwt = false
