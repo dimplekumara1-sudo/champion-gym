@@ -40,7 +40,10 @@ const AdminPlans: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNaviga
           popular: editingPlan.popular,
           duration_months: parseInt(editingPlan.duration_months) || 1,
           description: editingPlan.description,
-          features: typeof editingPlan.features === 'string' ? editingPlan.features.split('\n').filter((f: string) => f.trim() !== '') : editingPlan.features
+          features: typeof editingPlan.features === 'string' ? editingPlan.features.split('\n').filter((f: string) => f.trim() !== '') : editingPlan.features,
+          discount_percentage: parseFloat(editingPlan.discount_percentage) || 0,
+          discount_amount: parseFloat(editingPlan.discount_amount) || 0,
+          discount_expiry: editingPlan.discount_expiry || null
         })
         .eq('id', editingPlan.id);
 
@@ -48,7 +51,10 @@ const AdminPlans: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNaviga
       setPlans(plans.map(p => p.id === editingPlan.id ? {
         ...editingPlan,
         price: editingPlan.price.startsWith('₹') ? editingPlan.price : `₹${editingPlan.price}`,
-        features: typeof editingPlan.features === 'string' ? editingPlan.features.split('\n').filter((f: string) => f.trim() !== '') : editingPlan.features
+        features: typeof editingPlan.features === 'string' ? editingPlan.features.split('\n').filter((f: string) => f.trim() !== '') : editingPlan.features,
+        discount_percentage: parseFloat(editingPlan.discount_percentage) || 0,
+        discount_amount: parseFloat(editingPlan.discount_amount) || 0,
+        discount_expiry: editingPlan.discount_expiry || null
       } : p));
       setEditingPlan(null);
     } catch (error) {
@@ -72,7 +78,10 @@ const AdminPlans: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNaviga
           popular: editingPlan.popular,
           duration_months: parseInt(editingPlan.duration_months) || 1,
           description: editingPlan.description,
-          features: typeof editingPlan.features === 'string' ? editingPlan.features.split('\n').filter((f: string) => f.trim() !== '') : []
+          features: typeof editingPlan.features === 'string' ? editingPlan.features.split('\n').filter((f: string) => f.trim() !== '') : [],
+          discount_percentage: parseFloat(editingPlan.discount_percentage) || 0,
+          discount_amount: parseFloat(editingPlan.discount_amount) || 0,
+          discount_expiry: editingPlan.discount_expiry || null
         }]);
 
       if (error) throw error;
@@ -107,7 +116,19 @@ const AdminPlans: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNaviga
           <h1 className="text-xl font-bold tracking-tight">Membership Plans</h1>
         </div>
         <button
-          onClick={() => setEditingPlan({ isNew: true, id: '', name: '', price: '', popular: false, duration_months: 1, description: '', features: '' })}
+          onClick={() => setEditingPlan({ 
+            isNew: true, 
+            id: '', 
+            name: '', 
+            price: '', 
+            popular: false, 
+            duration_months: 1, 
+            description: '', 
+            features: '',
+            discount_percentage: 0,
+            discount_amount: 0,
+            discount_expiry: ''
+          })}
           className="bg-primary text-slate-900 w-8 h-8 rounded-full flex items-center justify-center active:scale-95 transition-transform"
         >
           <span className="material-symbols-rounded text-sm font-bold">add</span>
@@ -220,6 +241,35 @@ const AdminPlans: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNaviga
                     value={editingPlan.features || ''}
                     onChange={e => setEditingPlan({ ...editingPlan, features: e.target.value })}
                     placeholder="Feature 1&#10;Feature 2&#10;Feature 3"
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-xs font-bold text-slate-500 uppercase">Discount %</label>
+                    <input
+                      type="number"
+                      className="w-full bg-slate-900 border-none rounded-xl mt-1 text-sm p-3 focus:ring-1 focus:ring-primary text-white"
+                      value={editingPlan.discount_percentage}
+                      onChange={e => setEditingPlan({ ...editingPlan, discount_percentage: e.target.value })}
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs font-bold text-slate-500 uppercase">Discount ₹</label>
+                    <input
+                      type="number"
+                      className="w-full bg-slate-900 border-none rounded-xl mt-1 text-sm p-3 focus:ring-1 focus:ring-primary text-white"
+                      value={editingPlan.discount_amount}
+                      onChange={e => setEditingPlan({ ...editingPlan, discount_amount: e.target.value })}
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="text-xs font-bold text-slate-500 uppercase">Discount Expiry</label>
+                  <input
+                    type="datetime-local"
+                    className="w-full bg-slate-900 border-none rounded-xl mt-1 text-sm p-3 focus:ring-1 focus:ring-primary text-white"
+                    value={editingPlan.discount_expiry ? new Date(new Date(editingPlan.discount_expiry).getTime() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16) : ''}
+                    onChange={e => setEditingPlan({ ...editingPlan, discount_expiry: e.target.value })}
                   />
                 </div>
                 <div className="flex items-center gap-2">

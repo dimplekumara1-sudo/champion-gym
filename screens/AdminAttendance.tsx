@@ -7,6 +7,8 @@ interface AttendanceRecord {
     id: string;
     user_id: string;
     check_in: string;
+    device_id: string | null;
+    raw_data: any;
     profiles: {
         full_name: string;
         plan: string | null;
@@ -32,6 +34,8 @@ const AdminAttendance: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onN
         check_in_date: new Date().toISOString().split('T')[0],
         check_in_time: '09:00'
     });
+
+    const [showRawData, setShowRawData] = useState<string | null>(null);
 
     useEffect(() => {
         fetchAttendance();
@@ -59,8 +63,8 @@ const AdminAttendance: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onN
             setLoading(true);
             
             // Calculate start and end of selected day
-            const startOfDay = `${selectedDate}T00:00:00.000Z`;
-            const endOfDay = `${selectedDate}T23:59:59.999Z`;
+            const startOfDay = `${selectedDate} 00:00:00`;
+            const endOfDay = `${selectedDate} 23:59:59`;
 
             const { data, error } = await supabase
                 .from('attendance')
@@ -68,7 +72,9 @@ const AdminAttendance: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onN
                     id,
                     user_id,
                     check_in,
-                    profiles!inner (
+                    device_id,
+                    raw_data,
+                    profiles (
                         full_name,
                         plan,
                         plan_expiry_date,
@@ -99,7 +105,7 @@ const AdminAttendance: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onN
         setUsers(data || []);
     };
 
-    const fetchUserDaysPresent = async (userId: string, startDate: string | null) => {
+    const fetchUserDaysPresent = async (userId: string, startDate: string | null, groupKey: string) => {
         if (!startDate) return;
         try {
             const { data, error } = await supabase
@@ -112,7 +118,7 @@ const AdminAttendance: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onN
             
             // Count unique days
             const days = new Set(data.map(r => r.check_in.split('T')[0]));
-            setUserDaysPresent(prev => ({ ...prev, [userId]: days.size }));
+            setUserDaysPresent(prev => ({ ...prev, [groupKey]: days.size }));
         } catch (error) {
             console.error('Error fetching user days present:', error);
         }
@@ -120,14 +126,19 @@ const AdminAttendance: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onN
 
     useEffect(() => {
         if (expandedUser) {
-            const record = attendance.find(a => a.user_id === expandedUser);
-            if (record?.profiles?.plan_start_date) {
-                fetchUserDaysPresent(expandedUser, record.profiles.plan_start_date);
-            } else {
-                // Default to 30 days ago if no start date
-                const thirtyDaysAgo = new Date();
-                thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-                fetchUserDaysPresent(expandedUser, thirtyDaysAgo.toISOString());
+            const records = groupedAttendance[expandedUser];
+            if (!records) return;
+            const record = records[0];
+            
+            if (record?.user_id) {
+                if (record.profiles?.plan_start_date) {
+                    fetchUserDaysPresent(record.user_id, record.profiles.plan_start_date, expandedUser);
+                } else {
+                    // Default to 30 days ago if no start date
+                    const thirtyDaysAgo = new Date();
+                    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+                    fetchUserDaysPresent(record.user_id, thirtyDaysAgo.toISOString(), expandedUser);
+                }
             }
         }
     }, [expandedUser]);
@@ -174,15 +185,32 @@ const AdminAttendance: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onN
         return diffDays;
     };
 
+    const formatDateTime = (dateString: string) => {
+        const date = new Date(dateString);
+        const d = String(date.getDate()).padStart(2, '0');
+        const m = String(date.getMonth() + 1).padStart(2, '0');
+        const y = date.getFullYear();
+        let hours = date.getHours();
+        const ampm = hours >= 12 ? 'PM' : 'AM';
+        hours = hours % 12;
+        hours = hours ? hours : 12; // the hour '0' should be '12'
+        const mm = String(date.getMinutes()).padStart(2, '0');
+        return `${d}-${m}-${y} Time: ${hours}:${mm} ${ampm}`;
+    };
+
     const groupedAttendance = attendance.reduce((acc: { [key: string]: AttendanceRecord[] }, curr) => {
-        const userId = curr.user_id;
-        if (!acc[userId]) acc[userId] = [];
-        acc[userId].push(curr);
+        // Use user_id if available, otherwise use eSSL ID from raw_data or device_id
+        const esslId = curr.raw_data?.UserId || curr.raw_data?.EmployeeCode || 'unknown';
+        const groupKey = curr.user_id || `essl_${esslId}`;
+        
+        if (!acc[groupKey]) acc[groupKey] = [];
+        acc[groupKey].push(curr);
         return acc;
     }, {});
 
-    const filteredUserIds = Object.keys(groupedAttendance).filter(userId => {
-        const userName = groupedAttendance[userId][0].profiles?.full_name || '';
+    const filteredUserIds = Object.keys(groupedAttendance).filter(groupKey => {
+        const firstRecord = groupedAttendance[groupKey][0];
+        const userName = firstRecord.profiles?.full_name || `Unknown User (${firstRecord.raw_data?.UserId || 'ID N/A'})`;
         return userName.toLowerCase().includes(searchTerm.toLowerCase());
     });
 
@@ -289,35 +317,36 @@ const AdminAttendance: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onN
                         filteredUserIds.length === 0 ? (
                             <div className="text-center py-10 text-slate-500">No records found</div>
                         ) : (
-                            filteredUserIds.map((userId) => {
-                            const userRecords = groupedAttendance[userId];
-                            const isExpanded = expandedUser === userId;
+                            filteredUserIds.map((groupKey) => {
+                            const userRecords = groupedAttendance[groupKey];
+                            const isExpanded = expandedUser === groupKey;
                             const entryCount = userRecords.length;
                             const lastRecord = userRecords[0];
+                            const isUnknown = !lastRecord.user_id;
+                            const userName = lastRecord.profiles?.full_name || `Unknown User (${lastRecord.raw_data?.UserId || 'ID N/A'})`;
 
                             return (
-                                <div key={userId} className="space-y-2">
+                                <div key={groupKey} className="space-y-2">
                                     <div 
-                                        onClick={() => setExpandedUser(isExpanded ? null : userId)}
+                                        onClick={() => setExpandedUser(isExpanded ? null : groupKey)}
                                         className={`bg-slate-800/40 border p-4 rounded-2xl transition-all active:scale-[0.98] ${isExpanded ? 'border-primary/50' : 'border-slate-700/50'}`}
                                     >
                                         <div className="flex justify-between items-center">
                                             <div className="flex items-center gap-3">
-                                                <div className="w-10 h-10 rounded-full bg-slate-700 flex items-center justify-center text-primary font-bold">
-                                                    {(lastRecord.profiles?.full_name || 'U')[0]}
+                                                <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold ${isUnknown ? 'bg-slate-800 text-slate-500 border border-slate-700' : 'bg-slate-700 text-primary'}`}>
+                                                    {(userName || 'U')[0]}
                                                 </div>
                                                 <div>
-                                                    <h3 className="font-bold text-white">{lastRecord.profiles?.full_name || 'Unknown User'}</h3>
+                                                    <h3 className="font-bold text-white">{userName}</h3>
                                                     <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">
                                                         Today's records
                                                     </p>
                                                 </div>
                                             </div>
-                                            <div className="text-right">
-                                                <div className="bg-primary/10 px-3 py-1 rounded-full border border-primary/20 mb-1">
-                                                    <span className="text-[10px] font-black text-primary uppercase">
-                                                        {entryCount} {entryCount === 1 ? 'Entry' : 'Entries'}
-                                                    </span>
+                                            <div className="text-right flex flex-col items-end gap-2">
+                                                <div className="w-14 h-14 rounded-full border-2 border-primary/30 bg-primary/5 flex flex-col items-center justify-center leading-none">
+                                                    <span className="text-sm font-black text-primary">{entryCount}</span>
+                                                    <span className="text-[7px] font-black text-primary uppercase tracking-tighter">Entries</span>
                                                 </div>
                                                 <span className="material-symbols-rounded text-slate-500 text-sm">
                                                     {isExpanded ? 'expand_less' : 'expand_more'}
@@ -330,69 +359,106 @@ const AdminAttendance: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onN
                                     {isExpanded && (
                                         <div className="ml-4 pl-4 border-l-2 border-slate-700 space-y-3 py-2 animate-in fade-in slide-in-from-left-2">
                                             {/* Subscription Info Card */}
-                                            <div className="bg-primary/10 border border-primary/20 p-3 rounded-xl mb-2">
-                                                <div className="flex justify-between items-start mb-2">
-                                                    <div>
-                                                        <p className="text-[8px] text-slate-500 font-black uppercase tracking-widest">Current Plan</p>
-                                                        <p className="text-sm font-bold text-white">{lastRecord.profiles?.plan || 'No Active Plan'}</p>
-                                                    </div>
-                                                    <div className="text-right">
-                                                        <p className="text-[8px] text-slate-500 font-black uppercase tracking-widest">Status</p>
-                                                        {(() => {
-                                                            const remaining = getRemainingDays(lastRecord.profiles?.plan_expiry_date, lastRecord.profiles?.grace_period);
-                                                            if (remaining === null) return <span className="text-[10px] text-slate-400 font-bold">N/A</span>;
-                                                            if (remaining < 0) return <span className="text-[10px] text-red-400 font-bold">EXPIRED</span>;
-                                                            if (remaining <= 5) return <span className="text-[10px] text-orange-400 font-bold">ENDING SOON</span>;
-                                                            return <span className="text-[10px] text-primary font-bold">ACTIVE</span>;
-                                                        })()}
-                                                    </div>
-                                                </div>
-                                                <div className="grid grid-cols-2 gap-4 mt-3 pt-3 border-t border-primary/10">
-                                                    <div>
-                                                        <p className="text-[8px] text-slate-500 font-bold uppercase">Expires On</p>
-                                                        <p className="text-[11px] font-bold">
-                                                            {lastRecord.profiles?.plan_expiry_date ? new Date(lastRecord.profiles.plan_expiry_date).toLocaleDateString() : 'N/A'}
-                                                        </p>
-                                                    </div>
-                                                    <div className="text-right">
-                                                        <p className="text-[8px] text-slate-500 font-bold uppercase">Days Present</p>
-                                                        <p className="text-[11px] font-bold text-primary">
-                                                            {userDaysPresent[userId] || '...'} Days
-                                                        </p>
-                                                        <p className="text-[8px] text-slate-500 font-medium italic mt-0.5">In current plan</p>
-                                                    </div>
-                                                </div>
-                                                <div className="mt-2 flex items-center justify-between">
-                                                    <div className="flex items-center gap-1">
-                                                        <span className="material-symbols-rounded text-[10px] text-orange-400">info</span>
-                                                        <p className="text-[9px] text-orange-400/80 italic font-medium">
+                                            {!isUnknown && (
+                                                <div className="bg-primary/10 border border-primary/20 p-3 rounded-xl mb-2">
+                                                    <div className="flex justify-between items-start mb-2">
+                                                        <div>
+                                                            <p className="text-[8px] text-slate-500 font-black uppercase tracking-widest">Current Plan</p>
+                                                            <p className="text-sm font-bold text-white">{lastRecord.profiles?.plan || 'No Active Plan'}</p>
+                                                        </div>
+                                                        <div className="text-right">
+                                                            <p className="text-[8px] text-slate-500 font-black uppercase tracking-widest">Status</p>
                                                             {(() => {
-                                                                const rem = getRemainingDays(lastRecord.profiles?.plan_expiry_date, lastRecord.profiles?.grace_period);
-                                                                if (rem === null) return 'No expiry set';
-                                                                if (rem < 0) return `Expired ${Math.abs(rem)} days ago`;
-                                                                return `${rem} days remaining`;
+                                                                const remaining = getRemainingDays(lastRecord.profiles?.plan_expiry_date, lastRecord.profiles?.grace_period);
+                                                                if (remaining === null) return <span className="text-[10px] text-slate-400 font-bold">N/A</span>;
+                                                                if (remaining < 0) return <span className="text-[10px] text-red-400 font-bold">EXPIRED</span>;
+                                                                if (remaining <= 5) return <span className="text-[10px] text-orange-400 font-bold">ENDING SOON</span>;
+                                                                return <span className="text-[10px] text-primary font-bold">ACTIVE</span>;
                                                             })()}
-                                                        </p>
+                                                        </div>
                                                     </div>
-                                                    {lastRecord.profiles?.grace_period && lastRecord.profiles.grace_period > 0 && (
-                                                        <p className="text-[8px] text-slate-500 font-bold uppercase">+{lastRecord.profiles.grace_period}d Grace</p>
-                                                    )}
+                                                    <div className="grid grid-cols-2 gap-4 mt-3 pt-3 border-t border-primary/10">
+                                                        <div>
+                                                            <p className="text-[8px] text-slate-500 font-bold uppercase">Expires On</p>
+                                                            <p className="text-[11px] font-bold">
+                                                                {lastRecord.profiles?.plan_expiry_date ? new Date(lastRecord.profiles.plan_expiry_date).toLocaleDateString() : 'N/A'}
+                                                            </p>
+                                                        </div>
+                                                        <div className="text-right">
+                                                            <p className="text-[8px] text-slate-500 font-bold uppercase">Days Present</p>
+                                                            <p className="text-[11px] font-bold text-primary">
+                                                                {userDaysPresent[groupKey] || '...'} Days
+                                                            </p>
+                                                            <p className="text-[8px] text-slate-500 font-medium italic mt-0.5">In current plan</p>
+                                                        </div>
+                                                    </div>
+                                                    <div className="mt-2 flex items-center justify-between">
+                                                        <div className="flex items-center gap-1">
+                                                            <span className="material-symbols-rounded text-[10px] text-orange-400">info</span>
+                                                            <p className="text-[9px] text-orange-400/80 italic font-medium">
+                                                                {(() => {
+                                                                    const rem = getRemainingDays(lastRecord.profiles?.plan_expiry_date, lastRecord.profiles?.grace_period);
+                                                                    if (rem === null) return 'No expiry set';
+                                                                    if (rem < 0) return `Expired ${Math.abs(rem)} days ago`;
+                                                                    return `${rem} days remaining`;
+                                                                })()}
+                                                            </p>
+                                                        </div>
+                                                        {lastRecord.profiles?.grace_period && lastRecord.profiles.grace_period > 0 && (
+                                                            <p className="text-[8px] text-slate-500 font-bold uppercase">+{lastRecord.profiles.grace_period}d Grace</p>
+                                                        )}
+                                                    </div>
                                                 </div>
-                                            </div>
+                                            )}
 
                                             <div className="flex items-center justify-between px-1">
                                                 <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest">Timings</span>
                                             </div>
                                             
                                             {userRecords.map((record) => (
-                                                <div key={record.id} className="bg-slate-800/20 border border-slate-700/30 p-3 rounded-xl">
-                                                    <div className="flex items-center gap-3">
-                                                        <span className="material-symbols-rounded text-primary text-xs">login</span>
-                                                        <div>
-                                                            <p className="text-[8px] text-slate-500 font-bold uppercase tracking-widest">Recorded Entry</p>
-                                                            <p className="text-xs font-bold">{new Date(record.check_in).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
+                                                <div key={record.id} className="space-y-2">
+                                                    <div className="bg-slate-800/20 border border-slate-700/30 p-3 rounded-xl">
+                                                        <div className="flex items-center justify-between">
+                                                            <div className="flex items-center gap-3">
+                                                                <span className={`material-symbols-rounded text-xs ${record.device_id ? 'text-primary' : 'text-slate-500'}`}>
+                                                                    {record.device_id ? 'biometrics' : 'person'}
+                                                                </span>
+                                                                <div>
+                                                                    <p className="text-[8px] text-slate-500 font-bold uppercase tracking-widest">
+                                                                        {record.device_id ? `eSSL Device: ${record.device_id}` : 'Manual Entry'}
+                                                                    </p>
+                                                                    <p className="text-[10px] font-bold text-white/90">
+                                                                        {formatDateTime(record.check_in)}
+                                                                    </p>
+                                                                </div>
+                                                            </div>
+                                                            {record.raw_data && (
+                                                                <button 
+                                                                    onClick={(e) => {
+                                                                        e.stopPropagation();
+                                                                        setShowRawData(showRawData === record.id ? null : record.id);
+                                                                    }}
+                                                                    className="w-8 h-8 rounded-lg bg-white/5 flex items-center justify-center text-slate-500 hover:text-primary transition-colors"
+                                                                >
+                                                                    <span className="material-symbols-rounded text-sm">terminal</span>
+                                                                </button>
+                                                            )}
                                                         </div>
                                                     </div>
+                                                    
+                                                    {showRawData === record.id && record.raw_data && (
+                                                        <div className="bg-black/40 border border-white/5 p-3 rounded-xl overflow-hidden animate-in slide-in-from-top-2">
+                                                            <div className="flex justify-between items-center mb-2">
+                                                                <p className="text-[8px] font-black text-slate-500 uppercase tracking-widest">Raw Device Payload</p>
+                                                                <button onClick={() => setShowRawData(null)}>
+                                                                    <span className="material-symbols-rounded text-xs text-slate-500">close</span>
+                                                                </button>
+                                                            </div>
+                                                            <pre className="text-[10px] text-primary/80 font-mono overflow-x-auto">
+                                                                {JSON.stringify(record.raw_data, null, 2)}
+                                                            </pre>
+                                                        </div>
+                                                    )}
                                                 </div>
                                             ))}
                                         </div>

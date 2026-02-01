@@ -22,10 +22,10 @@ ESSL Device → Supabase Function → Database Tables → Application UI
 
 #### Attendance Table
 - `user_id`: References profiles.id
-- `check_in`: Timestamp for check-in
-- `check_out`: Timestamp for check-out  
+- `check_in`: Timestamp for the attendance log (one-way records)
 - `device_id`: Source device identifier
 - `raw_data`: Complete ESSL payload for debugging
+- **Note**: This implementation uses a one-way logging system where every scan is recorded as a new entry in `check_in`.
 
 ## Implementation Components
 
@@ -33,6 +33,10 @@ ESSL Device → Supabase Function → Database Tables → Application UI
 - Handles incoming ESSL webhook requests
 - Maps device user ID to system user profile via `essl_id`
 - Inserts attendance records with device metadata
+- **Public Access**: Must be deployed with `--no-verify-jwt` to allow device webhooks without authentication:
+  ```bash
+  npx supabase functions deploy essl-attendance --no-verify-jwt
+  ```
 - Provides CORS support for cross-origin requests
 
 ### 2. Admin User Management (`screens/AdminUsers.tsx`)
@@ -96,7 +100,7 @@ ESSL Device → Supabase Function → Database Tables → Application UI
 ### Standard ESSL Payload
 ```json
 {
-  "UserId": "12345",
+  "EmployeeCode": "1",
   "LogTime": "2026-02-01T09:30:00Z",
   "DeviceId": "ESSL001",
   "Status": "IN"
@@ -104,6 +108,8 @@ ESSL Device → Supabase Function → Database Tables → Application UI
 ```
 
 ### Alternative Payload Formats Supported
+- `EmployeeCode` (primary key for user identification)
+- `UserId` (camelCase)
 - `userId` (camelCase)
 - `ID` (uppercase)
 - `timestamp` instead of `LogTime`

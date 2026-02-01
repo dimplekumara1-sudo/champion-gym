@@ -17,6 +17,9 @@ const AdminDashboard: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNa
     dueRevenue: 0,
     upcomingRenewals: 0,
     todayAttendance: 0,
+    totalAttendance: 0,
+    unknownAttendance: 0,
+    totalUnknownAttendance: 0,
   });
   const [trendPeriod, setTrendPeriod] = useState<'7' | '30'>('30');
   const [trendData, setTrendData] = useState<number[]>([]);
@@ -106,12 +109,26 @@ const AdminDashboard: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNa
       // Get upcoming renewals
       const upcoming = await planService.getUsersWithUpcomingRenewals();
 
-      // Fetch today's attendance
-      const today = new Date().toISOString().split('T')[0];
-      const { count: attendanceCount } = await supabase
+      // Fetch today's attendance (local day start)
+      const now_local = new Date();
+      const todayDate = `${now_local.getFullYear()}-${String(now_local.getMonth() + 1).padStart(2, '0')}-${String(now_local.getDate()).padStart(2, '0')}`;
+      const { data: attendanceData } = await supabase
         .from('attendance')
-        .select('*', { count: 'exact', head: true })
-        .gte('created_at', today);
+        .select('user_id, raw_data')
+        .gte('check_in', `${todayDate} 00:00:00`);
+
+      const membersOnly = attendanceData?.filter(r => r.user_id) || [];
+      const unknownsOnly = attendanceData?.filter(r => !r.user_id) || [];
+
+      const uniqueUsers = new Set(membersOnly.map(r => r.user_id)).size;
+      const totalCheckIns = membersOnly.length;
+
+      // Unique unknowns grouped by eSSL ID if available
+      const uniqueUnknowns = new Set(unknownsOnly.map(r => {
+        const esslId = r.raw_data?.UserId || r.raw_data?.EmployeeCode || `temp_${Math.random()}`;
+        return `essl_${esslId}`;
+      })).size;
+      const totalUnknownCheckIns = unknownsOnly.length;
 
       setStats({
         totalRevenue: totalRev,
@@ -124,7 +141,10 @@ const AdminDashboard: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNa
         shopOrders: deliveredOrders,
         dueRevenue: totalDue,
         upcomingRenewals: upcoming.length,
-        todayAttendance: attendanceCount || 0,
+        todayAttendance: uniqueUsers,
+        totalAttendance: totalCheckIns,
+        unknownAttendance: uniqueUnknowns,
+        totalUnknownAttendance: totalUnknownCheckIns,
       });
     } catch (error) {
       console.error('Error fetching admin stats:', error);
@@ -323,10 +343,28 @@ const AdminDashboard: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNa
             className="p-5 bg-white dark:bg-[#1E293B] rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800 cursor-pointer active:scale-95 transition-transform"
           >
             <p className="text-slate-500 dark:text-slate-400 text-xs font-medium uppercase tracking-wider">Gym Attendance</p>
-            <h2 className="text-2xl font-bold mt-1 text-purple-500">{stats.todayAttendance}</h2>
+            <div className="flex items-baseline gap-2 mt-1">
+              <h2 className="text-2xl font-bold text-purple-500">{stats.todayAttendance}</h2>
+              <span className="text-xs font-bold text-slate-400">({stats.totalAttendance} logs)</span>
+            </div>
             <div className="mt-3 flex items-center text-purple-500 text-xs font-semibold">
               <span className="material-symbols-rounded text-xs mr-0.5">fingerprint</span>
-              <span>Today's Logins</span>
+              <span>Member Logins</span>
+            </div>
+          </div>
+
+          <div 
+            onClick={() => onNavigate('ADMIN_ATTENDANCE')}
+            className="p-5 bg-white dark:bg-[#1E293B] rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800 cursor-pointer active:scale-95 transition-transform"
+          >
+            <p className="text-slate-500 dark:text-slate-400 text-xs font-medium uppercase tracking-wider">Unknown Logs</p>
+            <div className="flex items-baseline gap-2 mt-1">
+              <h2 className="text-2xl font-bold text-slate-400">{stats.unknownAttendance}</h2>
+              <span className="text-xs font-bold text-slate-500/50">({stats.totalUnknownAttendance} logs)</span>
+            </div>
+            <div className="mt-3 flex items-center text-slate-400 text-xs font-semibold">
+              <span className="material-symbols-rounded text-xs mr-0.5">help_center</span>
+              <span>Unknown Check-ins</span>
             </div>
           </div>
         </div>

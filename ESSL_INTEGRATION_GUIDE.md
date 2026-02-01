@@ -6,12 +6,35 @@ This guide explains how to connect your eSSL/ZKTeco biometric attendance device 
 
 To connect your device, you need to configure the **Web Server** or **ADMS** settings in your eSSL device menu.
 
-### Connection Settings:
+### Method A: Direct Connection (If your device supports custom URLs)
 - **Server URL**: `https://osjvvcbcvlcdmqxczttf.supabase.co/functions/v1/essl-attendance`
-- **Port**: `443` (Standard HTTPS)
-- **Request Format**: JSON (if supported) or Standard POST
+- **Port**: `443`
+- **HTTPS**: ON
 
-*Note: Replace the URL if your project has changed. The endpoint expects a JSON payload with `UserId`, `LogTime`, and `DeviceId`.*
+### Method B: Cloudflare Proxy (Recommended for ADMS devices)
+If your device does not have a "Request URL" field or hides the Port/HTTPS options, use a Cloudflare Worker bridge.
+
+**Worker Code:**
+```javascript
+export default {
+  async fetch(request) {
+    const target = "https://osjvvcbcvlcdmqxczttf.supabase.co/functions/v1/essl-attendance";
+    return fetch(new Request(target, {
+      method: request.method,
+      headers: request.headers,
+      body: request.body
+    }));
+  }
+};
+```
+
+**Device Settings with Proxy:**
+- **Server Address**: `your-worker-name.workers.dev`
+- **Server Port**: `80`
+- **HTTPS**: OFF
+- **Proxy Server**: OFF
+
+*Note: The endpoint expects standard ADMS payload or JSON with `EmployeeCode`, `LogTime`, and `DeviceId`.*
 
 ## 2. User Management (Mapping IDs)
 

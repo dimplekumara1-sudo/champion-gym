@@ -61,12 +61,13 @@ const AttendanceScreen: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ on
     };
 
     const uniqueDaysCount = useMemo(() => {
+        // Since check_in is now a TIMESTAMP without timezone, it comes as 'YYYY-MM-DD HH:mm:ss'
         const filtered = selectedDate 
             ? attendance.filter(a => a.check_in.startsWith(selectedDate))
             : attendance;
         
         // Count unique dates
-        const days = new Set(filtered.map(a => a.check_in.split('T')[0]));
+        const days = new Set(filtered.map(a => a.check_in.split(' ')[0]));
         return days.size;
     }, [attendance, selectedDate]);
 
@@ -205,11 +206,11 @@ const AttendanceScreen: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ on
                                     </div>
                                     <div>
                                         <p className="text-xs font-bold text-white">
-                                            {new Date(record.check_in).toLocaleDateString('en-US', { day: 'numeric', month: 'short' })}
+                                            {record.check_in.split(' ')[0]}
                                         </p>
                                         <p className="text-[10px] text-slate-400">
-                                            {new Date(record.check_in).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} - 
-                                            {record.check_out ? new Date(record.check_out).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ' ...'}
+                                            {record.check_in.split(' ')[1].substring(0, 5)} - 
+                                            {record.check_out ? record.check_out.split(' ')[1].substring(0, 5) : ' ...'}
                                         </p>
                                     </div>
                                 </div>

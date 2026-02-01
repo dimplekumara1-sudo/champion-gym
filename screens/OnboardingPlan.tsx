@@ -15,6 +15,42 @@ interface OnboardingPlanProps {
   };
 }
 
+const CountdownTimer: React.FC<{ expiry: string }> = ({ expiry }) => {
+  const [timeLeft, setTimeLeft] = useState<{ d: number, h: number, m: number, s: number } | null>(null);
+
+  useEffect(() => {
+    const calculateTime = () => {
+      const difference = new Date(expiry).getTime() - new Date().getTime();
+      if (difference <= 0) return null;
+
+      return {
+        d: Math.floor(difference / (1000 * 60 * 60 * 24)),
+        h: Math.floor((difference / (1000 * 60 * 60)) % 24),
+        m: Math.floor((difference / 1000 / 60) % 60),
+        s: Math.floor((difference / 1000) % 60)
+      };
+    };
+
+    const timer = setInterval(() => {
+      setTimeLeft(calculateTime());
+    }, 1000);
+
+    setTimeLeft(calculateTime());
+    return () => clearInterval(timer);
+  }, [expiry]);
+
+  if (!timeLeft) return null;
+
+  return (
+    <div className="flex gap-2 items-center mt-2">
+      <span className="material-symbols-rounded text-orange-400 text-xs">timer</span>
+      <span className="text-[10px] font-black text-orange-400 uppercase tracking-widest">
+        Offer ends in: {timeLeft.d}d {timeLeft.h}h {timeLeft.m}m {timeLeft.s}s
+      </span>
+    </div>
+  );
+};
+
 const OnboardingPlan: React.FC<OnboardingPlanProps> = ({ onNext, onBack, onboardingData }) => {
   const [plans, setPlans] = useState<any[]>([]);
   const [selected, setSelected] = useState('');
@@ -121,14 +157,48 @@ const OnboardingPlan: React.FC<OnboardingPlanProps> = ({ onNext, onBack, onboard
                     <p className="text-slate-500 text-xs">{plan.description || 'Flexible plan option'}</p>
                   </div>
                   <div className="text-right">
-                    <div className="flex items-baseline gap-1 text-primary justify-end">
-                      <span className="text-3xl font-black">{plan.price}</span>
+                    <div className="flex flex-col items-end">
+                      {(() => {
+                        const originalPrice = parseInt(plan.price.replace('₹', ''));
+                        const isExpired = plan.discount_expiry && new Date(plan.discount_expiry).getTime() < new Date().getTime();
+                        let discountedPrice = originalPrice;
+                        
+                        if (!isExpired) {
+                          if (plan.discount_percentage > 0) {
+                            discountedPrice = originalPrice * (1 - plan.discount_percentage / 100);
+                          } else if (plan.discount_amount > 0) {
+                            discountedPrice = originalPrice - plan.discount_amount;
+                          }
+                        }
+
+                        if (discountedPrice < originalPrice) {
+                          return (
+                            <>
+                              <span className="text-xs text-slate-500 line-through font-bold">₹{originalPrice}</span>
+                              <div className="flex items-baseline gap-1 text-primary justify-end">
+                                <span className="text-3xl font-black">₹{Math.round(discountedPrice)}</span>
+                              </div>
+                            </>
+                          );
+                        }
+                        
+                        return (
+                          <div className="flex items-baseline gap-1 text-primary justify-end">
+                            <span className="text-3xl font-black">{plan.price.startsWith('₹') ? plan.price : `₹${plan.price}`}</span>
+                          </div>
+                        );
+                      })()}
                     </div>
                     <span className="text-[10px] font-bold text-slate-500 uppercase">
                       {plan.duration_months === 1 ? 'Per Month' : `Per ${plan.duration_months} Months`}
                     </span>
                   </div>
                 </div>
+                {plan.discount_expiry && new Date(plan.discount_expiry).getTime() > new Date().getTime() && (
+                  <div className="mb-4">
+                    <CountdownTimer expiry={plan.discount_expiry} />
+                  </div>
+                )}
                 {plan.features && plan.features.length > 0 && (
                   <div className="space-y-3">
                     {plan.features.map((f: string, i: number) => (
