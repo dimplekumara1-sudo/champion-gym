@@ -76,8 +76,10 @@ export interface Profile {
   goal: string | null;
   gender: string | null;
   phone_number: string | null;
+  username: string | null;
   openwearables_user_id: string | null;
   essl_id: string | null;
+  essl_blocked: boolean;
   grace_period: number | null;
   created_at: string;
   due_amount?: number | null;

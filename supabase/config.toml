@@ -6,3 +6,6 @@ verify_jwt = false
 
 [functions.fatsecret-proxy]
 verify_jwt = false
+
+[functions.update-access]
+verify_jwt = false

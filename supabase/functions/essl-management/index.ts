@@ -53,15 +53,19 @@ Deno.serve(async (req) => {
       console.log(`Found ${expiredUsers?.length || 0} expired users to block.`);
 
       const results = [];
+      const now = new Date();
+      const ymd = now.toISOString().slice(0, 10).replace(/-/g, "");
+      const blockTime = `${ymd}000000`;
+
       for (const user of (expiredUsers || [])) {
         console.log(`Blocking user ${user.essl_id} (${user.username})...`);
         
-        // 2. Queue block command (Using Privilege 14 = Disabled/Invalid for X2008)
+        // 2. Queue block command (Moving to Group 99 for X990)
         const { error: cmdError } = await supabase
           .from("essl_commands")
           .insert({
             essl_id: "ALL",
-            command: `DATA UPDATE USERINFO PIN=${user.essl_id} Privilege=14`,
+            command: `DATA UPDATE USER PIN=${user.essl_id} Group=99`,
             status: "pending",
             payload: { user_id: user.id, reason: "plan_expired", pin: user.essl_id }
           });
@@ -96,9 +100,12 @@ Deno.serve(async (req) => {
       const commands = users.map(user => {
         const date = new Date(user.plan_expiry_date);
         const yyyymmdd = date.toISOString().split('T')[0].replace(/-/g, '');
+        const isExpired = date < new Date();
+        const group = isExpired ? 99 : 1;
+        
         return {
           essl_id: "ALL",
-          command: `DATA UPDATE USERINFO PIN=${user.essl_id} EndDateTime=${yyyymmdd}235959`,
+          command: `DATA UPDATE USER PIN=${user.essl_id} EndDateTime=${yyyymmdd}235959 Group=${group}`,
           status: "pending",
           payload: { user_id: user.id, action: "sync_all_expiry", pin: user.essl_id }
         };
@@ -126,13 +133,13 @@ Deno.serve(async (req) => {
 
       console.log(`Unblocking user ${essl_id} and syncing records...`);
 
-      // 1. Queue command to enable user (Using Privilege 0 = Normal User)
+      // 1. Queue command to enable user (Moving to Group 1 for X990)
       await supabase
         .from("essl_commands")
         .insert([
           {
             essl_id: "ALL",
-            command: `DATA UPDATE USERINFO PIN=${essl_id} Privilege=0`,
+            command: `DATA UPDATE USER PIN=${essl_id} Group=1 EndDateTime=20991231235959`,
             status: "pending",
             payload: { user_id, action: "unblock" }
           },
@@ -238,7 +245,7 @@ Deno.serve(async (req) => {
         .from("essl_commands")
         .insert({
           essl_id: "ALL",
-          command: `DATA DELETE USERINFO PIN=${essl_id}`,
+          command: `DATA DELETE USER PIN=${essl_id}`,
           status: "pending",
           payload: { action: "delete_user" }
         });
@@ -259,7 +266,7 @@ Deno.serve(async (req) => {
         .from("essl_commands")
         .insert({
           essl_id: "ALL",
-          command: `DATA UPDATE USERINFO PIN=${essl_id} Name=${name}`,
+          command: `DATA UPDATE USER PIN=${essl_id} Name=${name}`,
           status: "pending",
           payload: { action: "update_user" }
         });

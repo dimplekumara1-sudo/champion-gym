@@ -41,7 +41,8 @@ export default {
         const body = await request.json();
         if (!body.essl_id) return new Response("Missing essl_id", { status: 400, headers: corsHeaders });
         try {
-          const result = await queueCommand(SUPABASE_URL, SUPABASE_SERVICE_KEY, body.essl_id, `DATA UPDATE USERINFO PIN=${body.essl_id} Privilege=14`);
+          // Block user by moving to Access Group 99
+          const result = await queueCommand(SUPABASE_URL, SUPABASE_SERVICE_KEY, body.essl_id, `DATA UPDATE USER PIN=${body.essl_id} Group=99`);
           return new Response(JSON.stringify(result), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
         } catch (err) {
           return new Response(JSON.stringify({ success: false, error: err.message }), { status: 500, headers: corsHeaders });
@@ -52,7 +53,8 @@ export default {
         const body = await request.json();
         if (!body.essl_id) return new Response("Missing essl_id", { status: 400, headers: corsHeaders });
         try {
-          const result = await queueCommand(SUPABASE_URL, SUPABASE_SERVICE_KEY, body.essl_id, `DATA UPDATE USERINFO PIN=${body.essl_id} Privilege=0`);
+          // Unblock user by moving to Access Group 1
+          const result = await queueCommand(SUPABASE_URL, SUPABASE_SERVICE_KEY, body.essl_id, `DATA UPDATE USER PIN=${body.essl_id} Group=1`);
           return new Response(JSON.stringify(result), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
         } catch (err) {
           return new Response(JSON.stringify({ success: false, error: err.message }), { status: 500, headers: corsHeaders });

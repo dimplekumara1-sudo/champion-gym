@@ -11,12 +11,13 @@ interface AttendanceRecord {
     device_id: string | null;
     raw_data: any;
     profiles: {
-        full_name: string;
+        full_name: string | null;
+        username: string | null;
         plan: string | null;
         plan_expiry_date: string | null;
         plan_start_date: string | null;
         grace_period: number | null;
-    };
+    } | null;
 }
 
 const AdminAttendance: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNavigate }) => {
@@ -61,6 +62,7 @@ const AdminAttendance: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onN
                     raw_data,
                     profiles (
                         full_name,
+                        username,
                         plan,
                         plan_expiry_date,
                         plan_start_date,
@@ -114,6 +116,7 @@ const AdminAttendance: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onN
                     raw_data,
                     profiles (
                         full_name,
+                        username,
                         plan,
                         plan_expiry_date,
                         plan_start_date,
@@ -155,7 +158,7 @@ const AdminAttendance: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onN
             if (error) throw error;
 
             // Count unique days
-            const days = new Set(data.map(r => r.check_in.split('T')[0]));
+            const days = new Set(data.map(r => r.check_in.split(/[ T]/)[0]));
             setUserDaysPresent(prev => ({ ...prev, [groupKey]: days.size }));
         } catch (error) {
             console.error('Error fetching user days present:', error);
@@ -240,11 +243,11 @@ const AdminAttendance: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onN
 
     const groupedAttendance = attendance.reduce((acc: { [key: string]: AttendanceRecord[] }, curr) => {
         // Robust ID resolution
-        const esslId = curr.essl_id || curr.raw_data?.essl_id || curr.raw_data?.UserId || curr.raw_data?.EmployeeCode;
+        const esslId = curr.essl_id || curr.raw_data?.essl_id || curr.raw_data?.UserId || curr.raw_data?.EmployeeCode || curr.raw_data?.PIN;
         
-        // If it's a known user, group by user_id
-        // If unknown, group by essl_id if available, otherwise use a fallback based on record ID to avoid grouping unrelated "truly unknown" logs
-        const groupKey = curr.user_id || (esslId ? `essl_${esslId}` : `unknown_${curr.id}`);
+        // Group by user_id if known, otherwise by esslId if available, otherwise by record id (unique)
+        // If esslId is "0", we treat it as truly unknown and don't group them together to avoid "mass merging"
+        const groupKey = curr.user_id || (esslId && esslId !== "0" ? `essl_${esslId}` : `unknown_${curr.id}`);
 
         if (!acc[groupKey]) acc[groupKey] = [];
         acc[groupKey].push(curr);
@@ -253,8 +256,8 @@ const AdminAttendance: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onN
 
     const filteredUserIds = Object.keys(groupedAttendance).filter(groupKey => {
         const firstRecord = groupedAttendance[groupKey][0];
-        const esslId = firstRecord.essl_id || firstRecord.raw_data?.essl_id || firstRecord.raw_data?.UserId || firstRecord.raw_data?.EmployeeCode || 'N/A';
-        const userName = firstRecord.profiles?.full_name || `Unknown User (${esslId})`;
+        const esslId = firstRecord.essl_id || firstRecord.raw_data?.essl_id || firstRecord.raw_data?.UserId || firstRecord.raw_data?.EmployeeCode || firstRecord.raw_data?.PIN || 'N/A';
+        const userName = firstRecord.profiles?.full_name || firstRecord.profiles?.username || `Unknown User (${esslId})`;
         return userName.toLowerCase().includes(searchTerm.toLowerCase());
     });
 
@@ -373,8 +376,8 @@ const AdminAttendance: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onN
                                 const entryCount = userRecords.length;
                                 const lastRecord = userRecords[0];
                                 const isUnknown = !lastRecord.user_id;
-                                const esslId = lastRecord.essl_id || lastRecord.raw_data?.essl_id || lastRecord.raw_data?.UserId || lastRecord.raw_data?.EmployeeCode || 'N/A';
-                                const userName = lastRecord.profiles?.full_name || `Unknown User (${esslId})`;
+                                const esslId = lastRecord.essl_id || lastRecord.raw_data?.essl_id || lastRecord.raw_data?.UserId || lastRecord.raw_data?.EmployeeCode || lastRecord.raw_data?.PIN || 'N/A';
+                                const userName = lastRecord.profiles?.full_name || lastRecord.profiles?.username || `Unknown User (${esslId})`;
 
                                 return (
                                     <div key={groupKey} className="space-y-2">

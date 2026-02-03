@@ -123,10 +123,11 @@ const AdminDashboard: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNa
       const uniqueUsers = new Set(membersOnly.map(r => r.user_id)).size;
       const totalCheckIns = membersOnly.length;
 
-      // Unique unknowns grouped by eSSL ID if available
+      // Unique unknowns grouped by eSSL ID or PIN from raw_data
       const uniqueUnknowns = new Set(unknownsOnly.map(r => {
-        const esslId = r.essl_id || r.raw_data?.essl_id || r.raw_data?.UserId || r.raw_data?.EmployeeCode || `temp_${Math.random()}`;
-        return `essl_${esslId}`;
+        const esslId = r.essl_id || r.raw_data?.essl_id || r.raw_data?.UserId || r.raw_data?.EmployeeCode || r.raw_data?.PIN;
+        // If still no ID, use a stable hash of the record ID instead of random to avoid jumping counts
+        return esslId ? `essl_${esslId}` : `unknown_${r.id || Math.random()}`;
       })).size;
       const totalUnknownCheckIns = unknownsOnly.length;
 
@@ -357,7 +358,7 @@ const AdminDashboard: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNa
             onClick={() => onNavigate('ADMIN_ATTENDANCE')}
             className="p-5 bg-white dark:bg-[#1E293B] rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800 cursor-pointer active:scale-95 transition-transform"
           >
-            <p className="text-slate-500 dark:text-slate-400 text-xs font-medium uppercase tracking-wider">Unknown Logs</p>
+            <p className="text-slate-500 dark:text-slate-400 text-xs font-medium uppercase tracking-wider">Unknown Users</p>
             <div className="flex items-baseline gap-2 mt-1">
               <h2 className="text-2xl font-bold text-slate-400">{stats.unknownAttendance}</h2>
               <span className="text-xs font-bold text-slate-500/50">({stats.totalUnknownAttendance} logs)</span>

@@ -68,6 +68,7 @@ const ConfigScreen: React.FC<ConfigScreenProps> = ({ onNavigate }) => {
     const [esslHistoryPage, setEsslHistoryPage] = useState(0);
     const [totalEsslCommands, setTotalEsslCommands] = useState(0);
     const [esslHistory, setEsslHistory] = useState<any[]>([]);
+    const [isUpdatingAccess, setIsUpdatingAccess] = useState(false);
     const esslPageSize = 10;
 
     useEffect(() => {
@@ -138,6 +139,22 @@ const ConfigScreen: React.FC<ConfigScreenProps> = ({ onNavigate }) => {
             alert(error.message);
         } finally {
             setIsExecutingEssl(false);
+        }
+    };
+
+    const handleUpdateAccess = async () => {
+        try {
+            setIsUpdatingAccess(true);
+            const { data, error } = await supabase.functions.invoke('update-access');
+
+            if (error) throw error;
+            
+            alert(`Access updated: ${data.processed} users processed.`);
+        } catch (error: any) {
+            console.error('Error updating access:', error);
+            alert(error.message);
+        } finally {
+            setIsUpdatingAccess(false);
         }
     };
 
@@ -656,7 +673,15 @@ const ConfigScreen: React.FC<ConfigScreenProps> = ({ onNavigate }) => {
                             className="flex flex-col items-center justify-center p-4 bg-slate-900 border border-slate-700 rounded-xl hover:border-red-500/50 transition-colors gap-2"
                         >
                             <span className="material-symbols-rounded text-red-500">block</span>
-                            <span className="text-[10px] font-bold uppercase">Block Expired</span>
+                            <span className="text-[10px] font-bold uppercase">Block (Local)</span>
+                        </button>
+                        <button
+                            onClick={handleUpdateAccess}
+                            disabled={isUpdatingAccess}
+                            className="flex flex-col items-center justify-center p-4 bg-slate-900 border border-slate-700 rounded-xl hover:border-orange-500/50 transition-colors gap-2"
+                        >
+                            <span className="material-symbols-rounded text-orange-500">sync_problem</span>
+                            <span className="text-[10px] font-bold uppercase text-center">Block (Cloud)</span>
                         </button>
                         <button
                             onClick={() => handleEsslAction('sync-all-expiry')}
