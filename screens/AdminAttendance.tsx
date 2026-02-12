@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
-import { AppScreen, Profile } from '../types';
+import { AppScreen, Profile, UnknownUser } from '../types';
 import { supabase } from '../lib/supabase';
+import { unknownUserService } from '../lib/unknownUserService';
 import StatusBar from '../components/StatusBar';
 
 interface AttendanceRecord {
@@ -23,6 +24,7 @@ interface AttendanceRecord {
 const AdminAttendance: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNavigate }) => {
     const [attendance, setAttendance] = useState<AttendanceRecord[]>([]);
     const [users, setUsers] = useState<Profile[]>([]);
+    const [unknownUsersMap, setUnknownUsersMap] = useState<{ [key: string]: UnknownUser }>({});
     const [loading, setLoading] = useState(true);
     const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
     const [searchTerm, setSearchTerm] = useState('');
@@ -45,38 +47,97 @@ const AdminAttendance: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onN
             fetchAttendance();
         }
         fetchUsers();
+        fetchUnknownUsersMap();
         fetchGlobalGracePeriod();
     }, [selectedDate, activeTab]);
+
+    const fetchUnknownUsersMap = async () => {
+        try {
+            const unknowns = await unknownUserService.getAllUnknownUsers();
+            const map: { [key: string]: UnknownUser } = {};
+            unknowns.forEach(u => {
+                if (u.essl_id) map[u.essl_id] = u;
+            });
+            setUnknownUsersMap(map);
+        } catch (error) {
+            console.error('Error fetching unknown users map:', error);
+        }
+    };
 
     const fetchUnknownAttendance = async () => {
         try {
             setLoading(true);
-            const { data, error } = await supabase
-                .from('attendance')
-                .select(`
-                    id,
-                    user_id,
-                    essl_id,
-                    check_in,
-                    device_id,
-                    raw_data,
-                    profiles (
-                        full_name,
-                        username,
-                        plan,
-                        plan_expiry_date,
-                        plan_start_date,
-                        grace_period
-                    )
-                `)
-                .is('user_id', null)
-                .order('check_in', { ascending: false })
-                .limit(500);
+            let allUnknowns: any[] = [];
+            let lastId = null;
+            let hasMore = true;
+            const PAGE_SIZE = 1000;
 
-            if (error) throw error;
-            setAttendance(data as any || []);
+            while (hasMore) {
+                let query = supabase
+                    .from('attendance')
+                    .select(`
+                        id,
+                        user_id,
+                        essl_id,
+                        check_in,
+                        device_id,
+                        raw_data,
+                        profiles (
+                            full_name,
+                            username,
+                            plan,
+                            plan_expiry_date,
+                            plan_start_date,
+                            grace_period
+                        )
+                    `)
+                    .is('user_id', null)
+                    .order('id', { ascending: false })
+                    .limit(PAGE_SIZE);
+
+                if (lastId) {
+                    query = query.lt('id', lastId);
+                }
+
+                const { data, error } = await query;
+                if (error) throw error;
+
+                if (!data || data.length === 0) {
+                    hasMore = false;
+                } else {
+                    allUnknowns = [...allUnknowns, ...data];
+                    lastId = data[data.length - 1].id;
+                    if (data.length < PAGE_SIZE) hasMore = false;
+                }
+            }
+
+            setAttendance(allUnknowns || []);
         } catch (error) {
             console.error('Error fetching unknown attendance:', error);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleDiscoverUsers = async () => {
+        try {
+            setLoading(true);
+            const { data: { user } } = await supabase.auth.getUser();
+            if (!user) throw new Error('Not authenticated');
+
+            const discoveredCount = await unknownUserService.discoverUnknownUsers(user.id);
+            if (discoveredCount > 0) {
+                alert(`${discoveredCount} new unknown users discovered from attendance logs.`);
+                await Promise.all([
+                    fetchUnknownAttendance(),
+                    fetchUnknownUsersMap()
+                ]);
+            } else {
+                alert('No new unknown users found in attendance logs.');
+            }
+        } catch (error) {
+            console.error('Error discovering users:', error);
+            alert('Error discovering unknown users');
         } finally {
             setLoading(false);
         }
@@ -257,8 +318,16 @@ const AdminAttendance: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onN
     const filteredUserIds = Object.keys(groupedAttendance).filter(groupKey => {
         const firstRecord = groupedAttendance[groupKey][0];
         const esslId = firstRecord.essl_id || firstRecord.raw_data?.essl_id || firstRecord.raw_data?.UserId || firstRecord.raw_data?.EmployeeCode || firstRecord.raw_data?.PIN || 'N/A';
-        const userName = firstRecord.profiles?.full_name || firstRecord.profiles?.username || `Unknown User (${esslId})`;
-        return userName.toLowerCase().includes(searchTerm.toLowerCase());
+        const unknownInfo = unknownUsersMap[esslId];
+        
+        const displayName = firstRecord.profiles?.full_name || 
+                        firstRecord.profiles?.username || 
+                        unknownInfo?.full_name ||
+                        unknownInfo?.temporary_name || 
+                        'Unknown User';
+        const userName = `${displayName} (${esslId})`;
+                        
+        return userName.toLowerCase().includes(searchTerm.toLowerCase()) || esslId.toLowerCase().includes(searchTerm.toLowerCase());
     });
 
     const nearExpiryUsers = users.filter(user => {
@@ -280,12 +349,24 @@ const AdminAttendance: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onN
                     <span className="material-symbols-rounded">arrow_back</span>
                 </button>
                 <h1 className="text-xl font-bold">Attendance</h1>
-                <button
-                    onClick={() => setShowAddModal(true)}
-                    className="w-10 h-10 rounded-full bg-primary/20 flex items-center justify-center text-primary"
-                >
-                    <span className="material-symbols-rounded">add</span>
-                </button>
+                <div className="flex gap-2">
+                    {activeTab === 'unknown' && (
+                        <button
+                            onClick={handleDiscoverUsers}
+                            disabled={loading}
+                            className={`w-10 h-10 rounded-full bg-orange-500/20 flex items-center justify-center text-orange-500 ${loading ? 'opacity-50' : ''}`}
+                            title="Discover new unknown users"
+                        >
+                            <span className="material-symbols-rounded">manage_search</span>
+                        </button>
+                    )}
+                    <button
+                        onClick={() => setShowAddModal(true)}
+                        className="w-10 h-10 rounded-full bg-primary/20 flex items-center justify-center text-primary"
+                    >
+                        <span className="material-symbols-rounded">add</span>
+                    </button>
+                </div>
             </div>
 
             {/* Tab Switcher */}
@@ -377,7 +458,13 @@ const AdminAttendance: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onN
                                 const lastRecord = userRecords[0];
                                 const isUnknown = !lastRecord.user_id;
                                 const esslId = lastRecord.essl_id || lastRecord.raw_data?.essl_id || lastRecord.raw_data?.UserId || lastRecord.raw_data?.EmployeeCode || lastRecord.raw_data?.PIN || 'N/A';
-                                const userName = lastRecord.profiles?.full_name || lastRecord.profiles?.username || `Unknown User (${esslId})`;
+                                const unknownInfo = unknownUsersMap[esslId];
+                                const displayName = lastRecord.profiles?.full_name || 
+                                                lastRecord.profiles?.username || 
+                                                unknownInfo?.full_name ||
+                                                unknownInfo?.temporary_name || 
+                                                'Unknown User';
+                                const userName = `${displayName} (${esslId})`;
 
                                 return (
                                     <div key={groupKey} className="space-y-2">

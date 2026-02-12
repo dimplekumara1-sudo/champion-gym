@@ -3,7 +3,8 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
 const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
-const CLOUDFLARE_WORKER_URL = "https://gym-access-worker.dimplekumara1.workers.dev";
+const CLOUDFLARE_WORKER_URL = Deno.env.get("CLOUDFLARE_WORKER_URL")!;
+const CLOUDFLARE_WORKER_KEY = Deno.env.get("CLOUDFLARE_WORKER_KEY")!;
 
 const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
@@ -45,6 +46,7 @@ Deno.serve(async (req) => {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
+            "x-worker-key": CLOUDFLARE_WORKER_KEY,
           },
           body: JSON.stringify({
             employee_code: user.essl_id,

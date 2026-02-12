@@ -45,6 +45,7 @@ import AdminFoodApprovals from './screens/AdminFoodApprovals';
 import AdminPT from './screens/AdminPT';
 import AdminAnnouncements from './screens/AdminAnnouncements';
 import AdminSubscriptionTracker from './screens/AdminSubscriptionTracker';
+import AdminUnknownUsers from './screens/AdminUnknownUsers';
 import AttendanceScreen from './screens/AttendanceScreen';
 import AdminAttendance from './screens/AdminAttendance';
 import ConfigScreen from './screens/ConfigScreen';
@@ -154,7 +155,7 @@ const App: React.FC = () => {
       // Check if plan has expired with grace period
       const now = new Date();
       const expiryDate = data?.plan_expiry_date ? new Date(data.plan_expiry_date) : null;
-      
+
       let isExpired = false;
       if (expiryDate) {
         // Fetch global grace period from app_settings
@@ -163,12 +164,12 @@ const App: React.FC = () => {
           .select('value')
           .eq('id', 'gym_settings')
           .single();
-        
+
         const globalGracePeriod = gymSettings?.value?.global_grace_period || 0;
-        
+
         // Use individual grace period if set, otherwise use global
-        const graceDays = (data?.grace_period !== null && data?.grace_period !== undefined) 
-          ? data.grace_period 
+        const graceDays = (data?.grace_period !== null && data?.grace_period !== undefined)
+          ? data.grace_period
           : globalGracePeriod;
 
         const totalExpiryDate = new Date(expiryDate);
@@ -293,6 +294,7 @@ const App: React.FC = () => {
       case 'ADMIN_PT': return <AdminPT onNavigate={navigate} />;
       case 'ADMIN_ANNOUNCEMENTS': return <AdminAnnouncements onNavigate={navigate} />;
       case 'ADMIN_SUBSCRIPTION_TRACKER': return <AdminSubscriptionTracker onNavigate={navigate} />;
+      case 'ADMIN_UNKNOWN_USERS': return <AdminUnknownUsers onNavigate={navigate} />;
       case 'ATTENDANCE': return <AttendanceScreen onNavigate={navigate} />;
       case 'ADMIN_ATTENDANCE': return <AdminAttendance onNavigate={navigate} />;
       case 'STORE': return <StoreScreen onNavigate={navigate} />;
@@ -309,18 +311,18 @@ const App: React.FC = () => {
 
   const renderNavigation = () => {
     const userScreens: AppScreen[] = [
-      'DASHBOARD', 'EXPLORE', 'DAILY_TRACKER', 'NUTRITION_GOALS', 
-      'STATS', 'TRAINERS', 'PROFILE', 'GYM_CATALOG', 
-      'WORKOUT_PROGRAM', 'WORKOUT_HISTORY', 'STORE', 'CART', 
+      'DASHBOARD', 'EXPLORE', 'DAILY_TRACKER', 'NUTRITION_GOALS',
+      'STATS', 'TRAINERS', 'PROFILE', 'GYM_CATALOG',
+      'WORKOUT_PROGRAM', 'WORKOUT_HISTORY', 'STORE', 'CART',
       'ATTENDANCE', 'ORDER_HISTORY', 'CATEGORY_VIDEOS'
     ];
 
     const adminScreens: AppScreen[] = [
-      'ADMIN_DASHBOARD', 'ADMIN_USERS', 'ADMIN_PLANS', 'ADMIN_EXERCISES', 
-      'ADMIN_WORKOUTS', 'ADMIN_CATEGORIES', 'ADMIN_SHOP', 'ADMIN_ORDERS', 
-      'ADMIN_EXPLORE', 'ADMIN_INDIAN_FOODS', 'ADMIN_FOOD_APPROVALS', 
-      'ADMIN_PT', 'ADMIN_ANNOUNCEMENTS', 'ADMIN_SUBSCRIPTION_TRACKER', 
-      'ADMIN_ATTENDANCE', 'CONFIG'
+      'ADMIN_DASHBOARD', 'ADMIN_USERS', 'ADMIN_PLANS', 'ADMIN_EXERCISES',
+      'ADMIN_WORKOUTS', 'ADMIN_CATEGORIES', 'ADMIN_SHOP', 'ADMIN_ORDERS',
+      'ADMIN_EXPLORE', 'ADMIN_INDIAN_FOODS', 'ADMIN_FOOD_APPROVALS',
+      'ADMIN_PT', 'ADMIN_ANNOUNCEMENTS', 'ADMIN_SUBSCRIPTION_TRACKER',
+      'ADMIN_UNKNOWN_USERS', 'ADMIN_ATTENDANCE', 'CONFIG'
     ];
 
     if (userScreens.includes(currentScreen)) {
@@ -328,7 +330,7 @@ const App: React.FC = () => {
       if (currentScreen === 'EXPLORE' || currentScreen === 'CATEGORY_VIDEOS') active = 'EXPLORE';
       if (currentScreen === 'STATS' || currentScreen === 'DAILY_TRACKER') active = 'STATS';
       if (currentScreen === 'WORKOUT_PROGRAM') active = 'WORKOUTS';
-      
+
       return <BottomNav active={active} onNavigate={navigate} />;
     }
 
@@ -347,7 +349,7 @@ const App: React.FC = () => {
         </PullToRefresh>
         {renderNavigation()}
       </div>
-      
+
       {/* PWA Install Prompt */}
       {showPWAInstall && (
         <PWAInstallPrompt onClose={() => setShowPWAInstall(false)} />

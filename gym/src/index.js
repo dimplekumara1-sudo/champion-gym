@@ -21,18 +21,98 @@ export default {
       return new Response("ok", { headers: corsHeaders });
     }
 
+    // 🔐 Verify Supabase → Worker secret for access control requests
+    const workerKey = request.headers.get("x-worker-key");
+    if (workerKey && workerKey === env.WORKER_SECRET) {
+      if (method === "POST") {
+        try {
+          const body = await request.json();
+          // If it's a request to update access (block/unblock)
+          if (body.employee_code) {
+            const res = await fetch(env.LOCAL_BRIDGE_URL, {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                "x-api-key": env.LOCAL_API_KEY,
+              },
+              body: JSON.stringify(body),
+            });
+            return new Response(await res.text(), {
+              status: res.status,
+              headers: { ...corsHeaders, "Content-Type": "application/json" },
+            });
+          }
+        } catch (e) {
+          console.error("Error processing worker-key request:", e);
+        }
+      }
+    }
+
     // 1. Handle API Endpoints (from Supabase/Admin)
-    if (url.pathname.startsWith("/essl/users/")) {
-      const auth = request.headers.get("x-internal-secret");
-      if (!INTERNAL_SECRET || auth !== INTERNAL_SECRET) {
-        return new Response("Unauthorized", { status: 401, headers: corsHeaders });
+    if (url.pathname.startsWith("/essl/users/") || ["/set-user", "/disable-user", "/enable-user"].includes(url.pathname)) {
+      const auth = request.headers.get("x-internal-secret") || request.headers.get("x-api-key");
+      if (!INTERNAL_SECRET && !env.WORKER_SECRET) {
+        console.warn("No secret configured for auth");
+      } else {
+        const secret = INTERNAL_SECRET || env.WORKER_SECRET;
+        if (auth !== secret) {
+          return new Response("Unauthorized", { status: 401, headers: corsHeaders });
+        }
+      }
+
+      if (url.pathname === "/set-user") {
+        const body = await request.json();
+        const pin = body.employee_code || body.essl_id;
+        const name = body.name || "User";
+        const valid_to = body.valid_to ? body.valid_to.replace(/[- :]/g, "").slice(0, 14) : "20991231235959";
+        const enable = body.enabled !== false ? 1 : 0;
+        const group = enable ? 1 : 99;
+
+        try {
+          // Using tabs (\t) and USERINFO for better compatibility as seen in existing triggers
+          const command = `DATA UPDATE USERINFO PIN=${pin}\tName=${name}\tEndDateTime=${valid_to}\tGroup=${group}\tEnable=${enable}`;
+          const result = await queueCommand(SUPABASE_URL, SUPABASE_SERVICE_KEY, pin, command);
+          return new Response(JSON.stringify({ success: true, message: "User update queued", result }), { status: 200, headers: corsHeaders });
+        } catch (err) {
+          return new Response(JSON.stringify({ success: false, error: err.message }), { status: 500, headers: corsHeaders });
+        }
+      }
+
+      if (url.pathname === "/disable-user") {
+        const body = await request.json();
+        const pin = body.employee_code || body.essl_id;
+        try {
+          const command = `DATA UPDATE USERINFO PIN=${pin}\tEnable=0\tGroup=99`;
+          const result = await queueCommand(SUPABASE_URL, SUPABASE_SERVICE_KEY, pin, command);
+          return new Response(JSON.stringify({ success: true, message: "Disable command queued", result }), { status: 200, headers: corsHeaders });
+        } catch (err) {
+          return new Response(JSON.stringify({ success: false, error: err.message }), { status: 500, headers: corsHeaders });
+        }
+      }
+
+      if (url.pathname === "/enable-user") {
+        const body = await request.json();
+        const pin = body.employee_code || body.essl_id;
+        const valid_to = body.valid_to ? body.valid_to.replace(/[- :]/g, "").slice(0, 14) : "20991231235959";
+        try {
+          const command = `DATA UPDATE USERINFO PIN=${pin}\tEndDateTime=${valid_to}\tEnable=1\tGroup=1`;
+          const result = await queueCommand(SUPABASE_URL, SUPABASE_SERVICE_KEY, pin, command);
+          return new Response(JSON.stringify({ success: true, message: "Enable command queued", result }), { status: 200, headers: corsHeaders });
+        } catch (err) {
+          return new Response(JSON.stringify({ success: false, error: err.message }), { status: 500, headers: corsHeaders });
+        }
       }
 
       if (url.pathname === "/essl/users/sync") {
         try {
+          if (!SUPABASE_SERVICE_KEY) {
+            console.error("SUPABASE_SERVICE_ROLE_KEY not configured");
+            return new Response(JSON.stringify({ success: false, error: "Service key not configured" }), { status: 503, headers: corsHeaders });
+          }
           const result = await queueCommand(SUPABASE_URL, SUPABASE_SERVICE_KEY, "ALL", "DATA QUERY User");
           return new Response(JSON.stringify(result), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
         } catch (err) {
+          console.error("Error syncing users:", err);
           return new Response(JSON.stringify({ success: false, error: err.message }), { status: 500, headers: corsHeaders });
         }
       }
@@ -41,10 +121,16 @@ export default {
         const body = await request.json();
         if (!body.essl_id) return new Response("Missing essl_id", { status: 400, headers: corsHeaders });
         try {
+          if (!SUPABASE_SERVICE_KEY) {
+            console.error("SUPABASE_SERVICE_ROLE_KEY not configured");
+            return new Response(JSON.stringify({ success: false, error: "Service key not configured" }), { status: 503, headers: corsHeaders });
+          }
           // Block user by moving to Access Group 99
           const result = await queueCommand(SUPABASE_URL, SUPABASE_SERVICE_KEY, body.essl_id, `DATA UPDATE USER PIN=${body.essl_id} Group=99`);
+          console.log(`Successfully queued block command for ${body.essl_id}`);
           return new Response(JSON.stringify(result), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
         } catch (err) {
+          console.error(`Error blocking user ${body.essl_id}:`, err);
           return new Response(JSON.stringify({ success: false, error: err.message }), { status: 500, headers: corsHeaders });
         }
       }
@@ -53,10 +139,16 @@ export default {
         const body = await request.json();
         if (!body.essl_id) return new Response("Missing essl_id", { status: 400, headers: corsHeaders });
         try {
+          if (!SUPABASE_SERVICE_KEY) {
+            console.error("SUPABASE_SERVICE_ROLE_KEY not configured");
+            return new Response(JSON.stringify({ success: false, error: "Service key not configured" }), { status: 503, headers: corsHeaders });
+          }
           // Unblock user by moving to Access Group 1
           const result = await queueCommand(SUPABASE_URL, SUPABASE_SERVICE_KEY, body.essl_id, `DATA UPDATE USER PIN=${body.essl_id} Group=1`);
+          console.log(`Successfully queued unblock command for ${body.essl_id}`);
           return new Response(JSON.stringify(result), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
         } catch (err) {
+          console.error(`Error unblocking user ${body.essl_id}:`, err);
           return new Response(JSON.stringify({ success: false, error: err.message }), { status: 500, headers: corsHeaders });
         }
       }
@@ -65,11 +157,11 @@ export default {
     // 2. Handle ESSL Device Requests
     const sn = url.searchParams.get("SN") || url.searchParams.get("sn");
     let deviceBody = null;
-    
+
     // Handshake
     if (url.pathname === "/iclock/cdata" && method === "GET") {
-      return new Response(`GET OPTION FROM: ${sn || "UNKNOWN"}\nStamp=9999\nOpStamp=0\nPhotoStamp=0\nErrorDelay=60\nDelay=30\nTransTimes=00:00;\nTransInterval=1\nTransFlag=1111000000\nRealtime=1\nEncrypt=0\n`, { 
-        headers: { ...corsHeaders, "Content-Type": "text/plain" } 
+      return new Response(`GET OPTION FROM: ${sn || "UNKNOWN"}\nStamp=9999\nOpStamp=0\nPhotoStamp=0\nErrorDelay=60\nDelay=30\nTransTimes=00:00;\nTransInterval=1\nTransFlag=1111000000\nRealtime=1\nEncrypt=0\n`, {
+        headers: { ...corsHeaders, "Content-Type": "text/plain" }
       });
     }
 
@@ -82,13 +174,13 @@ export default {
     // Device reporting command result or data upload
     if (url.pathname.startsWith("/iclock/devicecmd") || (url.pathname === "/iclock/cdata" && method === "POST")) {
       deviceBody = await request.text();
-      
+
       // If it's a command result (ID=...&Return=...)
       if (deviceBody.includes("ID=") && deviceBody.includes("Return=")) {
         await updateCommandStatus(SUPABASE_URL, SUPABASE_SERVICE_KEY, deviceBody);
         return new Response("OK", { headers: { ...corsHeaders, "Content-Type": "text/plain" } });
       }
-      
+
       // Otherwise it might be attendance logs, will be forwarded below
     }
 
@@ -99,7 +191,7 @@ export default {
     }
 
     const SUPABASE_FUNCTION_URL = `${SUPABASE_URL}/functions/v1/${targetFunction}`;
-    
+
     try {
       const newHeaders = new Headers(request.headers);
       newHeaders.delete("host");
@@ -123,18 +215,18 @@ export default {
 
       const forwardReq = new Request(SUPABASE_FUNCTION_URL + url.search, init);
       const response = await fetch(forwardReq);
-      
+
       const responseHeaders = new Headers(response.headers);
       Object.keys(corsHeaders).forEach(key => responseHeaders.set(key, corsHeaders[key]));
 
       // If it's a device request, always return OK to keep it happy
       if (sn && response.status !== 200) {
-        return new Response("OK", { 
-          status: 200, 
-          headers: { ...corsHeaders, "Content-Type": "text/plain" } 
+        return new Response("OK", {
+          status: 200,
+          headers: { ...corsHeaders, "Content-Type": "text/plain" }
         });
       }
-      
+
       return new Response(response.body, {
         status: response.status,
         statusText: response.statusText,
@@ -162,12 +254,13 @@ async function queueCommand(url, key, essl_id, commandText) {
       status: "pending"
     })
   });
-  
+
   if (!resp.ok) {
     const errorText = await resp.text();
-    throw new Error(errorText);
+    console.error(`Supabase API error (${resp.status}): ${errorText}`);
+    throw new Error(`Failed to queue command: ${resp.status} ${errorText}`);
   }
-  
+
   return { success: true };
 }
 
@@ -180,18 +273,18 @@ async function fetchPendingCommands(url, key, sn) {
       "Authorization": `Bearer ${key}`
     }
   });
-  
+
   if (!resp.ok) return "OK";
-  
+
   const commands = await resp.json();
   if (!commands || commands.length === 0) return "OK";
-  
+
   let responseText = "";
   for (const cmd of commands) {
     // Format: C:ID:COMMAND\n
     // Use sequence_id as it's numeric and compatible with device expectations
     responseText += `C:${cmd.sequence_id}:${cmd.command}\n`;
-    
+
     // Mark as sent
     await fetch(`${url}/rest/v1/essl_commands?id=eq.${cmd.id}`, {
       method: "PATCH",
@@ -200,13 +293,13 @@ async function fetchPendingCommands(url, key, sn) {
         "Authorization": `Bearer ${key}`,
         "Content-Type": "application/json"
       },
-      body: JSON.stringify({ 
-        status: "sent", 
-        updated_at: new Date().toISOString() 
+      body: JSON.stringify({
+        status: "sent",
+        updated_at: new Date().toISOString()
       })
     });
   }
-  
+
   return responseText;
 }
 
@@ -215,7 +308,7 @@ async function updateCommandStatus(url, key, body) {
   const params = new URLSearchParams(body.replace(/\s+/g, '&'));
   const id = params.get("ID");
   const ret = params.get("Return");
-  
+
   if (id) {
     // Try updating by sequence_id first as that's what we send to the device
     await fetch(`${url}/rest/v1/essl_commands?sequence_id=eq.${id}`, {
@@ -225,9 +318,9 @@ async function updateCommandStatus(url, key, body) {
         "Authorization": `Bearer ${key}`,
         "Content-Type": "application/json"
       },
-      body: JSON.stringify({ 
+      body: JSON.stringify({
         status: ret === "0" ? "completed" : "failed",
-        updated_at: new Date().toISOString() 
+        updated_at: new Date().toISOString()
       })
     });
   }

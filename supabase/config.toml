@@ -9,3 +9,9 @@ verify_jwt = false
 
 [functions.update-access]
 verify_jwt = false
+
+[functions.sync-member-to-device]
+verify_jwt = false
+
+[functions.check-expired-members]
+verify_jwt = false

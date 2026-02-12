@@ -106,6 +106,25 @@ const AdminUsers: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNaviga
     }
   };
 
+  const syncUserToDevice = async (userId: string, action: 'create' | 'renew' | 'expire') => {
+    try {
+      console.log(`Syncing user ${userId} to device, action: ${action}...`);
+      const { data, error } = await supabase.functions.invoke('sync-member-to-device', {
+        body: { member_id: userId, action }
+      });
+      if (error) throw error;
+      console.log('Sync result:', data);
+      
+      // Refresh users list to show new sync status
+      fetchUsers();
+      
+      return data;
+    } catch (error) {
+      console.error('Error syncing to device:', error);
+      // Don't alert here to avoid annoying the user if it's a background sync
+    }
+  };
+
   const fetchPlans = async () => {
     try {
       const { data, error } = await supabase
@@ -219,6 +238,9 @@ const AdminUsers: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNaviga
       cache.remove(`${CACHE_KEYS.PROFILE_DATA}_expiring_notifications`);
       cache.remove(`${CACHE_KEYS.PROFILE_DATA}_expired_notifications`);
 
+      // Sync to device
+      syncUserToDevice(userId, 'create');
+
       setApprovalModal(null);
       alert('User approved successfully!');
     } catch (error) {
@@ -242,6 +264,10 @@ const AdminUsers: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNaviga
       if (error) throw error;
       setUsers(users.map(u => u.id === userId ? { ...u, plan_expiry_date: isoDate } : u));
       setSelectedUser({ ...selectedUser, plan_expiry_date: isoDate });
+      
+      // Sync to device
+      syncUserToDevice(userId, 'renew');
+
       alert('Expiry date updated successfully');
     } catch (error) {
       console.error('Error updating expiry date:', error);
@@ -360,6 +386,9 @@ const AdminUsers: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNaviga
       const updatedSelectedUser = updatedUsers.find(u => u.id === userId);
       setSelectedUser(updatedSelectedUser);
       setSelectedPlan(newPlanId);
+
+      // Sync to device
+      syncUserToDevice(userId, 'renew');
 
       alert(`Plan ${calculation.upgrade_type === 'active_upgrade' ? 'upgraded' : 'renewed'} to ${selectedPlanData.name} successfully! Due amount: ₹${calculation.payable_amount}`);
     } catch (error) {
@@ -483,7 +512,10 @@ const AdminUsers: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNaviga
   };
 
   const filteredUsers = users.filter(u => {
-    const matchesSearch = (u.full_name || '').toLowerCase().includes(searchTerm.toLowerCase());
+    const searchLower = searchTerm.toLowerCase();
+    const matchesSearch = 
+      (u.full_name || '').toLowerCase().includes(searchLower) ||
+      (u.essl_id || '').toLowerCase().includes(searchLower);
 
     // Check if user is expiring soon (5 days) or expired
     const isExpiringSoon = u.plan_expiry_date &&
@@ -602,7 +634,7 @@ const AdminUsers: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNaviga
           <span className="material-symbols-rounded absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">search</span>
           <input
             className="w-full bg-slate-100 dark:bg-slate-800 border-none rounded-xl py-3 pl-10 pr-4 text-sm focus:ring-2 focus:ring-primary focus:bg-white dark:focus:bg-slate-900 transition-all outline-none text-slate-900 dark:text-slate-100"
-            placeholder="Search members..."
+            placeholder="Search by name or ESSL ID..."
             type="text"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}

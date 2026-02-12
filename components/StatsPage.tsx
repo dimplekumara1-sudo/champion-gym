@@ -15,17 +15,15 @@ const StatsPage: React.FC<StatsPageProps> = ({ onBack }) => {
         <span className="material-symbols-rounded text-lg">arrow_back</span>
         <span className="text-sm font-medium text-slate-300">Back</span>
       </button>
-      </div>
       
       <div className="text-center mb-6">
         <h1 className="text-2xl font-bold text-white uppercase tracking-wider">Statistics</h1>
-        </div>
+      </div>
         
-        <div className="bg-[#151C2C] rounded-3xl p-8 shadow-xl border border-slate-700/50">
-          <div className="text-center text-white">
-            <h2 className="text-3xl font-bold">Your Fitness Stats</h2>
-            <p className="text-sm text-slate-300 mb-4">Track your progress over time</p>
-          </div>
+      <div className="bg-[#151C2C] rounded-3xl p-8 shadow-xl border border-slate-700/50">
+        <div className="text-center text-white">
+          <h2 className="text-3xl font-bold">Your Fitness Stats</h2>
+          <p className="text-sm text-slate-300 mb-4">Track your progress over time</p>
         </div>
       </div>
     </div>

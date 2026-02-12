@@ -69,6 +69,7 @@ const ConfigScreen: React.FC<ConfigScreenProps> = ({ onNavigate }) => {
     const [totalEsslCommands, setTotalEsslCommands] = useState(0);
     const [esslHistory, setEsslHistory] = useState<any[]>([]);
     const [isUpdatingAccess, setIsUpdatingAccess] = useState(false);
+    const [isCheckingExpiry, setIsCheckingExpiry] = useState(false);
     const esslPageSize = 10;
 
     useEffect(() => {
@@ -155,6 +156,23 @@ const ConfigScreen: React.FC<ConfigScreenProps> = ({ onNavigate }) => {
             alert(error.message);
         } finally {
             setIsUpdatingAccess(false);
+        }
+    };
+
+    const handleCheckExpiredMembers = async () => {
+        try {
+            setIsCheckingExpiry(true);
+            const { data, error } = await supabase.functions.invoke('check-expired-members');
+
+            if (error) throw error;
+            
+            alert(`Expiry check complete: ${data.processed} users processed.`);
+            fetchEsslCommands();
+        } catch (error: any) {
+            console.error('Error checking expired members:', error);
+            alert(error.message);
+        } finally {
+            setIsCheckingExpiry(false);
         }
     };
 
@@ -690,6 +708,14 @@ const ConfigScreen: React.FC<ConfigScreenProps> = ({ onNavigate }) => {
                         >
                             <span className="material-symbols-rounded text-purple-500">calendar_month</span>
                             <span className="text-[10px] font-bold uppercase">Sync Expiry</span>
+                        </button>
+                        <button
+                            onClick={handleCheckExpiredMembers}
+                            disabled={isCheckingExpiry}
+                            className="flex flex-col items-center justify-center p-4 bg-slate-900 border border-slate-700 rounded-xl hover:border-blue-500/50 transition-colors gap-2"
+                        >
+                            <span className="material-symbols-rounded text-blue-500">lock_clock</span>
+                            <span className="text-[10px] font-bold uppercase text-center">Auto-Expiry Check</span>
                         </button>
                     </div>
 

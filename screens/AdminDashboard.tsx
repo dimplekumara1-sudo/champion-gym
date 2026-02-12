@@ -327,7 +327,7 @@ const AdminDashboard: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNa
             </div>
           </div>
 
-          <div 
+          <div
             onClick={() => onNavigate('ADMIN_SUBSCRIPTION_TRACKER')}
             className="p-5 bg-white dark:bg-[#1E293B] rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800 cursor-pointer active:scale-95 transition-transform"
           >
@@ -339,7 +339,7 @@ const AdminDashboard: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNa
             </div>
           </div>
 
-          <div 
+          <div
             onClick={() => onNavigate('ADMIN_ATTENDANCE')}
             className="p-5 bg-white dark:bg-[#1E293B] rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800 cursor-pointer active:scale-95 transition-transform"
           >
@@ -354,8 +354,8 @@ const AdminDashboard: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNa
             </div>
           </div>
 
-          <div 
-            onClick={() => onNavigate('ADMIN_ATTENDANCE')}
+          <div
+            onClick={() => onNavigate('ADMIN_UNKNOWN_USERS')}
             className="p-5 bg-white dark:bg-[#1E293B] rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800 cursor-pointer active:scale-95 transition-transform"
           >
             <p className="text-slate-500 dark:text-slate-400 text-xs font-medium uppercase tracking-wider">Unknown Users</p>
@@ -365,7 +365,7 @@ const AdminDashboard: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNa
             </div>
             <div className="mt-3 flex items-center text-slate-400 text-xs font-semibold">
               <span className="material-symbols-rounded text-xs mr-0.5">help_center</span>
-              <span>Unknown Check-ins</span>
+              <span>Manage Temporary Users</span>
             </div>
           </div>
         </div>

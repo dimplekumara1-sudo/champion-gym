@@ -47,6 +47,7 @@ export type AppScreen =
   | 'ADMIN_PT'
   | 'ADMIN_ANNOUNCEMENTS'
   | 'ADMIN_SUBSCRIPTION_TRACKER'
+  | 'ADMIN_UNKNOWN_USERS'
   | 'ATTENDANCE'
   | 'ADMIN_ATTENDANCE';
 
@@ -130,4 +131,22 @@ export interface CreateNotificationData {
   message: string;
   link?: string;
   target_user?: string; // null for broadcast to all users
+}
+export interface UnknownUser {
+  id: string;
+  temporary_name: string;
+  essl_id: string | null;
+  phone_number: string | null;
+  full_name: string | null;
+  email: string | null;
+  assigned_at: string;
+  verified_at: string | null;
+  assigned_by: string | null;
+  status: 'pending' | 'verified' | 'converted' | 'rejected';
+  check_in_count: number;
+  last_check_in: string | null;
+  metadata: any;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
 }
