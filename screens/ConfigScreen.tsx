@@ -2,12 +2,12 @@ import React, { useEffect, useState } from 'react';
 import { AppScreen, Announcement, PushNotification } from '../types';
 import { supabase } from '../lib/supabase';
 import { clearAIConfigCache } from '../lib/gemini';
-import { 
-    getAllNotifications, 
-    createNotification, 
-    deleteNotification, 
+import {
+    getAllNotifications,
+    createNotification,
+    deleteNotification,
     getAllUsers,
-    CreateNotificationData 
+    CreateNotificationData
 } from '../lib/push-notifications';
 
 interface ConfigScreenProps {
@@ -22,12 +22,12 @@ const ConfigScreen: React.FC<ConfigScreenProps> = ({ onNavigate }) => {
     const [announcements, setAnnouncements] = useState<Announcement[]>([]);
     const [showAnnouncementModal, setShowAnnouncementModal] = useState(false);
     const [editingAnnouncement, setEditingAnnouncement] = useState<Partial<Announcement> | null>(null);
-    
+
     const [title, setTitle] = useState('');
     const [content, setContent] = useState('');
     const [priority, setPriority] = useState<'low' | 'medium' | 'high'>('medium');
     const [isActive, setIsActive] = useState(true);
-    
+
     // Gym Settings State
     const [globalGracePeriod, setGlobalGracePeriod] = useState(1);
     const [isSavingGym, setIsSavingGym] = useState(false);
@@ -90,7 +90,7 @@ const ConfigScreen: React.FC<ConfigScreenProps> = ({ onNavigate }) => {
                 .select('*', { count: 'exact' })
                 .order('created_at', { ascending: false })
                 .limit(5);
-            
+
             if (error) throw error;
             setEsslCommands(data || []);
             setTotalEsslCommands(count || 0);
@@ -112,7 +112,7 @@ const ConfigScreen: React.FC<ConfigScreenProps> = ({ onNavigate }) => {
                 .select('*')
                 .order('created_at', { ascending: false })
                 .range(from, to);
-            
+
             if (error) throw error;
             setEsslHistory(data || []);
             setEsslHistoryPage(page);
@@ -126,13 +126,13 @@ const ConfigScreen: React.FC<ConfigScreenProps> = ({ onNavigate }) => {
     const handleEsslAction = async (action: string, payload: any = {}) => {
         try {
             setIsExecutingEssl(true);
-            
+
             const { data, error } = await supabase.functions.invoke('essl-management', {
                 body: { action, ...payload }
             });
 
             if (error) throw error;
-            
+
             alert('Action triggered successfully');
             fetchEsslCommands();
         } catch (error: any) {
@@ -149,7 +149,7 @@ const ConfigScreen: React.FC<ConfigScreenProps> = ({ onNavigate }) => {
             const { data, error } = await supabase.functions.invoke('update-access');
 
             if (error) throw error;
-            
+
             alert(`Access updated: ${data.processed} users processed.`);
         } catch (error: any) {
             console.error('Error updating access:', error);
@@ -165,7 +165,7 @@ const ConfigScreen: React.FC<ConfigScreenProps> = ({ onNavigate }) => {
             const { data, error } = await supabase.functions.invoke('check-expired-members');
 
             if (error) throw error;
-            
+
             alert(`Expiry check complete: ${data.processed} users processed.`);
             fetchEsslCommands();
         } catch (error: any) {
@@ -207,7 +207,7 @@ const ConfigScreen: React.FC<ConfigScreenProps> = ({ onNavigate }) => {
                 .select('value')
                 .eq('id', 'gym_settings')
                 .single();
-            
+
             if (data?.value) {
                 setGlobalGracePeriod(data.value.global_grace_period || 0);
             }
@@ -248,8 +248,8 @@ const ConfigScreen: React.FC<ConfigScreenProps> = ({ onNavigate }) => {
 
         // Search filter
         if (userSearchTerm.trim() !== '') {
-            filtered = filtered.filter(user => 
-                (user.username?.toLowerCase().includes(userSearchTerm.toLowerCase()) ||
+            filtered = filtered.filter(user =>
+            (user.username?.toLowerCase().includes(userSearchTerm.toLowerCase()) ||
                 user.full_name?.toLowerCase().includes(userSearchTerm.toLowerCase()))
             );
         }
@@ -300,7 +300,7 @@ const ConfigScreen: React.FC<ConfigScreenProps> = ({ onNavigate }) => {
                 .select('value')
                 .eq('id', 'ai_config')
                 .single();
-            
+
             if (data?.value) {
                 setAiConfig(data.value);
             }
@@ -390,10 +390,10 @@ const ConfigScreen: React.FC<ConfigScreenProps> = ({ onNavigate }) => {
         if (!title || !content) return alert('Title and Content are required');
         try {
             const { data: { user } } = await supabase.auth.getUser();
-            const announcementData = { 
-                title, 
-                content, 
-                priority, 
+            const announcementData = {
+                title,
+                content,
+                priority,
                 is_active: isActive,
                 created_by: user?.id
             };
@@ -410,7 +410,7 @@ const ConfigScreen: React.FC<ConfigScreenProps> = ({ onNavigate }) => {
                     .insert([announcementData]);
                 if (error) throw error;
             }
-            
+
             setEditingAnnouncement(null);
             resetAnnouncementForm();
             fetchAnnouncements();
@@ -479,7 +479,7 @@ const ConfigScreen: React.FC<ConfigScreenProps> = ({ onNavigate }) => {
 
         try {
             setIsSavingNotification(true);
-            
+
             if (targetUser === 'all') {
                 // Send to all users
                 const notificationData: CreateNotificationData = {
@@ -496,7 +496,7 @@ const ConfigScreen: React.FC<ConfigScreenProps> = ({ onNavigate }) => {
                     setIsSavingNotification(false);
                     return;
                 }
-                
+
                 // Create notifications for each selected user
                 for (const userId of selectedUsers) {
                     const notificationData: CreateNotificationData = {
@@ -526,8 +526,8 @@ const ConfigScreen: React.FC<ConfigScreenProps> = ({ onNavigate }) => {
     };
 
     const toggleUserSelection = (userId: string) => {
-        setSelectedUsers(prev => 
-            prev.includes(userId) 
+        setSelectedUsers(prev =>
+            prev.includes(userId)
                 ? prev.filter(id => id !== userId)
                 : [...prev, userId]
         );
@@ -618,13 +618,13 @@ const ConfigScreen: React.FC<ConfigScreenProps> = ({ onNavigate }) => {
                             <p className="text-xs text-slate-400">Manage entry logs and grace periods</p>
                         </div>
                     </div>
-                    
+
                     <div className="space-y-4">
                         <div>
                             <label className="block text-xs font-black text-slate-500 uppercase mb-2">Global Grace Period (Days)</label>
                             <div className="flex gap-2">
-                                <input 
-                                    type="number" 
+                                <input
+                                    type="number"
                                     min="0"
                                     max="30"
                                     value={globalGracePeriod}
@@ -644,7 +644,7 @@ const ConfigScreen: React.FC<ConfigScreenProps> = ({ onNavigate }) => {
                                 * Users can access the gym for this many days after their subscription expires.
                             </p>
                         </div>
-                        
+
                         <div className="pt-2">
                             <button
                                 onClick={() => onNavigate('ADMIN_ATTENDANCE')}
@@ -724,15 +724,15 @@ const ConfigScreen: React.FC<ConfigScreenProps> = ({ onNavigate }) => {
                             <label className="block text-xs font-black text-slate-500 uppercase mb-2">Send Custom Command</label>
                             <div className="flex flex-col gap-2">
                                 <div className="flex gap-2">
-                                    <input 
-                                        type="text" 
+                                    <input
+                                        type="text"
                                         value={esslTargetId}
                                         onChange={(e) => setEsslTargetId(e.target.value)}
                                         className="w-24 bg-slate-900 border border-slate-700 rounded-xl px-4 py-2 text-sm focus:outline-none focus:border-primary"
                                         placeholder="Target (SN/PIN)"
                                     />
-                                    <input 
-                                        type="text" 
+                                    <input
+                                        type="text"
                                         value={customEsslCommand}
                                         onChange={(e) => setCustomEsslCommand(e.target.value)}
                                         className="flex-1 bg-slate-900 border border-slate-700 rounded-xl px-4 py-2 text-sm focus:outline-none focus:border-primary"
@@ -765,12 +765,11 @@ const ConfigScreen: React.FC<ConfigScreenProps> = ({ onNavigate }) => {
                                             <div key={cmd.id} className="p-3">
                                                 <div className="flex items-center justify-between mb-1">
                                                     <span className="text-[10px] font-mono text-slate-400">{cmd.command}</span>
-                                                    <span className={`px-2 py-0.5 rounded-full text-[8px] font-bold uppercase ${
-                                                        cmd.status === 'completed' ? 'bg-green-500/20 text-green-500' :
-                                                        cmd.status === 'pending' ? 'bg-yellow-500/20 text-yellow-500' :
-                                                        cmd.status === 'sent' ? 'bg-blue-500/20 text-blue-500' :
-                                                        'bg-red-500/20 text-red-500'
-                                                    }`}>
+                                                    <span className={`px-2 py-0.5 rounded-full text-[8px] font-bold uppercase ${cmd.status === 'completed' ? 'bg-green-500/20 text-green-500' :
+                                                            cmd.status === 'pending' ? 'bg-yellow-500/20 text-yellow-500' :
+                                                                cmd.status === 'sent' ? 'bg-blue-500/20 text-blue-500' :
+                                                                    'bg-red-500/20 text-red-500'
+                                                        }`}>
                                                         {cmd.status}
                                                     </span>
                                                 </div>
@@ -785,7 +784,7 @@ const ConfigScreen: React.FC<ConfigScreenProps> = ({ onNavigate }) => {
                                     </div>
                                 )}
                             </div>
-                            <button 
+                            <button
                                 onClick={() => {
                                     setShowEsslModal(true);
                                     fetchEsslHistory(0);
@@ -899,6 +898,31 @@ const ConfigScreen: React.FC<ConfigScreenProps> = ({ onNavigate }) => {
                         </div>
                     </button>
 
+                    {/* Device User Cache Button */}
+                    <button
+                        onClick={() => onNavigate('ADMIN_DEVICE_USER_CACHE')}
+                        className="w-full p-6 rounded-lg border border-white/10 hover:border-cyan-500/50 bg-white/5 hover:bg-cyan-500/10 transition-all group"
+                    >
+                        <div className="flex items-start gap-4">
+                            <div className="flex-shrink-0 mt-1">
+                                <span className="material-symbols-rounded text-3xl text-cyan-500 group-hover:scale-110 transition-transform">
+                                    cloud_sync
+                                </span>
+                            </div>
+                            <div className="text-left flex-1">
+                                <h2 className="text-lg font-bold mb-2">Device User Cache</h2>
+                                <p className="text-sm text-slate-400">
+                                    Fetch & cache biometric device users for attendance log resolution.
+                                </p>
+                            </div>
+                            <div className="flex-shrink-0 mt-1">
+                                <span className="material-symbols-rounded text-slate-500 group-hover:text-cyan-500 transition-colors">
+                                    arrow_forward
+                                </span>
+                            </div>
+                        </div>
+                    </button>
+
                     {/* Announcements Button */}
                     <button
                         onClick={() => onNavigate('ADMIN_ANNOUNCEMENTS')}
@@ -994,14 +1018,14 @@ const ConfigScreen: React.FC<ConfigScreenProps> = ({ onNavigate }) => {
                         <div className="p-6 space-y-4">
                             <div>
                                 <label className="block text-sm font-medium text-slate-400 mb-1">Provider</label>
-                                <select 
+                                <select
                                     className="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2 focus:outline-none focus:border-primary"
                                     value={aiConfig.provider}
                                     onChange={(e) => {
                                         const provider = e.target.value;
                                         let model = aiConfig.model;
                                         let api_key = aiConfig.api_key;
-                                        
+
                                         if (provider === 'puter') {
                                             model = 'gemini-3-flash-preview';
                                             api_key = 'not-required'; // Placeholder for Puter
@@ -1010,8 +1034,8 @@ const ConfigScreen: React.FC<ConfigScreenProps> = ({ onNavigate }) => {
                                         } else if (provider === 'google') {
                                             model = 'gemini-1.5-flash';
                                         }
-                                        
-                                        setAiConfig({...aiConfig, provider, model, api_key});
+
+                                        setAiConfig({ ...aiConfig, provider, model, api_key });
                                     }}
                                 >
                                     <option value="openrouter">OpenRouter (Recommended)</option>
@@ -1021,12 +1045,12 @@ const ConfigScreen: React.FC<ConfigScreenProps> = ({ onNavigate }) => {
                             </div>
                             <div>
                                 <label className="block text-sm font-medium text-slate-400 mb-1">Model ID</label>
-                                <input 
+                                <input
                                     type="text"
                                     className="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2 focus:outline-none focus:border-primary"
                                     placeholder="e.g. google/gemini-2.5-flash"
                                     value={aiConfig.model}
-                                    onChange={(e) => setAiConfig({...aiConfig, model: e.target.value})}
+                                    onChange={(e) => setAiConfig({ ...aiConfig, model: e.target.value })}
                                 />
                                 <p className="text-xs text-slate-500 mt-1">
                                     For OpenRouter, use format like `google/gemini-2.5-flash`
@@ -1034,15 +1058,15 @@ const ConfigScreen: React.FC<ConfigScreenProps> = ({ onNavigate }) => {
                             </div>
                             <div>
                                 <label className="block text-sm font-medium text-slate-400 mb-1">API Key</label>
-                                <input 
+                                <input
                                     type="password"
                                     className="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2 focus:outline-none focus:border-primary"
                                     placeholder="Enter your API key"
                                     value={aiConfig.api_key}
-                                    onChange={(e) => setAiConfig({...aiConfig, api_key: e.target.value})}
+                                    onChange={(e) => setAiConfig({ ...aiConfig, api_key: e.target.value })}
                                 />
                             </div>
-                            
+
                             <div className="pt-4 flex flex-col gap-3">
                                 <div className="flex gap-3">
                                     <button
@@ -1088,7 +1112,7 @@ const ConfigScreen: React.FC<ConfigScreenProps> = ({ onNavigate }) => {
                                 <h4 className="font-semibold text-purple-400">Create New Notification</h4>
                                 <div>
                                     <label className="block text-sm font-medium text-slate-400 mb-1">Title</label>
-                                    <input 
+                                    <input
                                         type="text"
                                         className="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2 focus:outline-none focus:border-purple-500"
                                         placeholder="Enter notification title"
@@ -1098,7 +1122,7 @@ const ConfigScreen: React.FC<ConfigScreenProps> = ({ onNavigate }) => {
                                 </div>
                                 <div>
                                     <label className="block text-sm font-medium text-slate-400 mb-1">Message</label>
-                                    <textarea 
+                                    <textarea
                                         className="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2 focus:outline-none focus:border-purple-500 h-24 resize-none"
                                         placeholder="Enter notification message"
                                         value={notificationMessage}
@@ -1107,7 +1131,7 @@ const ConfigScreen: React.FC<ConfigScreenProps> = ({ onNavigate }) => {
                                 </div>
                                 <div>
                                     <label className="block text-sm font-medium text-slate-400 mb-1">Link (Optional)</label>
-                                    <input 
+                                    <input
                                         type="url"
                                         className="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2 focus:outline-none focus:border-purple-500"
                                         placeholder="https://example.com"
@@ -1117,7 +1141,7 @@ const ConfigScreen: React.FC<ConfigScreenProps> = ({ onNavigate }) => {
                                 </div>
                                 <div>
                                     <label className="block text-sm font-medium text-slate-400 mb-1">Target</label>
-                                    <select 
+                                    <select
                                         className="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2 focus:outline-none focus:border-purple-500"
                                         value={targetUser}
                                         onChange={(e) => setTargetUser(e.target.value)}
@@ -1126,7 +1150,7 @@ const ConfigScreen: React.FC<ConfigScreenProps> = ({ onNavigate }) => {
                                         <option value="selected">Selected Users</option>
                                     </select>
                                 </div>
-                                
+
                                 {targetUser === 'selected' && (
                                     <div className="space-y-3 mt-4 p-3 bg-slate-800/50 rounded-lg">
                                         <div className="flex justify-between items-center mb-3">
@@ -1148,7 +1172,7 @@ const ConfigScreen: React.FC<ConfigScreenProps> = ({ onNavigate }) => {
                                         <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
                                             <div>
                                                 <label className="block text-xs font-medium text-slate-400 mb-1">Search</label>
-                                                <input 
+                                                <input
                                                     type="text"
                                                     className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:border-purple-500"
                                                     placeholder="Search by name..."
@@ -1158,7 +1182,7 @@ const ConfigScreen: React.FC<ConfigScreenProps> = ({ onNavigate }) => {
                                             </div>
                                             <div>
                                                 <label className="block text-xs font-medium text-slate-400 mb-1">Goal</label>
-                                                <select 
+                                                <select
                                                     className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:border-purple-500"
                                                     value={goalFilter}
                                                     onChange={(e) => setGoalFilter(e.target.value)}
@@ -1172,44 +1196,44 @@ const ConfigScreen: React.FC<ConfigScreenProps> = ({ onNavigate }) => {
                                             <div>
                                                 <label className="block text-xs font-medium text-slate-400 mb-1">Weight Range (kg)</label>
                                                 <div className="flex gap-2">
-                                                    <input 
+                                                    <input
                                                         type="number"
                                                         className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:border-purple-500"
                                                         placeholder="Min"
                                                         value={weightFilter.min}
-                                                        onChange={(e) => setWeightFilter({...weightFilter, min: e.target.value})}
+                                                        onChange={(e) => setWeightFilter({ ...weightFilter, min: e.target.value })}
                                                     />
-                                                    <input 
+                                                    <input
                                                         type="number"
                                                         className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:border-purple-500"
                                                         placeholder="Max"
                                                         value={weightFilter.max}
-                                                        onChange={(e) => setWeightFilter({...weightFilter, max: e.target.value})}
+                                                        onChange={(e) => setWeightFilter({ ...weightFilter, max: e.target.value })}
                                                     />
                                                 </div>
                                             </div>
                                             <div>
                                                 <label className="block text-xs font-medium text-slate-400 mb-1">BMI Range</label>
                                                 <div className="flex gap-2">
-                                                    <input 
+                                                    <input
                                                         type="number"
                                                         className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:border-purple-500"
                                                         placeholder="Min"
                                                         value={bmiFilter.min}
-                                                        onChange={(e) => setBmiFilter({...bmiFilter, min: e.target.value})}
+                                                        onChange={(e) => setBmiFilter({ ...bmiFilter, min: e.target.value })}
                                                     />
-                                                    <input 
+                                                    <input
                                                         type="number"
                                                         className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:border-purple-500"
                                                         placeholder="Max"
                                                         value={bmiFilter.max}
-                                                        onChange={(e) => setBmiFilter({...bmiFilter, max: e.target.value})}
+                                                        onChange={(e) => setBmiFilter({ ...bmiFilter, max: e.target.value })}
                                                     />
                                                 </div>
                                             </div>
                                             <div>
                                                 <label className="block text-xs font-medium text-slate-400 mb-1">Gender</label>
-                                                <select 
+                                                <select
                                                     className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:border-purple-500"
                                                     value={genderFilter}
                                                     onChange={(e) => setGenderFilter(e.target.value)}
@@ -1289,11 +1313,10 @@ const ConfigScreen: React.FC<ConfigScreenProps> = ({ onNavigate }) => {
                                                         <span className="text-xs text-slate-500">
                                                             {new Date(notification.created_at).toLocaleDateString()}
                                                         </span>
-                                                        <span className={`text-xs px-2 py-0.5 rounded-full ${
-                                                            notification.is_read 
-                                                                ? 'bg-green-500/20 text-green-400' 
+                                                        <span className={`text-xs px-2 py-0.5 rounded-full ${notification.is_read
+                                                                ? 'bg-green-500/20 text-green-400'
                                                                 : 'bg-orange-500/20 text-orange-400'
-                                                        }`}>
+                                                            }`}>
                                                             {notification.is_read ? 'Read' : 'Unread'}
                                                         </span>
                                                     </div>
@@ -1335,12 +1358,11 @@ const ConfigScreen: React.FC<ConfigScreenProps> = ({ onNavigate }) => {
                                                     <p className="text-sm font-mono text-primary">{cmd.command}</p>
                                                     <p className="text-xs text-slate-500 mt-1">Target: {cmd.essl_id}</p>
                                                 </div>
-                                                <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${
-                                                    cmd.status === 'completed' ? 'bg-green-500/20 text-green-500' :
-                                                    cmd.status === 'pending' ? 'bg-yellow-500/20 text-yellow-500' :
-                                                    cmd.status === 'sent' ? 'bg-blue-500/20 text-blue-500' :
-                                                    'bg-red-500/20 text-red-500'
-                                                }`}>
+                                                <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${cmd.status === 'completed' ? 'bg-green-500/20 text-green-500' :
+                                                        cmd.status === 'pending' ? 'bg-yellow-500/20 text-yellow-500' :
+                                                            cmd.status === 'sent' ? 'bg-blue-500/20 text-blue-500' :
+                                                                'bg-red-500/20 text-red-500'
+                                                    }`}>
                                                     {cmd.status}
                                                 </span>
                                             </div>

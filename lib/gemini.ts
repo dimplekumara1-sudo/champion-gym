@@ -12,6 +12,12 @@ export interface AINutritionResult {
   sodium_mg?: number;
 }
 
+export interface ChatMessage {
+  role: 'user' | 'assistant' | 'system';
+  content: string;
+  reasoning_details?: any;
+}
+
 let cachedConfig: any = null;
 let lastCallTime = 0;
 const COOLDOWN_MS = 2000; // 2 second cooldown between requests
@@ -19,6 +25,28 @@ let requestQueue: Promise<any> = Promise.resolve();
 
 export const getAIConfig = async () => {
   if (cachedConfig) return cachedConfig;
+
+  // Try to use environment variables first to allow overriding database config
+  const openRouterKey = import.meta.env.VITE_OPENROUTER_API_KEY;
+  const geminiKey = import.meta.env.VITE_GEMINI_API_KEY;
+  const preferredProvider = import.meta.env.VITE_AI_PROVIDER;
+
+  // If environment variables are set and not placeholders, use them
+  if (preferredProvider === 'openrouter' && openRouterKey && !openRouterKey.includes('PLACEHOLDER')) {
+    return {
+      provider: 'openrouter',
+      model: import.meta.env.VITE_AI_MODEL || 'nvidia/nemotron-3-nano-30b-a3b:free',
+      api_key: openRouterKey
+    };
+  }
+
+  if (preferredProvider === 'google' && geminiKey && !geminiKey.includes('PLACEHOLDER')) {
+    return {
+      provider: 'google',
+      model: import.meta.env.VITE_AI_MODEL || 'gemini-1.5-flash',
+      api_key: geminiKey
+    };
+  }
 
   try {
     const { data, error } = await supabase
@@ -32,31 +60,36 @@ export const getAIConfig = async () => {
       return cachedConfig;
     }
   } catch (error) {
-    console.error('Error fetching AI config:', error);
+    console.error('Error fetching AI config from database:', error);
   }
 
-  // Try to use environment variables if database config is missing or invalid
-  const envKey = import.meta.env.VITE_GEMINI_API_KEY || import.meta.env.VITE_OPENROUTER_API_KEY;
-  const envProvider = import.meta.env.VITE_AI_PROVIDER || (import.meta.env.VITE_GEMINI_API_KEY ? 'google' : 'openrouter');
-  const envModel = import.meta.env.VITE_AI_MODEL || (envProvider === 'google' ? 'gemini-1.5-flash' : 'google/gemini-2.0-flash-exp:free');
-
-  if (envKey && !envKey.includes('PLACEHOLDER')) {
+  // Fallback to environment variables if database config is missing or invalid
+  if (openRouterKey && !openRouterKey.includes('PLACEHOLDER')) {
     const config = {
-      provider: envProvider,
-      model: envModel,
-      api_key: envKey
+      provider: 'openrouter',
+      model: import.meta.env.VITE_AI_MODEL || 'nvidia/nemotron-3-nano-30b-a3b:free',
+      api_key: openRouterKey
+    };
+    cachedConfig = config;
+    return config;
+  }
+
+  if (geminiKey && !geminiKey.includes('PLACEHOLDER')) {
+    const config = {
+      provider: 'google',
+      model: import.meta.env.VITE_AI_MODEL || 'gemini-1.5-flash',
+      api_key: geminiKey
     };
     cachedConfig = config;
     return config;
   }
 
   // Default fallback
-  const defaultConfig = {
+  return {
     provider: 'openrouter',
-    model: 'google/gemini-2.0-flash-exp:free',
+    model: 'nvidia/nemotron-3-nano-30b-a3b:free',
     api_key: ''
   };
-  return defaultConfig;
 };
 
 export const clearAIConfigCache = () => {
@@ -67,7 +100,7 @@ export const analyzeFoodImage = async (base64Image: string): Promise<AINutrition
   try {
     const config = await getAIConfig();
 
-    if (!config.api_key) {
+    if (!config.api_key && config.provider !== 'puter') {
       console.warn('AI API key is missing. Please configure it in settings.');
       return null;
     }
@@ -101,7 +134,7 @@ export const analyzeFoodImage = async (base64Image: string): Promise<AINutrition
           "X-Title": "Challenge Gym Fitness"
         },
         body: JSON.stringify({
-          "model": config.model || "google/gemini-2.0-flash-exp:free",
+          "model": config.model || "nvidia/nemotron-3-nano-30b-a3b:free",
           "max_tokens": 1000,
           "messages": [
             {
@@ -123,11 +156,13 @@ export const analyzeFoodImage = async (base64Image: string): Promise<AINutrition
         })
       });
 
-      const data = await response.json();
-      if (data.error) {
-        console.error('OpenRouter Error:', data.error);
-        throw new Error(data.error.message || 'OpenRouter API error');
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        console.error('OpenRouter Image Analysis Error:', errorData);
+        throw new Error(errorData.error?.message || `HTTP error! status: ${response.status}`);
       }
+
+      const data = await response.json();
       responseText = data.choices[0].message.content;
     } else {
       const genAI = new GoogleGenerativeAI(config.api_key);
@@ -152,7 +187,7 @@ export const analyzeFoodImage = async (base64Image: string): Promise<AINutrition
   }
 };
 
-export const generateAIChatResponse = async (fullPrompt: string): Promise<string> => {
+export const generateAIChatResponse = async (input: string | ChatMessage[]): Promise<any> => {
   const executeRequest = async () => {
     try {
       let now = Date.now();
@@ -170,7 +205,7 @@ export const generateAIChatResponse = async (fullPrompt: string): Promise<string
 
       if (config.provider === 'puter') {
         // @ts-ignore
-        const response = await window.puter.ai.chat(fullPrompt, {
+        const response = await window.puter.ai.chat(typeof input === 'string' ? input : input[input.length - 1].content, {
           model: config.model || 'gemini-3-flash-preview'
         });
         return response.toString();
@@ -181,6 +216,16 @@ export const generateAIChatResponse = async (fullPrompt: string): Promise<string
       }
 
       if (config.provider === 'openrouter') {
+        const messages = typeof input === 'string' 
+          ? [{ role: 'user', content: input }]
+          : input;
+
+        console.log('Sending request to OpenRouter...', { 
+          model: config.model,
+          hasApiKey: !!config.api_key,
+          apiKeyPrefix: config.api_key ? config.api_key.substring(0, 7) + '...' : 'none'
+        });
+
         const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
           method: "POST",
           headers: {
@@ -190,38 +235,49 @@ export const generateAIChatResponse = async (fullPrompt: string): Promise<string
             "X-Title": "Challenge Gym Fitness"
           },
           body: JSON.stringify({
-            "model": config.model || "google/gemini-2.0-flash-exp:free",
+            "model": config.model || "nvidia/nemotron-3-nano-30b-a3b:free",
             "max_tokens": 1000,
-            "messages": [
-              {
-                "role": "user",
-                "content": fullPrompt
-              }
-            ]
+            "messages": messages,
+            "reasoning": { "enabled": true }
           })
         });
 
         if (!response.ok) {
           let errorMsg = `HTTP error! status: ${response.status}`;
+          let errorData: any = null;
           try {
-            const errorData = await response.json();
+            errorData = await response.json();
             errorMsg = errorData.error?.message || errorMsg;
             console.error('OpenRouter Error details:', errorData.error);
           } catch (e) {
             // Fallback if JSON parsing fails
           }
+          
+          if (response.status === 502 && errorMsg.includes('Clerk')) {
+            errorMsg = "OpenRouter authentication error. Please check if your API key is valid and correctly configured in settings or .env file.";
+          }
+          
           const error = new Error(errorMsg);
           (error as any).status = response.status;
+          (error as any).details = errorData;
           throw error;
         }
 
         const data = await response.json();
-        return data.choices[0].message.content;
+        return data.choices[0].message;
       } else {
         const genAI = new GoogleGenerativeAI(config.api_key);
         const model = genAI.getGenerativeModel({ model: config.model.split('/').pop() || "gemini-1.5-flash" });
-        const result = await model.generateContent(fullPrompt);
-        return result.response.text();
+        
+        if (typeof input === 'string') {
+          const result = await model.generateContent(input);
+          return { role: 'assistant', content: result.response.text() };
+        } else {
+          // Simplistic conversion for Gemini SDK
+          const lastMessage = input[input.length - 1].content;
+          const result = await model.generateContent(lastMessage);
+          return { role: 'assistant', content: result.response.text() };
+        }
       }
     } catch (error: any) {
       if (error.message?.includes('429')) {

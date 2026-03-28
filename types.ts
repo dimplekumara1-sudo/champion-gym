@@ -49,7 +49,8 @@ export type AppScreen =
   | 'ADMIN_SUBSCRIPTION_TRACKER'
   | 'ADMIN_UNKNOWN_USERS'
   | 'ATTENDANCE'
-  | 'ADMIN_ATTENDANCE';
+  | 'ADMIN_ATTENDANCE'
+  | 'ADMIN_DEVICE_USER_CACHE';
 
 export type NavTab = 'HOME' | 'EXPLORE' | 'ADD' | 'STATS' | 'MY_WORKOUTS';
 

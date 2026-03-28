@@ -9,8 +9,6 @@ export const config = {
 
 const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
 const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
-const WORKER_URL = "https://gym.dimplekumara1.workers.dev";
-const INTERNAL_SECRET = Deno.env.get("INTERNAL_SECRET") ?? "";
 
 if (!supabaseUrl || !supabaseServiceKey) {
   console.error("Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY");
@@ -44,7 +42,7 @@ Deno.serve(async (req) => {
 
       if (error) {
         console.error("Error fetching expired users:", error);
-        return new Response(JSON.stringify({ error: error.message }), { 
+        return new Response(JSON.stringify({ error: error.message }), {
           status: 500,
           headers: { ...corsHeaders, "Content-Type": "application/json" }
         });
@@ -59,7 +57,7 @@ Deno.serve(async (req) => {
 
       for (const user of (expiredUsers || [])) {
         console.log(`Blocking user ${user.essl_id} (${user.username})...`);
-        
+
         // 2. Queue block command (Moving to Group 99 for X990)
         const { error: cmdError } = await supabase
           .from("essl_commands")
@@ -77,11 +75,11 @@ Deno.serve(async (req) => {
           .from("profiles")
           .update({ essl_blocked: true })
           .eq("id", user.id);
-        
+
         results.push({ id: user.id, success: !updateError });
       }
 
-      return new Response(JSON.stringify({ results }), { 
+      return new Response(JSON.stringify({ results }), {
         status: 200,
         headers: { ...corsHeaders, "Content-Type": "application/json" }
       });
@@ -102,7 +100,7 @@ Deno.serve(async (req) => {
         const yyyymmdd = date.toISOString().split('T')[0].replace(/-/g, '');
         const isExpired = date < new Date();
         const group = isExpired ? 99 : 1;
-        
+
         return {
           essl_id: "ALL",
           command: `DATA UPDATE USER PIN=${user.essl_id} EndDateTime=${yyyymmdd}235959 Group=${group}`,
@@ -118,7 +116,7 @@ Deno.serve(async (req) => {
         if (insertError) throw insertError;
       }
 
-      return new Response(JSON.stringify({ success: true, count: commands.length }), { 
+      return new Response(JSON.stringify({ success: true, count: commands.length }), {
         status: 200,
         headers: { ...corsHeaders, "Content-Type": "application/json" }
       });
@@ -126,7 +124,7 @@ Deno.serve(async (req) => {
 
     if (action === "unblock-user") {
       const { essl_id, user_id } = body;
-      if (!essl_id) return new Response(JSON.stringify({ error: "Missing essl_id" }), { 
+      if (!essl_id) return new Response(JSON.stringify({ error: "Missing essl_id" }), {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" }
       });
@@ -155,14 +153,14 @@ Deno.serve(async (req) => {
       if (user_id) {
         await supabase
           .from("profiles")
-          .update({ 
+          .update({
             plan_status: "active",
-            essl_blocked: false 
+            essl_blocked: false
           })
           .eq("id", user_id);
       }
 
-      return new Response(JSON.stringify({ success: true, message: "Unblock and sync commands queued" }), { 
+      return new Response(JSON.stringify({ success: true, message: "Unblock and sync commands queued" }), {
         status: 200,
         headers: { ...corsHeaders, "Content-Type": "application/json" }
       });
@@ -171,7 +169,7 @@ Deno.serve(async (req) => {
     if (action === "sync-attendance") {
       const { essl_id, pin } = body;
       console.log(`Manually fetching attendance logs for Device: ${essl_id || 'ALL'}, PIN: ${pin || 'ALL'}...`);
-      
+
       const thirtyDaysAgo = new Date();
       thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
       // Format: YYYY-MM-DD HH:mm:ss (Required by ZKTeco/eSSL protocol)
@@ -180,8 +178,8 @@ Deno.serve(async (req) => {
       const routingId = essl_id || "ALL";
       // If PIN is provided, filter by it. Otherwise fetch all (which includes unknown users).
       const commandBase = pin ? `DATA QUERY ATTLOG PIN=${pin}` : "DATA QUERY ATTLOG";
-      const commandHistorical = pin 
-        ? `DATA QUERY ATTLOG PIN=${pin} StartTime=${startTime}` 
+      const commandHistorical = pin
+        ? `DATA QUERY ATTLOG PIN=${pin} StartTime=${startTime}`
         : `DATA QUERY ATTLOG StartTime=${startTime}`;
 
       await supabase
@@ -201,7 +199,7 @@ Deno.serve(async (req) => {
           }
         ]);
 
-      return new Response(JSON.stringify({ success: true, message: "Attendance sync commands queued for all users" }), { 
+      return new Response(JSON.stringify({ success: true, message: "Attendance sync commands queued for all users" }), {
         status: 200,
         headers: { ...corsHeaders, "Content-Type": "application/json" }
       });
@@ -209,29 +207,24 @@ Deno.serve(async (req) => {
 
     if (action === "sync-names") {
       console.log("Triggering user sync from ESSL device...");
-      
-      // 1. Queue a command for the device to upload all user data
-      // 'DATA QUERY User' or 'DATA QUERY Userinfo'
-      await supabase
+
+      // Queue command for device to upload all user data
+      const { error } = await supabase
         .from("essl_commands")
         .insert({
           essl_id: "ALL",
           command: "DATA QUERY User",
           status: "pending",
-          payload: { action: "sync_all_users" }
+          payload: { action: "sync_all_users", timestamp: new Date().toISOString() }
         });
 
-      // 2. Fallback to Worker
-      const resp = await fetch(`${WORKER_URL}/essl/users/sync`, {
-        method: "POST",
-        headers: {
-          "x-internal-secret": INTERNAL_SECRET
-        }
-      });
-      const text = await resp.text();
-      return new Response(text, { 
-        status: resp.status,
-        headers: { ...corsHeaders, "Content-Type": "text/plain" }
+      return new Response(JSON.stringify({
+        success: !error,
+        message: error ? error.message : "Sync command queued. Device will fetch user data when it polls.",
+        error: error?.message || null
+      }), {
+        status: error ? 400 : 200,
+        headers: { ...corsHeaders, "Content-Type": "application/json" }
       });
     }
 
@@ -240,7 +233,7 @@ Deno.serve(async (req) => {
       if (!essl_id) return new Response(JSON.stringify({ error: "Missing essl_id" }), { status: 400, headers: corsHeaders });
 
       console.log(`Deleting user ${essl_id} from ESSL device...`);
-      
+
       await supabase
         .from("essl_commands")
         .insert({
@@ -250,7 +243,7 @@ Deno.serve(async (req) => {
           payload: { action: "delete_user" }
         });
 
-      return new Response(JSON.stringify({ success: true, message: "Delete command queued" }), { 
+      return new Response(JSON.stringify({ success: true, message: "Delete command queued" }), {
         status: 200,
         headers: { ...corsHeaders, "Content-Type": "application/json" }
       });
@@ -261,7 +254,7 @@ Deno.serve(async (req) => {
       if (!essl_id || !name) return new Response(JSON.stringify({ error: "Missing essl_id or name" }), { status: 400, headers: corsHeaders });
 
       console.log(`Updating user ${essl_id} (Name: ${name}) on ESSL device...`);
-      
+
       await supabase
         .from("essl_commands")
         .insert({
@@ -271,7 +264,7 @@ Deno.serve(async (req) => {
           payload: { action: "update_user" }
         });
 
-      return new Response(JSON.stringify({ success: true, message: "Update command queued" }), { 
+      return new Response(JSON.stringify({ success: true, message: "Update command queued" }), {
         status: 200,
         headers: { ...corsHeaders, "Content-Type": "application/json" }
       });
@@ -288,7 +281,7 @@ Deno.serve(async (req) => {
           status: "pending",
           payload: { action: "device_info" }
         });
-      return new Response(JSON.stringify({ success: true, message: "INFO command queued" }), { 
+      return new Response(JSON.stringify({ success: true, message: "INFO command queued" }), {
         status: 200,
         headers: { ...corsHeaders, "Content-Type": "application/json" }
       });
@@ -306,19 +299,19 @@ Deno.serve(async (req) => {
           status: "pending",
           payload: { action: "get_options" }
         });
-      return new Response(JSON.stringify({ success: true, message: "GET OPTIONS command queued" }), { 
+      return new Response(JSON.stringify({ success: true, message: "GET OPTIONS command queued" }), {
         status: 200,
         headers: { ...corsHeaders, "Content-Type": "application/json" }
       });
     }
 
-    return new Response(JSON.stringify({ error: "Invalid action" }), { 
+    return new Response(JSON.stringify({ error: "Invalid action" }), {
       status: 400,
       headers: { ...corsHeaders, "Content-Type": "application/json" }
     });
   } catch (err) {
     console.error("Function error:", err);
-    return new Response(JSON.stringify({ error: err.message }), { 
+    return new Response(JSON.stringify({ error: err.message }), {
       status: 500,
       headers: { ...corsHeaders, "Content-Type": "application/json" }
     });

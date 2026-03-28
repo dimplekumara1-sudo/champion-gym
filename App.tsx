@@ -48,6 +48,7 @@ import AdminSubscriptionTracker from './screens/AdminSubscriptionTracker';
 import AdminUnknownUsers from './screens/AdminUnknownUsers';
 import AttendanceScreen from './screens/AttendanceScreen';
 import AdminAttendance from './screens/AdminAttendance';
+import AdminDeviceUserCache from './screens/AdminDeviceUserCache';
 import ConfigScreen from './screens/ConfigScreen';
 import PullToRefresh from './components/PullToRefresh';
 import BottomNav from './components/BottomNav';
@@ -297,6 +298,7 @@ const App: React.FC = () => {
       case 'ADMIN_UNKNOWN_USERS': return <AdminUnknownUsers onNavigate={navigate} />;
       case 'ATTENDANCE': return <AttendanceScreen onNavigate={navigate} />;
       case 'ADMIN_ATTENDANCE': return <AdminAttendance onNavigate={navigate} />;
+      case 'ADMIN_DEVICE_USER_CACHE': return <AdminDeviceUserCache onNavigate={navigate} />;
       case 'STORE': return <StoreScreen onNavigate={navigate} />;
       case 'CART': return <CartScreen onNavigate={navigate} />;
       case 'ORDER_HISTORY': return <OrderHistoryScreen onNavigate={navigate} />;
@@ -322,7 +324,7 @@ const App: React.FC = () => {
       'ADMIN_WORKOUTS', 'ADMIN_CATEGORIES', 'ADMIN_SHOP', 'ADMIN_ORDERS',
       'ADMIN_EXPLORE', 'ADMIN_INDIAN_FOODS', 'ADMIN_FOOD_APPROVALS',
       'ADMIN_PT', 'ADMIN_ANNOUNCEMENTS', 'ADMIN_SUBSCRIPTION_TRACKER',
-      'ADMIN_UNKNOWN_USERS', 'ADMIN_ATTENDANCE', 'CONFIG'
+      'ADMIN_UNKNOWN_USERS', 'ADMIN_ATTENDANCE', 'ADMIN_DEVICE_USER_CACHE', 'CONFIG'
     ];
 
     if (userScreens.includes(currentScreen)) {

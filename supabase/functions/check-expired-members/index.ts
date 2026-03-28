@@ -48,6 +48,8 @@ serve(async (req) => {
       
       const finalExpiry = new Date(expiryDate);
       finalExpiry.setDate(finalExpiry.getDate() + grace);
+      // End of day logic
+      finalExpiry.setHours(23, 59, 59, 999);
       
       // If now is after finalExpiry, the user is TRULY expired
       const isTrulyExpired = now > finalExpiry;
@@ -77,6 +79,7 @@ serve(async (req) => {
         : globalGracePeriod;
       const finalExpiry = new Date(expiryDate);
       finalExpiry.setDate(finalExpiry.getDate() + grace);
+      finalExpiry.setHours(23, 59, 59, 999);
       
       const isTrulyExpired = now > finalExpiry;
 

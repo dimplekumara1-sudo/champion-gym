@@ -10,8 +10,9 @@ interface DailyNutrition {
 }
 
 interface Message {
-  role: 'user' | 'assistant';
+  role: 'user' | 'assistant' | 'system';
   content: string;
+  reasoning_details?: any;
 }
 
 interface AIChatAssistantProps {
@@ -82,12 +83,24 @@ const AIChatAssistant: React.FC<AIChatAssistantProps> = ({
         5. If they ask about nutrition, refer to their current intake vs targets.
       `;
 
-      const chatHistory = messages.map(m => `${m.role === 'user' ? 'User' : 'Assistant'}: ${m.content}`).join('\n');
-      const fullPrompt = `${systemPrompt}\n\nChat History:\n${chatHistory}\n\nUser: ${userMessage}\nAssistant:`;
+      const chatMessages = [
+        { role: 'system', content: systemPrompt },
+        ...messages.map(m => ({ 
+          role: m.role, 
+          content: m.content,
+          ...(m.reasoning_details ? { reasoning_details: m.reasoning_details } : {})
+        })),
+        { role: 'user', content: userMessage }
+      ];
 
-      const assistantResponse = await generateAIChatResponse(fullPrompt);
+      // @ts-ignore
+      const assistantResponse = await generateAIChatResponse(chatMessages);
 
-      setMessages(prev => [...prev, { role: 'assistant', content: assistantResponse }]);
+      if (typeof assistantResponse === 'string') {
+        setMessages(prev => [...prev, { role: 'assistant', content: assistantResponse }]);
+      } else {
+        setMessages(prev => [...prev, assistantResponse]);
+      }
     } catch (error) {
       console.error('Chat AI Error:', error);
       setMessages(prev => [...prev, { role: 'assistant', content: "I'm sorry, I'm having trouble connecting right now. Please try again in a moment." }]);

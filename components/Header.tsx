@@ -66,65 +66,59 @@ const Header: React.FC<HeaderProps> = ({
 
     useEffect(() => {
         const initializeProfile = async () => {
-            const { data: { user } } = await supabase.auth.getUser();
-            setUser(user);
+            try {
+                const { data: { user } } = await supabase.auth.getUser();
+                setUser(user);
 
-            if (user) {
-                const googlePhoto = user.user_metadata?.avatar_url;
-                const cachedProfile = cache.get(CACHE_KEYS.PROFILE_DATA) as any;
+                if (user) {
+                    const googlePhoto = user.user_metadata?.avatar_url;
+                    const cachedProfile = cache.get(CACHE_KEYS.PROFILE_DATA) as any;
 
-                // Use Google photo directly if valid
-                if (googlePhoto && validateGooglePhotoUrl(googlePhoto)) {
-                    setProfilePhoto(googlePhoto);
-                    setPhotoError(false);
-                    console.log('Using Google photo URL directly:', googlePhoto);
-                } 
-                // Use cached photo if available and not Google photo
-                else if (cachedProfile?.avatar_url && cachedProfile.avatar_url.includes('supabase')) {
-                    setProfilePhoto(cachedProfile.avatar_url);
-                    setPhotoError(false);
-                    console.log('Using cached profile photo:', cachedProfile.avatar_url);
-                }
-                // Fetch from profiles table if no cached photo and not Google photo
-                else {
-                    const { data: profileData } = await supabase
-                        .from('profiles')
-                        .select('avatar_url')
-                        .eq('id', user.id)
-                        .single();
-
-                    if (profileData?.avatar_url && profileData.avatar_url.includes('supabase')) {
-                        setProfilePhoto(profileData.avatar_url);
+                    if (googlePhoto && validateGooglePhotoUrl(googlePhoto)) {
+                        setProfilePhoto(googlePhoto);
                         setPhotoError(false);
-                        console.log('Fetched profile photo from database:', profileData.avatar_url);
-
-                        // Update cache with new photo
-                        const updatedProfile = { ...cachedProfile, avatar_url: profileData.avatar_url };
-                        cache.set(CACHE_KEYS.PROFILE_DATA, updatedProfile, CACHE_TTL.LONG);
+                    } else if (cachedProfile?.avatar_url && cachedProfile.avatar_url.includes('supabase')) {
+                        setProfilePhoto(cachedProfile.avatar_url);
+                        setPhotoError(false);
                     } else {
-                        setProfilePhoto(null);
-                        setPhotoError(false);
-                        console.log('No profile photo found');
+                        const { data: profileData } = await supabase
+                            .from('profiles')
+                            .select('avatar_url')
+                            .eq('id', user.id)
+                            .single();
+
+                        if (profileData?.avatar_url && profileData.avatar_url.includes('supabase')) {
+                            setProfilePhoto(profileData.avatar_url);
+                            setPhotoError(false);
+                            const updatedProfile = { ...cachedProfile, avatar_url: profileData.avatar_url };
+                            cache.set(CACHE_KEYS.PROFILE_DATA, updatedProfile, CACHE_TTL.LONG);
+                        } else {
+                            setProfilePhoto(null);
+                            setPhotoError(false);
+                        }
                     }
                 }
+            } catch (error) {
+                console.error('Error initializing profile:', error);
             }
         };
 
         initializeProfile();
 
-        const { data: subscription } = supabase.auth.onAuthStateChange((_event, session) => {
+        const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
             if (session?.user) {
                 setUser(session.user);
                 initializeProfile();
+            } else {
+                setUser(null);
+                setProfilePhoto(null);
             }
         });
 
         return () => {
-            if (subscription?.subscription) {
-                subscription.subscription.unsubscribe();
-            }
+            subscription.unsubscribe();
         };
-    });
+    }, []);
 
     const handlePhotoUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
         try {

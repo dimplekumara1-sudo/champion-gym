@@ -114,10 +114,10 @@ const AdminUsers: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNaviga
       });
       if (error) throw error;
       console.log('Sync result:', data);
-      
+
       // Refresh users list to show new sync status
       fetchUsers();
-      
+
       return data;
     } catch (error) {
       console.error('Error syncing to device:', error);
@@ -264,7 +264,7 @@ const AdminUsers: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNaviga
       if (error) throw error;
       setUsers(users.map(u => u.id === userId ? { ...u, plan_expiry_date: isoDate } : u));
       setSelectedUser({ ...selectedUser, plan_expiry_date: isoDate });
-      
+
       // Sync to device
       syncUserToDevice(userId, 'renew');
 
@@ -513,7 +513,7 @@ const AdminUsers: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNaviga
 
   const filteredUsers = users.filter(u => {
     const searchLower = searchTerm.toLowerCase();
-    const matchesSearch = 
+    const matchesSearch =
       (u.full_name || '').toLowerCase().includes(searchLower) ||
       (u.essl_id || '').toLowerCase().includes(searchLower);
 
@@ -1141,6 +1141,58 @@ const AdminUsers: React.FC<{ onNavigate: (s: AppScreen) => void }> = ({ onNaviga
                         </div>
                       </div>
                     )}
+
+                    <div className="pt-3 border-t border-slate-800 flex flex-col gap-2">
+                      <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2 block">Device Access Control</label>
+                      <div className="grid grid-cols-3 gap-2">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            const now = new Date();
+                            const expiry = selectedUser.plan_expiry_date ? new Date(selectedUser.plan_expiry_date) : null;
+                            if (!expiry) {
+                              alert('No expiry date set');
+                              return;
+                            }
+                            const isExpired = expiry <= now;
+                            alert(`${selectedUser.full_name}\n${isExpired ? 'EXPIRED ❌' : 'ACTIVE ✅'}\nExpiry: ${expiry.toLocaleDateString()}`);
+                          }}
+                          className="bg-blue-500/20 hover:bg-blue-500/30 text-blue-400 text-[10px] font-black px-2 py-2.5 rounded-xl transition-all active:scale-95 border border-blue-500/30"
+                        >
+                          CHECK
+                        </button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (!selectedUser.essl_id) {
+                              alert('User has no ESSL ID mapped');
+                              return;
+                            }
+                            if (confirm(`Block ${selectedUser.full_name} (${selectedUser.essl_id})?\nThey cannot access the device.`)) {
+                              syncUserToDevice(selectedUser.id, 'expire');
+                            }
+                          }}
+                          className="bg-red-500/20 hover:bg-red-500/30 text-red-400 text-[10px] font-black px-2 py-2.5 rounded-xl transition-all active:scale-95 border border-red-500/30"
+                        >
+                          BLOCK
+                        </button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (!selectedUser.essl_id) {
+                              alert('User has no ESSL ID mapped');
+                              return;
+                            }
+                            if (confirm(`Unblock ${selectedUser.full_name} (${selectedUser.essl_id})?\nThey will regain access.`)) {
+                              syncUserToDevice(selectedUser.id, 'renew');
+                            }
+                          }}
+                          className="bg-green-500/20 hover:bg-green-500/30 text-green-400 text-[10px] font-black px-2 py-2.5 rounded-xl transition-all active:scale-95 border border-green-500/30"
+                        >
+                          UNBLOCK
+                        </button>
+                      </div>
+                    </div>
                   </div>
                 </section>
 
